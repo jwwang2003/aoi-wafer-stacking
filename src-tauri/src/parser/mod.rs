@@ -1,10 +1,12 @@
-// src-tauri/src/parser.rs
-mod test;
+mod tests;
 
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
 use thiserror::Error;
+use calamine::{open_workbook, Reader, Error, Xls, RangeDeserializerBuilder};
+use std::env;
+use serde::Deserialize;
 
 // Define error type
 #[derive(Error, Debug)]
@@ -15,6 +17,72 @@ pub enum ParseError {
     Format(String),
 }
 
+fn example() -> Result<(), Error> {
+    let path = env::current_dir()?;
+    println!("Example completed successfully.");
+    println!("The current directory is {}", path.display());
+    let path = format!("1-86107919CNF1.xls");
+    let mut workbook: Xls<_> = open_workbook(path).unwrap();
+    println!("Example completed successfully.");
+    let range = workbook.worksheet_range("Surface defect list")?;
+
+    let mut iter = RangeDeserializerBuilder::new().from_range(&range)?;
+    println!("Example completed successfully.");
+
+    for result in iter {
+        let (label, value): (String, f64) = result?;
+        println!("Label: {}, Value: {}", label, value);
+    }
+
+    Ok(())
+}
+
+
+// #[derive(Debug, Deserialize)]
+// struct DefectRecord {
+//     #[serde(rename = "No.")]
+//     no: u32,
+//     #[serde(rename = "X(mm)")]
+//     x: f64,
+//     #[serde(rename = "Y(mm)")]
+//     y: f64,
+//     #[serde(rename = "W(um)")]
+//     w: f64,
+//     #[serde(rename = "H(um)")]
+//     h: f64,
+//     #[serde(rename = "Area(um2)")]
+//     area: f64,
+//     #[serde(rename = "Class")]
+//     class: String,
+//     #[serde(rename = "Contrast")]
+//     contrast: u32,
+//     #[serde(rename = "Channel")]
+//     channel: String,
+// }
+
+// fn example() -> Result<(), Box<dyn Error>> {
+//     let path = "1-86107919CNF1.xls";
+//     let mut workbook: Xls<_> = open_workbook(path)?;
+
+//     // Step 1: Get the Result<Option<...>>
+//     let opt_range = workbook.worksheet_range("Surface defect list")?;
+
+//     // Step 2: Unwrap the Option
+//     let range = match opt_range {
+//         Some(r) => r,
+//         None => return Err("Worksheet 'Surface defect list' not found".into()),
+//     };
+
+//     // Step 3: Deserialize and iterate over rows
+//     let mut iter = RangeDeserializerBuilder::new().from_range::<_, DefectRecord>(&range)?;
+
+//     for result in iter {
+//         let record: DefectRecord = result?;
+//         println!("{:?}", record);
+//     }
+
+//     Ok(())
+// }
 // Structs for File1 metadata + map ASCII
 #[derive(Serialize, Debug)]
 pub struct WaferInfo {

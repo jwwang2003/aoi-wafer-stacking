@@ -1,3 +1,27 @@
+use serde::Deserialize;
+
+/// .xls Wafer defect list data strctures
+#[derive(Debug, Deserialize)]
+struct DefectRecord {
+    #[serde(rename = "No.")]
+    no: u32,
+    #[serde(rename = "X(mm)")]
+    x: f64,
+    #[serde(rename = "Y(mm)")]
+    y: f64,
+    #[serde(rename = "W(um)")]
+    w: f64,
+    #[serde(rename = "H(um)")]
+    h: f64,
+    #[serde(rename = "Area(um2)")]
+    area: f64,
+    #[serde(rename = "Class")]
+    class: String,
+    #[serde(rename = "Contrast")]
+    contrast: u32,
+    #[serde(rename = "Channel")]
+    channel: String,
+}
 
 // Device Name       : S1M032120B
 // Lot No.           : B003332
