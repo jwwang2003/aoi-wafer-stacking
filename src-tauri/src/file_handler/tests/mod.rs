@@ -2,6 +2,8 @@ use std::{env, fs};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 
+use calamine::Reader;
+
 // Replace `your_crate` with your actual crate name
 use super::{read_txt, read_xls};
 
@@ -48,4 +50,41 @@ fn read_xls_invalid_format() {
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+// =============================================================================
+// Real tests for reading .txt, .xls, and .WaferMap files
+
+#[test]
+fn read_txt_valid_file() {
+    // Assuming that the CWD is src-tauri
+    let path: &str = "static/S1M032120B_B003332_01_mapEx.txt";
+    let result = read_txt(path);
+    // Check if the .txt file was read successfully
+    assert!(result.is_ok());
+    let lines = result.unwrap();
+    // Check if the file contains the expected number of lines
+    assert!(!lines.is_empty(), "File should not be empty");
+}
+
+#[test]
+fn read_xls_valid_defect_list() {
+    // Assuming that the CWD is src-tauri
+    let path: &str = "static/1-86107919CNF1.xls";
+    let result = read_xls(path);
+    // Check if the .xls file was read successfully
+    assert!(result.is_ok());
+
+    let mut workbook = result.unwrap();
+
+    // Check if the specific worksheet "Surface defect list" exists
+    assert!(
+        workbook.worksheet_range("Surface defect list").is_ok(), 
+        "Workbook should not be empty (Surface defect list)"
+    );
+
+    assert!(
+        workbook.worksheet_range("PL defect list").is_ok(), 
+        "Workbook should not be empty (PL defect list)"
+    );
 }
