@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "wafer-overlay",
+        "title": "AOI Wafer Overlay (智能叠图)",
         "width": 1200,
         "height": 700
       }

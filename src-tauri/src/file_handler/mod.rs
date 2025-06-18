@@ -1,8 +1,8 @@
 mod tests;
 
+use calamine::{open_workbook, Xls};
 use std::fs::{metadata, File};
 use std::io::{self, BufRead, BufReader, Error, ErrorKind};
-use calamine::{open_workbook, Xls};
 
 /// Reads the given text file and returns all of its lines as a `Vec<String>`.
 ///
@@ -69,7 +69,10 @@ pub fn read_txt(path: &str) -> io::Result<Vec<String>> {
 pub fn read_xls(path: &str) -> io::Result<Xls<BufReader<File>>> {
     // Ensure the file exists before handing off to calamine
     if metadata(path).is_err() {
-        return Err(Error::new(ErrorKind::NotFound, format!("File not found: {}", path)));
+        return Err(Error::new(
+            ErrorKind::NotFound,
+            format!("File not found: {}", path),
+        ));
     }
 
     // Open the workbook; map any calamine error into an InvalidData io::Error

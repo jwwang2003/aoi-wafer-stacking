@@ -1,118 +1,123 @@
-// import { useState } from "react";
-// import reactLogo from "./assets/react.svg";
-// import { invoke } from "@tauri-apps/api/core";
-// import "./App.css";
-
-// function App() {
-//   const [greetMsg, setGreetMsg] = useState("");
-//   const [name, setName] = useState("");
-
-//   async function greet() {
-//     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-//     setGreetMsg(await invoke("greet", { name }));
-//   }
-
-//   return (
-//     <main className="container">
-//       <h1>Welcome to Tauri + React</h1>
-
-//       <div className="row">
-//         <a href="https://vitejs.dev" target="_blank">
-//           <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-//         </a>
-//         <a href="https://tauri.app" target="_blank">
-//           <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-//         </a>
-//         <a href="https://reactjs.org" target="_blank">
-//           <img src={reactLogo} className="logo react" alt="React logo" />
-//         </a>
-//       </div>
-//       <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-//       <form
-//         className="row"
-//         onSubmit={(e) => {
-//           e.preventDefault();
-//           greet();
-//         }}
-//       >
-//         <input
-//           id="greet-input"
-//           onChange={(e) => setName(e.currentTarget.value)}
-//           placeholder="Enter a name..."
-//         />
-//         <button type="submit">Greet</button>
-//       </form>
-//       <p>{greetMsg}</p>
-//     </main>
-//   );
-// }
-
-// export default App;
-
-// In App.tsx or App.jsx:
-// import React from 'react';
-
-// import WaferScene from './WaferScene.tsx';
-
-// function App() {
-//   return (
-//     <div style={{ width: 800, height: 800 }}>
-//       <WaferScene />
-//     </div>
-//   );
-// }
-
-// export default App;
 import React, { useState } from 'react';
-import { Box, Flex, Button, Text } from '@mantine/core';
+import { Box, Flex, Button, Tooltip } from '@mantine/core';
+import { 
+  IconHome, 
+  IconSettings, 
+  IconDisc,
+  IconEyeSearch,
+  IconDatabase,
+  IconHelpCircle,
+  IconInfoCircle
+} from '@tabler/icons-react';
+
+import ConfigPage from './pages/Config';
+import Wafer from './components/Wafer';
+import AboutPage from './pages/About';
+
+type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'help' | 'about';
 
 export default function App() {
-  const [mode, setMode] = useState<'import' | 'stack' | 'export'>('import');
+  const [mode, setMode] = useState<Mode>('home');
+  const [hovered, setHovered] = useState<Mode | null>(null);
 
   const renderContent = () => {
     switch (mode) {
-      case 'import':
-        return <Text size="lg">Import Mode: Load your data here.</Text>;
-      case 'stack':
-        return <Text size="lg">Stack Mode: Visualize and manage your stack.</Text>;
-      case 'export':
-        return <Text size="lg">Export Mode: Configure and export results.</Text>;
-      default:
-        return null;
+      case 'home':   return <div>Welcome to the Home page.</div>;
+      case 'config': return <ConfigPage />;
+      case 'aoi':    return <div>AOI (Automated Optical Inspection) content goes here.</div>;
+      case 'wafer':  return <Wafer />;
+      case 'help':   return <div>Need help? Find FAQs and support here.</div>;
+      case 'about':  return <AboutPage />;
+      default:       return <div>未找到内容</div>;
     }
   };
+
+  const menuItems: { icon: React.FC<any>; label: string; value: Mode }[] = [
+    { icon: IconHome,       label: '主页',  value: 'home'   },
+    { icon: IconSettings,   label: '配置',  value: 'config' },
+    { icon: IconEyeSearch,  label: 'AOI',   value: 'aoi'    },
+    { icon: IconDisc,       label: '叠图',  value: 'wafer'  },
+    { icon: IconDatabase,   label: '数据库', value: 'db'    },
+    { icon: IconHelpCircle, label: '帮助',  value: 'help'   },
+    { icon: IconInfoCircle, label: '关于',  value: 'about'  },
+  ];
+
+  // split into top 3 and bottom 2
+  const topItems = menuItems.slice(0, 5);
+  const bottomItems = menuItems.slice(5);
 
   return (
     <Flex style={{ height: '100vh' }}>
       {/* Left sidebar */}
       <Box
-        style={{ width: '33%', borderRight: '1px solid #eaeaea' }}
         p="md"
+        style={{
+          width: 50,
+          borderRight: '1px solid #eaeaea',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
       >
-        <Flex direction="column" gap="sm">
-          <Button
-            variant={mode === 'import' ? 'filled' : 'outline'}
-            onClick={() => setMode('import')}
-          >
-            Import
-          </Button>
-          <Button
-            variant={mode === 'stack' ? 'filled' : 'outline'}
-            onClick={() => setMode('stack')}
-          >
-            Stack
-          </Button>
-          <Button
-            variant={mode === 'export' ? 'filled' : 'outline'}
-            onClick={() => setMode('export')}
-          >
-            Export
-          </Button>
+        {/* top group */}
+        <Flex direction="column" align="center" gap="md">
+          {topItems.map(({ icon: Icon, label, value }) => {
+            const isActive = mode === value;
+            const isHovered = hovered === value;
+            return (
+              <Tooltip key={value} label={label} position="right">
+                <Button
+                  aria-label={label}
+                  variant={isActive ? 'filled' : 'outline'}
+                  onClick={() => setMode(value)}
+                  onMouseEnter={() => setHovered(value)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    width: 35,
+                    height: 35,
+                    padding: 0,
+                    transition: 'transform 150ms ease',
+                    transform: isHovered ? 'scale(1.075)' : 'scale(1)',
+                  }}
+                >
+                  <Icon size={20} strokeWidth={2} />
+                </Button>
+              </Tooltip>
+            );
+          })}
+        </Flex>
+
+        {/* bottom group */}
+        <Flex direction="column" align="center" gap="md">
+          {bottomItems.map(({ icon: Icon, label, value }) => {
+            const isActive = mode === value;
+            const isHovered = hovered === value;
+            return (
+              <Tooltip key={value} label={label} position="right">
+                <Button
+                  aria-label={label}
+                  variant={isActive ? 'filled' : 'outline'}
+                  onClick={() => setMode(value)}
+                  onMouseEnter={() => setHovered(value)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    width: 35,
+                    height: 35,
+                    padding: 0,
+                    transition: 'transform 150ms ease',
+                    transform: isHovered ? 'scale(1.075)' : 'scale(1)',
+                  }}
+                >
+                  <Icon size={20} strokeWidth={2} />
+                </Button>
+              </Tooltip>
+            );
+          })}
         </Flex>
       </Box>
 
-      {/* Main content area */}
+      {/* Main content */}
       <Box style={{ flex: 1, padding: 'md' }}>
         {renderContent()}
       </Box>

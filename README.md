@@ -30,6 +30,7 @@
 - https://react-redux.js.org/
 - https://threejs.org/
 - https://github.com/0xtaruhi/ufde-next/
+- https://github.com/tabler/tabler-icons/
 
 ## Authors
 

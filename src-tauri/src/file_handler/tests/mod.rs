@@ -1,6 +1,6 @@
-use std::{env, fs};
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::{env, fs};
 
 use calamine::Reader;
 
@@ -79,12 +79,12 @@ fn read_xls_valid_defect_list() {
 
     // Check if the specific worksheet "Surface defect list" exists
     assert!(
-        workbook.worksheet_range("Surface defect list").is_ok(), 
+        workbook.worksheet_range("Surface defect list").is_ok(),
         "Workbook should not be empty (Surface defect list)"
     );
 
     assert!(
-        workbook.worksheet_range("PL defect list").is_ok(), 
+        workbook.worksheet_range("PL defect list").is_ok(),
         "Workbook should not be empty (PL defect list)"
     );
 }

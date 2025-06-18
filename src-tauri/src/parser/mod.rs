@@ -1,12 +1,12 @@
 mod tests;
 
+use calamine::{open_workbook, Error, RangeDeserializerBuilder, Reader, Xls};
+use serde::Deserialize;
 use serde::Serialize;
+use std::env;
 use std::fs;
 use std::path::Path;
 use thiserror::Error;
-use calamine::{open_workbook, Reader, Error, Xls, RangeDeserializerBuilder};
-use std::env;
-use serde::Deserialize;
 
 // Define error type
 #[derive(Error, Debug)]
@@ -36,7 +36,6 @@ fn example() -> Result<(), Error> {
 
     Ok(())
 }
-
 
 // #[derive(Debug, Deserialize)]
 // struct DefectRecord {
@@ -151,7 +150,9 @@ pub fn parse_file1_str(content: &str) -> Result<WaferInfo, ParseError> {
     for _ in 0..13 {
         if let Some(line) = lines.next() {
             let parts: Vec<_> = line.split(':').map(str::trim).collect();
-            if parts.len() != 2 { continue; }
+            if parts.len() != 2 {
+                continue;
+            }
             match parts[0] {
                 "Device Name" => info.device_name = parts[1].to_string(),
                 "Lot No." => info.lot_no = parts[1].to_string(),
@@ -165,12 +166,14 @@ pub fn parse_file1_str(content: &str) -> Result<WaferInfo, ParseError> {
                 "Total Tested" => info.total_tested = parts[1].parse().unwrap_or(0),
                 "Total Pass" => info.total_pass = parts[1].parse().unwrap_or(0),
                 "Total Fail" => info.total_fail = parts[1].parse().unwrap_or(0),
-                "Yield" => info.yield_percent = parts[1].trim_end_matches('%').parse().unwrap_or(0.0),
+                "Yield" => {
+                    info.yield_percent = parts[1].trim_end_matches('%').parse().unwrap_or(0.0)
+                }
                 _ => {}
             }
         }
     }
-        // Remaining lines are ASCII map (skip blank lines)
+    // Remaining lines are ASCII map (skip blank lines)
     info.ascii_map = lines
         .filter(|l| !l.trim().is_empty())
         .map(str::to_string)
