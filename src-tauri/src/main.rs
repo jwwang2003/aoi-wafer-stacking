@@ -3,6 +3,7 @@
 
 mod file_handler;
 mod parser;
+mod wafer;
 
 fn main() {
     wafer_overlay_lib::run()
