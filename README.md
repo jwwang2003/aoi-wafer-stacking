@@ -37,8 +37,9 @@
 | CP 2     | `(?<=[/\\])CP\s*2(?=[/\\])`     |
 | AOI      | `(?<=[/\\])AOI(?=[/\\])`        |
 
-## Library references (dependencies)
+## References (libraries, dependencies, papers, etc.)
 
+- https://www.sichainsemi.com/
 - https://v2.tauri.app/start/
 - https://react-redux.js.org/
 - https://threejs.org/
