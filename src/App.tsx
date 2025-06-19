@@ -10,9 +10,11 @@ import {
   IconInfoCircle
 } from '@tabler/icons-react';
 
-import ConfigPage from './pages/Config';
-import Wafer from './components/Wafer';
-import AboutPage from './pages/About';
+import {
+  Config as ConfigPage, 
+  WaferStacking as WaferStackingPage,
+  About as AboutPage
+} from "@/pages";
 
 type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'help' | 'about';
 
@@ -25,7 +27,7 @@ export default function App() {
       case 'home':   return <div>Welcome to the Home page.</div>;
       case 'config': return <ConfigPage />;
       case 'aoi':    return <div>AOI (Automated Optical Inspection) content goes here.</div>;
-      case 'wafer':  return <Wafer />;
+      case 'wafer':  return <WaferStackingPage />;
       case 'help':   return <div>Need help? Find FAQs and support here.</div>;
       case 'about':  return <AboutPage />;
       default:       return <div>未找到内容</div>;

@@ -26,4 +26,5 @@ thiserror = "2.0.12"
 zip = "4.1.0"
 calamine = "0.26.0"
 tauri-plugin-dialog = "2"
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 
