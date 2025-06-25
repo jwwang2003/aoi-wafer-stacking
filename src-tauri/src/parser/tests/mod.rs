@@ -11,8 +11,8 @@ fn test_parse_defect_xls() {
     let path = "static/1-86107919CNF1.xls".to_string();
 
     // Attempt to parse
-    let defects = parse_defect_xls(path.clone())
-        .expect(&format!("Failed to parse defects from '{}'", path));
+    let defects =
+        parse_defect_xls(path.clone()).expect(&format!("Failed to parse defects from '{}'", path));
 
     // Should return at least one record
     assert!(!defects.is_empty(), "No defect records parsed");
@@ -37,15 +37,19 @@ fn test_parse_wafer() {
             println!("Parsed Wafer: {:?}", wafer);
             // Optionally add more assertions
             assert!(!wafer.ascii_map.is_empty(), "Wafer map should not be empty");
-            assert_eq!(wafer.gross_die, wafer.pass_die + wafer.fail_die, "Die counts should match");
-        },
+            assert_eq!(
+                wafer.gross_die,
+                wafer.pass_die + wafer.fail_die,
+                "Die counts should match"
+            );
+        }
         Err(e) => panic!("Failed to parse wafer: {}", e),
     }
 }
 
 #[test]
 fn test_parse_wafer_map() {
-  let path = "static/B003332-01_20250325_170454.WaferMap".to_string();
+    let path = "static/B003332-01_20250325_170454.WaferMap".to_string();
 
     // Attempt to parse the wafer file
     let result = parse_wafer_map(path);
@@ -57,15 +61,14 @@ fn test_parse_wafer_map() {
             // Optionally add more assertions
             assert!(!wafer.wafer_map.is_empty(), "Wafer map should not be empty");
             // assert_eq!(wafer.gross_die, wafer.pass_die + wafer.fail_die, "Die counts should match");
-        },
+        }
         Err(e) => panic!("Failed to parse wafer: {}", e),
     }
-
 }
 
 #[test]
 fn test_parse_wafer_map_ex() {
-  let path = "static/S1M032120B_B003332_01_mapEx.txt".to_string();
+    let path = "static/S1M032120B_B003332_01_mapEx.txt".to_string();
 
     // Attempt to parse the wafer file
     let result = parse_wafer_map_ex(path);
@@ -77,7 +80,7 @@ fn test_parse_wafer_map_ex() {
             // Optionally add more assertions
             assert!(!wafer.ascii_map.is_empty(), "Wafer map should not be empty");
             // assert_eq!(wafer.gross_die, wafer.pass_die + wafer.fail_die, "Die counts should match");
-        },
+        }
         Err(e) => panic!("Failed to parse wafer: {}", e),
     }
 }

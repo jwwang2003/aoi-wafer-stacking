@@ -2,7 +2,7 @@ mod tests;
 
 use calamine::{open_workbook, Xls};
 use std::fs::{metadata, File};
-use std::io::{self, Write, BufRead, BufReader, Error, ErrorKind};
+use std::io::{self, BufRead, BufReader, Error, ErrorKind, Write};
 
 /// Reads the given text file and returns all of its lines as a `Vec<String>`.
 ///
@@ -42,12 +42,12 @@ pub fn read_txt(path: &str) -> io::Result<Vec<String>> {
 }
 
 /// Writes any `data: &T` (where `T: Display`) to a file.
-/// 
+///
 /// - `base_path` is the file path *without* suffix (e.g. `"output/wafer1"`).
 /// - `suffix` is an optional extension like `".txt"` or `".WaferMap"`.  
 ///    If `None`, defaults to `".txt"`.  
 ///    If `base_path` already ends with that suffix, it won’t be duplicated.
-/// 
+///
 /// # Errors
 /// Returns any I/O error encountered when creating or writing the file.
 pub fn write_to_file<T: std::fmt::Display>(

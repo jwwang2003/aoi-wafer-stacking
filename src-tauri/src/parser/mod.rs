@@ -1,18 +1,17 @@
 mod tests;
 
-use tauri::command;
-use std::collections::HashSet;
-use calamine::{open_workbook_auto, RangeDeserializerBuilder, Reader};
 use super::file_handler::read_txt;
 use super::wafer::ds::{DefectRecord, Wafer, WaferMap, WaferMapEx};
-
+use calamine::{open_workbook_auto, RangeDeserializerBuilder, Reader};
+use std::collections::HashSet;
+use tauri::command;
 
 /// Parse a defect list from an Excel file into a Vec<DefectRecord>.
 #[command]
 pub fn parse_defect_xls(path: String) -> Result<Vec<DefectRecord>, String> {
     // 1. Open the workbook (.xls or .xlsx)
-    let mut wb = open_workbook_auto(&path)
-        .map_err(|e| format!("Failed to open Excel '{}': {}", path, e))?;
+    let mut wb =
+        open_workbook_auto(&path).map_err(|e| format!("Failed to open Excel '{}': {}", path, e))?;
 
     // 2. Ensure both required sheets exist
     let sheet_names: HashSet<_> = wb.sheet_names().iter().cloned().collect();
@@ -52,32 +51,28 @@ pub fn parse_defect_xls(path: String) -> Result<Vec<DefectRecord>, String> {
     Ok(records)
 }
 
-
 /// Parse a plain‐text wafer definition file into your `Wafer` struct.
 #[command]
 pub fn parse_wafer(path: String) -> Result<Wafer, String> {
-    let lines = read_txt(&path)
-        .map_err(|e| format!("Failed to read wafer file '{}': {}", path, e))?;
-    Wafer::from_lines(&lines)
-         .map_err(|e| format!("Failed to parse wafer: {}", e))
+    let lines =
+        read_txt(&path).map_err(|e| format!("Failed to read wafer file '{}': {}", path, e))?;
+    Wafer::from_lines(&lines).map_err(|e| format!("Failed to parse wafer: {}", e))
 }
 
 /// Parse a wafer-map (simple) file into your `WaferMap` struct.
 #[command]
 pub fn parse_wafer_map(path: String) -> Result<WaferMap, String> {
-    let lines = read_txt(&path)
-        .map_err(|e| format!("Failed to read wafer map '{}': {}", path, e))?;
-    WaferMap::from_lines(&lines)
-            .map_err(|e| format!("Failed to parse wafer map: {}", e))
+    let lines =
+        read_txt(&path).map_err(|e| format!("Failed to read wafer map '{}': {}", path, e))?;
+    WaferMap::from_lines(&lines).map_err(|e| format!("Failed to parse wafer map: {}", e))
 }
 
 /// Parse an extended wafer-map (with extra metadata) into `WaferMapEx`.
 #[command]
 pub fn parse_wafer_map_ex(path: String) -> Result<WaferMapEx, String> {
-    let lines = read_txt(&path)
-        .map_err(|e| format!("Failed to read wafer map ex '{}': {}", path, e))?;
-    WaferMapEx::from_lines(&lines)
-              .map_err(|e| format!("Failed to parse wafer map ex: {}", e))
+    let lines =
+        read_txt(&path).map_err(|e| format!("Failed to read wafer map ex '{}': {}", path, e))?;
+    WaferMapEx::from_lines(&lines).map_err(|e| format!("Failed to parse wafer map ex: {}", e))
 }
 
 // use calamine::{open_workbook, Error, RangeDeserializerBuilder, Reader, Xls};

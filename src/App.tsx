@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Flex, Button, Tooltip } from '@mantine/core';
+import { Group, Box, Flex, Button, Tooltip } from '@mantine/core';
 import { 
   IconHome, 
   IconSettings, 
@@ -49,7 +49,7 @@ export default function App() {
   const bottomItems = menuItems.slice(5);
 
   return (
-    <Flex style={{ height: '100vh' }}>
+    <div style={{ position: 'relative', height: '100vh', display: 'flex', overflow: 'hidden' }}>
       {/* Left sidebar */}
       <Box
         p="md"
@@ -57,12 +57,16 @@ export default function App() {
           width: 50,
           borderRight: '1px solid #eaeaea',
           display: 'flex',
+          top: 0,
+          left: 0,
+          height: '100vh',
+          position: 'sticky',
           flexDirection: 'column',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}
       >
-        {/* top group */}
+        {/* Top group */}
         <Flex direction="column" align="center" gap="md">
           {topItems.map(({ icon: Icon, label, value }) => {
             const isActive = mode === value;
@@ -90,7 +94,7 @@ export default function App() {
           })}
         </Flex>
 
-        {/* bottom group */}
+        {/* Bottom group */}
         <Flex direction="column" align="center" gap="md">
           {bottomItems.map(({ icon: Icon, label, value }) => {
             const isActive = mode === value;
@@ -120,9 +124,9 @@ export default function App() {
       </Box>
 
       {/* Main content */}
-      <Box style={{ flex: 1, padding: 'md' }}>
+      <Box flex={1} style={{ overflow: 'scroll' }}>
         {renderContent()}
       </Box>
-    </Flex>
+    </div>
   );
 }
