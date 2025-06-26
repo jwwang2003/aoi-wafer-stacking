@@ -10,6 +10,9 @@
     "opener:default",
     "dialog:default",
     "sql:default",
-    "fs:default"
+    "fs:default",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-resource-read-recursive"
   ]
 }

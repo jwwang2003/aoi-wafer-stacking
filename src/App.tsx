@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Group, Box, Flex, Button, Tooltip } from '@mantine/core';
+import { Box, Flex, Button, Tooltip } from '@mantine/core';
 import { 
   IconHome, 
   IconSettings, 
@@ -26,7 +26,7 @@ export default function App() {
     switch (mode) {
       case 'home':   return <div>Welcome to the Home page.</div>;
       case 'config': return <ConfigPage />;
-      case 'aoi':    return <div>AOI (Automated Optical Inspection) content goes here.</div>;
+      case 'aoi':    return <div>AOI (Automated Optical Inspection) 暂无实现.</div>;
       case 'wafer':  return <WaferStackingPage />;
       case 'help':   return <div>Need help? Find FAQs and support here.</div>;
       case 'about':  return <AboutPage />;
