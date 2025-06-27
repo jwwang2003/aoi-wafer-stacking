@@ -33,6 +33,19 @@ yarn tauri icon --help
 yarn tauri icon public/logo3.png
 ```
 
+### Building
+
+#### Windows
+
+```
+
+```
+
+#### MacOS
+```
+yarn tauri build --bundles dmg
+```
+
 ### 文件夹与文件正则表达式
 
 | 文件夹 | 正则表达式 |

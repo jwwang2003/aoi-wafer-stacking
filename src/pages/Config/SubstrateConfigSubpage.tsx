@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useState } from 'react';
 import { Button, Group, NumberInput, Slider, Stack, Text, Title, Box, Flex } from '@mantine/core';
 

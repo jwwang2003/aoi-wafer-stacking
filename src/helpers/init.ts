@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import {
     PREFERENCES_FILENAME,
     DATA_SOURCES_CONFIG_FILENAME

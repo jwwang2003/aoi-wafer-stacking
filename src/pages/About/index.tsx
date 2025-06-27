@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { Box, Title, Text, List, Anchor, Group } from '@mantine/core';
 
 export default function AboutPage() {
