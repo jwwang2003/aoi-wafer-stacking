@@ -26,6 +26,13 @@
 
 ## Developer notes
 
+### Creating icons
+
+```
+yarn tauri icon --help
+yarn tauri icon public/logo3.png
+```
+
 ### 文件夹与文件正则表达式
 
 | 文件夹 | 正则表达式 |

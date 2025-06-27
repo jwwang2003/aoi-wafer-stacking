@@ -1,22 +1,21 @@
-// src/store/configSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface PathsState {
   substratePaths: string[];
-  fabCpPaths: string[];
   cp1Paths: string[];
-  wlbiPaths: string[];
   cp2Paths: string[];
+  wlbiPaths: string[];
+  cp3Paths: string[];
   aoiPaths: string[];
   lastModified: string;
 }
 
 interface RegexState {
   substrateRegex: string;
-  fabCpRegex: string;
   cp1Regex: string;
-  wlbiRegex: string;
   cp2Regex: string;
+  wlbiRegex: string;
+  cp3Regex: string;
   aoiRegex: string;
   lastModified: string;
 }
@@ -33,24 +32,31 @@ type RegexKey = keyof RegexState;
 
 const now = () => new Date().toISOString();
 
+function arraysAreEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((val, index) => val === sortedB[index]);
+}
+
 const initialState: ConfigState = {
   rootPath: '',
   rootLastModified: now(),
   paths: {
     substratePaths: [],
-    fabCpPaths: [],
     cp1Paths: [],
-    wlbiPaths: [],
     cp2Paths: [],
+    wlbiPaths: [],
+    cp3Paths: [],
     aoiPaths: [],
     lastModified: now(),
   },
   regex: {
     substrateRegex: '^衬底$',
-    fabCpRegex: 'CP',
     cp1Regex: 'CP-01',
-    wlbiRegex: 'wlbi',
     cp2Regex: 'CP-prober-01',
+    wlbiRegex: 'wlbi',
+    cp3Regex: 'CP-03',
     aoiRegex: 'AOI-01',
     lastModified: now(),
   },
@@ -61,7 +67,7 @@ const configSlice = createSlice({
   name: 'config',
   initialState,
   reducers: {
-    // —— Root path reducers ——
+    // —— Root path reducer ——
     setRootPath(state, action: PayloadAction<string>) {
       state.rootPath = action.payload;
       state.rootLastModified = now();
@@ -69,8 +75,10 @@ const configSlice = createSlice({
 
     // —— Paths reducers ——
     setSubstratePaths(state, action: PayloadAction<string[]>) {
-      state.paths.substratePaths = action.payload;
-      state.paths.lastModified = now();
+      if (!arraysAreEqual(state.paths.substratePaths, action.payload)) {
+        state.paths.substratePaths = action.payload;
+        state.paths.lastModified = now();
+      }
     },
     addSubstratePath(state, action: PayloadAction<string>) {
       if (!state.paths.substratePaths.includes(action.payload)) {
@@ -83,24 +91,11 @@ const configSlice = createSlice({
       state.paths.lastModified = now();
     },
 
-    setFabCpPaths(state, action: PayloadAction<string[]>) {
-      state.paths.fabCpPaths = action.payload;
-      state.paths.lastModified = now();
-    },
-    addFabCpPath(state, action: PayloadAction<string>) {
-      if (!state.paths.fabCpPaths.includes(action.payload)) {
-        state.paths.fabCpPaths.push(action.payload);
+    setCp1Paths(state, action: PayloadAction<string[]>) {
+      if (!arraysAreEqual(state.paths.cp1Paths, action.payload)) {
+        state.paths.cp1Paths = action.payload;
         state.paths.lastModified = now();
       }
-    },
-    removeFabCpPath(state, action: PayloadAction<string>) {
-      state.paths.fabCpPaths = state.paths.fabCpPaths.filter(p => p !== action.payload);
-      state.paths.lastModified = now();
-    },
-
-    setCp1Paths(state, action: PayloadAction<string[]>) {
-      state.paths.cp1Paths = action.payload;
-      state.paths.lastModified = now();
     },
     addCp1Path(state, action: PayloadAction<string>) {
       if (!state.paths.cp1Paths.includes(action.payload)) {
@@ -113,24 +108,11 @@ const configSlice = createSlice({
       state.paths.lastModified = now();
     },
 
-    setWlbiPaths(state, action: PayloadAction<string[]>) {
-      state.paths.wlbiPaths = action.payload;
-      state.paths.lastModified = now();
-    },
-    addWlbiPath(state, action: PayloadAction<string>) {
-      if (!state.paths.wlbiPaths.includes(action.payload)) {
-        state.paths.wlbiPaths.push(action.payload);
+    setCp2Paths(state, action: PayloadAction<string[]>) {
+      if (!arraysAreEqual(state.paths.cp2Paths, action.payload)) {
+        state.paths.cp2Paths = action.payload;
         state.paths.lastModified = now();
       }
-    },
-    removeWlbiPath(state, action: PayloadAction<string>) {
-      state.paths.wlbiPaths = state.paths.wlbiPaths.filter(p => p !== action.payload);
-      state.paths.lastModified = now();
-    },
-
-    setCp2Paths(state, action: PayloadAction<string[]>) {
-      state.paths.cp2Paths = action.payload;
-      state.paths.lastModified = now();
     },
     addCp2Path(state, action: PayloadAction<string>) {
       if (!state.paths.cp2Paths.includes(action.payload)) {
@@ -143,9 +125,45 @@ const configSlice = createSlice({
       state.paths.lastModified = now();
     },
 
-    setAoiPaths(state, action: PayloadAction<string[]>) {
-      state.paths.aoiPaths = action.payload;
+    setWlbiPaths(state, action: PayloadAction<string[]>) {
+      if (!arraysAreEqual(state.paths.wlbiPaths, action.payload)) {
+        state.paths.wlbiPaths = action.payload;
+        state.paths.lastModified = now();
+      }
+    },
+    addWlbiPath(state, action: PayloadAction<string>) {
+      if (!state.paths.wlbiPaths.includes(action.payload)) {
+        state.paths.wlbiPaths.push(action.payload);
+        state.paths.lastModified = now();
+      }
+    },
+    removeWlbiPath(state, action: PayloadAction<string>) {
+      state.paths.wlbiPaths = state.paths.wlbiPaths.filter(p => p !== action.payload);
       state.paths.lastModified = now();
+    },
+
+    setCp3Paths(state, action: PayloadAction<string[]>) {
+      if (!arraysAreEqual(state.paths.cp3Paths, action.payload)) {
+        state.paths.cp3Paths = action.payload;
+        state.paths.lastModified = now();
+      }
+    },
+    addCp3Path(state, action: PayloadAction<string>) {
+      if (!state.paths.cp3Paths.includes(action.payload)) {
+        state.paths.cp3Paths.push(action.payload);
+        state.paths.lastModified = now();
+      }
+    },
+    removeCp3Path(state, action: PayloadAction<string>) {
+      state.paths.cp3Paths = state.paths.cp3Paths.filter(p => p !== action.payload);
+      state.paths.lastModified = now();
+    },
+
+    setAoiPaths(state, action: PayloadAction<string[]>) {
+      if (!arraysAreEqual(state.paths.aoiPaths, action.payload)) {
+        state.paths.aoiPaths = action.payload;
+        state.paths.lastModified = now();
+      }
     },
     addAoiPath(state, action: PayloadAction<string>) {
       if (!state.paths.aoiPaths.includes(action.payload)) {
@@ -158,14 +176,16 @@ const configSlice = createSlice({
       state.paths.lastModified = now();
     },
 
-    // —— Regex reducers ——
+    // —— Regex reducer ——
     setRegexPattern(state, action: PayloadAction<{ key: RegexKey; regex: string }>) {
       const { key, regex } = action.payload;
-      state.regex[key] = regex;
-      state.regex.lastModified = now();
+      if (state.regex[key] !== regex) {
+        state.regex[key] = regex;
+        state.regex.lastModified = now();
+      }
     },
 
-    // —— Main save reducer ——
+    // —— Save action ——
     saveConfig(state) {
       state.lastSaved = now();
     },
@@ -177,18 +197,18 @@ export const {
   setSubstratePaths,
   addSubstratePath,
   removeSubstratePath,
-  setFabCpPaths,
-  addFabCpPath,
-  removeFabCpPath,
   setCp1Paths,
   addCp1Path,
   removeCp1Path,
-  setWlbiPaths,
-  addWlbiPath,
-  removeWlbiPath,
   setCp2Paths,
   addCp2Path,
   removeCp2Path,
+  setWlbiPaths,
+  addWlbiPath,
+  removeWlbiPath,
+  setCp3Paths,
+  addCp3Path,
+  removeCp3Path,
   setAoiPaths,
   addAoiPath,
   removeAoiPath,

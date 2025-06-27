@@ -1,6 +1,6 @@
 // src/slices/userPreferencesSlice.ts
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { appConfigDir } from '@tauri-apps/api/path';
+import { appLocalDataDir } from '@tauri-apps/api/path';
 import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
 export const initConfigFilePath = createAsyncThunk<
@@ -11,8 +11,9 @@ export const initConfigFilePath = createAsyncThunk<
   'preferences/initConfigFilePath',
   async (_, thunkAPI) => {
     try {
-      const baseDir = await appConfigDir();
-      const prefFileName = 'user-preferences.json';
+      const baseDir = await appLocalDataDir();
+
+      const prefFileName = 'preferences.json';
       const configFileName = 'myapp-config.json';
 
       const prefFilePath = `${baseDir}/${prefFileName}`;
@@ -72,10 +73,10 @@ const preferencesSlice = createSlice({
   reducers: {
     setConfigFilePath(state, action: PayloadAction<string>) {
       state.configFilePath = action.payload;
-
+      console.log(state.configFilePath)
       // Persist the new preference immediately
       // (we need to know prefFilePath again)
-      appConfigDir()
+      appLocalDataDir()
         .then((baseDir) => {
           const prefFileName = 'user-preferences.json';
           const prefFilePath = `${baseDir}/${prefFileName}`;

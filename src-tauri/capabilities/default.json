@@ -11,8 +11,14 @@
     "dialog:default",
     "sql:default",
     "fs:default",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:allow-appdata-read-recursive",
+      "allow": [{ "path": "$APPCONFIG/**/*" }]
+    },
+    {
+      "identifier": "fs:allow-appdata-write-recursive",
+      "allow": [{ "path": "$APPCONFIG/**/*" }]
+    },
     "fs:allow-resource-read-recursive"
   ]
 }
