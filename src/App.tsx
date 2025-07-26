@@ -1,132 +1,142 @@
-import React, { useState } from 'react';
-import { Box, Flex, Button, Tooltip } from '@mantine/core';
-import { 
-  IconHome, 
-  IconSettings, 
-  IconDisc,
-  IconEyeSearch,
-  IconDatabase,
-  IconHelpCircle,
-  IconInfoCircle
-} from '@tabler/icons-react';
-
+import { useState, useEffect } from 'react';
 import {
-  Config as ConfigPage, 
-  WaferStacking as WaferStackingPage,
-  About as AboutPage
-} from "@/pages";
+    Routes,
+    Route,
+    useLocation,
+    Link,
+} from 'react-router-dom';
+import { Box, Flex, Button, Tooltip } from '@mantine/core';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ToastContainer, toast } from 'react-toastify';
 
-type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'help' | 'about';
+import { menuItems } from '@/constants/MenuItems';
+
+function getTopLevelPath(pathname: string): string {
+    const segments = pathname.split('/').filter(Boolean);
+    return '/' + (segments[0] || '');
+}
+
+export function AnimatedRoutes() {
+    const location = useLocation();
+    const topLevelKey = getTopLevelPath(location.pathname);
+
+    return (
+        <AnimatePresence mode="wait">
+            <motion.div
+                key={topLevelKey}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.10 }}
+                style={{ flex: 1, overflow: 'auto' }}
+            >   
+                {/* The app router is located here! */}
+                <Routes location={location}>
+                    {menuItems.map(({ path, component: Component }) => (
+                        <Route key={path} path={path + '/*'} element={<Component />} />
+                    ))}
+                    <Route path="*" element={<div>未找到内容</div>} />
+                </Routes>
+            </motion.div>
+        </AnimatePresence>
+    );
+}
 
 export default function App() {
-  const [mode, setMode] = useState<Mode>('home');
-  const [hovered, setHovered] = useState<Mode | null>(null);
+    const [hovered, setHovered] = useState<string | null>(null);
+    const location = useLocation();
 
-  const renderContent = () => {
-    switch (mode) {
-      case 'home':   return <div>Welcome to the Home page.</div>;
-      case 'config': return <ConfigPage />;
-      case 'aoi':    return <div>AOI (Automated Optical Inspection) 暂无实现.</div>;
-      case 'wafer':  return <WaferStackingPage />;
-      case 'help':   return <div>Need help? Find FAQs and support here.</div>;
-      case 'about':  return <AboutPage />;
-      default:       return <div>未找到内容</div>;
-    }
-  };
+    // A welcome message whenever the UI is loaded!
+    useEffect(() => {
+        toast.info('欢迎使用！', {
+            position: 'top-right',
+            autoClose: 10000,           // wait for 10 seconds
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: false,
+            draggable: false,
+        });
+    }, []);
 
-  const menuItems: { icon: React.FC<any>; label: string; value: Mode }[] = [
-    { icon: IconHome,       label: '主页',  value: 'home'   },
-    { icon: IconSettings,   label: '配置',  value: 'config' },
-    { icon: IconEyeSearch,  label: 'AOI',   value: 'aoi'    },
-    { icon: IconDisc,       label: '叠图',  value: 'wafer'  },
-    { icon: IconDatabase,   label: '数据库', value: 'db'    },
-    { icon: IconHelpCircle, label: '帮助',  value: 'help'   },
-    { icon: IconInfoCircle, label: '关于',  value: 'about'  },
-  ];
+    return (
+        <div style={{ position: 'relative', height: '100vh', display: 'flex', overflow: 'hidden' }}>
+            {/* Sidebar */}
+            <Box
+                p="md"
+                style={{
+                    width: 60,
+                    borderRight: '1px solid #eaeaea',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                }}
+            >
+                {/* Top Buttons */}
+                <SidebarButtonGroup
+                    items={menuItems.slice(0, 5)}
+                    hovered={hovered}
+                    setHovered={setHovered}
+                    currentPath={location.pathname}
+                />
 
-  // split into top 3 and bottom 2
-  const topItems = menuItems.slice(0, 5);
-  const bottomItems = menuItems.slice(5);
+                {/* Bottom Buttons */}
+                <SidebarButtonGroup
+                    items={menuItems.slice(5)}
+                    hovered={hovered}
+                    setHovered={setHovered}
+                    currentPath={location.pathname}
+                />
+            </Box>
 
-  return (
-    <div style={{ position: 'relative', height: '100vh', display: 'flex', overflow: 'hidden' }}>
-      {/* Left sidebar */}
-      <Box
-        p="md"
-        style={{
-          width: 50,
-          borderRight: '1px solid #eaeaea',
-          display: 'flex',
-          top: 0,
-          left: 0,
-          height: '100vh',
-          position: 'sticky',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        {/* Top group */}
+            {/* Main content */}
+            <AnimatedRoutes />
+            <ToastContainer />
+        </div>
+    );
+}
+function SidebarButtonGroup({
+    items,
+    hovered,
+    setHovered,
+    currentPath,
+}: {
+    items: typeof menuItems;
+    hovered: string | null;
+    setHovered: (path: string | null) => void;
+    currentPath: string;
+}) {
+    return (
         <Flex direction="column" align="center" gap="md">
-          {topItems.map(({ icon: Icon, label, value }) => {
-            const isActive = mode === value;
-            const isHovered = hovered === value;
-            return (
-              <Tooltip key={value} label={label} position="right">
-                <Button
-                  aria-label={label}
-                  variant={isActive ? 'filled' : 'outline'}
-                  onClick={() => setMode(value)}
-                  onMouseEnter={() => setHovered(value)}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    width: 35,
-                    height: 35,
-                    padding: 0,
-                    transition: 'transform 150ms ease',
-                    transform: isHovered ? 'scale(1.075)' : 'scale(1)',
-                  }}
-                >
-                  <Icon size={20} strokeWidth={2} />
-                </Button>
-              </Tooltip>
-            );
-          })}
-        </Flex>
+            {items.map(({ icon: Icon, label, path }) => {
+                const isHovered = hovered === path;
+                const isActive =
+                    path === '/'
+                        ? currentPath === '/'
+                        : currentPath.startsWith(path + '/') || currentPath === path;
 
-        {/* Bottom group */}
-        <Flex direction="column" align="center" gap="md">
-          {bottomItems.map(({ icon: Icon, label, value }) => {
-            const isActive = mode === value;
-            const isHovered = hovered === value;
-            return (
-              <Tooltip key={value} label={label} position="right">
-                <Button
-                  aria-label={label}
-                  variant={isActive ? 'filled' : 'outline'}
-                  onClick={() => setMode(value)}
-                  onMouseEnter={() => setHovered(value)}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    width: 35,
-                    height: 35,
-                    padding: 0,
-                    transition: 'transform 150ms ease',
-                    transform: isHovered ? 'scale(1.075)' : 'scale(1)',
-                  }}
-                >
-                  <Icon size={20} strokeWidth={2} />
-                </Button>
-              </Tooltip>
-            );
-          })}
+                return (
+                    <Tooltip key={path} label={label} position="right">
+                        <Button
+                            component={Link}
+                            to={path}
+                            aria-label={label}
+                            variant={isActive ? 'filled' : 'outline'}
+                            onMouseEnter={() => setHovered(path)}
+                            onMouseLeave={() => setHovered(null)}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                padding: 0,
+                                transform: isHovered ? 'scale(1.075)' : 'scale(1)',
+                                transition: 'transform 150ms ease',
+                            }}
+                        >
+                            <Icon size={20} strokeWidth={2} />
+                        </Button>
+                    </Tooltip>
+                );
+            })}
         </Flex>
-      </Box>
-
-      {/* Main content */}
-      <Box flex={1} style={{ overflow: 'scroll' }}>
-        {renderContent()}
-      </Box>
-    </div>
-  );
+    );
 }

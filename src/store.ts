@@ -1,7 +1,7 @@
 // src/store/index.ts
 import { configureStore } from '@reduxjs/toolkit';
 import configReducer from './slices/configSlice';
-import preferencesReducer from './slices/userPreferencesSlice';
+import preferencesReducer from './slices/preferencesSlice';
 
 const store = configureStore({
   reducer: {

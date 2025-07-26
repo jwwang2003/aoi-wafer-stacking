@@ -14,7 +14,7 @@ import {
     saveConfig,
 } from '@/slices/configSlice';
 import { RegexInput } from '@/components/RegexInput';
-import SubFolderInput from '@/components/FolderSelect';
+import SubFolderInput from '@/components/PathPicker';
 import DirectorySelectList from '@/components/DirectorySelectList';
 
 // =============================================================================
@@ -93,7 +93,7 @@ export default function DataConfigSubpage() {
     const DataSourceFlow: DataSourceFlowItem[] = [
         {
             name: "substrate",
-            title: "衬底 (substrate)",
+            title: "Substrate",
             paths: useAppSelector((s) => s.config.paths.substratePaths),
             onChange: (ps: string[]) => dispatch(setSubstratePaths(ps)),
         },
@@ -153,7 +153,7 @@ export default function DataConfigSubpage() {
                             保存
                         </Button>
                     </Indicator>
-                    <Text size="sm" color={rootDirty ? 'green' : undefined}>
+                    <Text size="sm" c={rootDirty ? 'green' : undefined}>
                         最后保存: {new Date(lastSaved).toLocaleString()}
                     </Text>
                 </Group>
@@ -217,7 +217,7 @@ export default function DataConfigSubpage() {
                         保存
                     </Button>
                 </Indicator>
-                <Text size="sm" color={pathsDirty ? 'green' : undefined}>
+                <Text size="sm" c={pathsDirty ? 'green' : undefined}>
                     最后保存: {new Date(lastSaved).toLocaleString()}
                 </Text>
             </Group>

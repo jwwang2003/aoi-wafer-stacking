@@ -1,98 +1,55 @@
-// @ts-nocheck
-
-import React, { useEffect, useState } from 'react';
 import {
-    // Structure
-    Box,
-    Flex,
     Container,
     Group,
     Stack,
-
-    // Components
     SegmentedControl,
-    Stepper,
-    Chip,
-    TextInput,
-    NumberInput,
-    Slider,
-    Button,
     Title,
-    Text,
-    Divider,
-    getBreakpointValue,
 } from '@mantine/core';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 
 // Subpages
-import UserPreferencesSubpage from './UserPreferencesSubpage';
-import DataConfigSubpage from './DataConfigSubpage';
-import SubstrateConfigPage from './SubstrateConfigSubpage';
+import Preferences from './Preferences';
+import DataConfig from './DataConfig';
+import SubstrateConfig from './SubstrateConfig';
 
+const subpageOptions = [
+    { label: '通用', value: 'preferences' },
+    { label: '数据源', value: 'data' },
+    { label: '衬底设置', value: 'substrate' },
+];
 
 export default function ConfigPage() {
-    const [selectedOption, setSelectedOption] = useState<string>('数据源');
+    const navigate = useNavigate();
+    const location = useLocation();
 
-    // Handle SegmentedControl change
-    const handleSegmentedControlChange = (value: string) => {
-        setSelectedOption(value);
+    // Determine current segment based on pathname
+    const currentValue =
+        subpageOptions.find((opt) =>
+            location.pathname.endsWith(opt.value)
+        )?.value ?? 'data';
+
+    // Handle segmented control change
+    const handleChange = (value: string) => {
+        navigate(`/config/${value}`);
     };
-
-    let componentToDisplay;
-
-    // Switch case based on selectedOption
-    switch (selectedOption) {
-        case '通用':
-            componentToDisplay = <UserPreferencesSubpage />;
-            break;
-        case '数据源':
-            componentToDisplay = <DataConfigSubpage />;
-            break;
-        case '衬底配置':
-            componentToDisplay = <SubstrateConfigPage />;
-            break;
-        default:
-            componentToDisplay = <div>请选择一个选项</div>; // Default component if no option is selected
-    }
-
-    const [saveError, setSaveError] = useState<string | null>(null);
-
-    // const saveConfig = () => {
-    //     if (
-    //         !rootPath ||
-    //         !substratePath ||
-    //         !fabCpPath ||
-    //         !cp1Path ||
-    //         !wlbiPath ||
-    //         !cp2Path ||
-    //         !aoiPath
-    //     ) {
-    //         setSaveError('请填写所有目录路径后再保存。');
-    //         return;
-    //     }
-    //     setSaveError(null);
-    //     console.log('Saving full config:', {
-    //         rootPath,
-    //         substratePath,
-    //         fabCpPath,
-    //         cp1Path,
-    //         wlbiPath,
-    //         cp2Path,
-    //         aoiPath,
-    //     });
-    //     // dispatch thunk to persist config…
-    // };
 
     return (
         <Group grow>
             <Container fluid p="md">
                 <Stack gap="md">
-                    <Title order={1}>配置</Title>
+                    <Title order={1}>设置</Title>
                     <SegmentedControl
-                        data={['通用', '数据源', '衬底配置']}
-                        value={selectedOption}
-                        onChange={handleSegmentedControlChange}
+                        data={subpageOptions}
+                        value={currentValue}
+                        onChange={handleChange}
                     />
-                    {componentToDisplay} {/* Render the selected component */}
+                    <Routes>
+                        <Route path="/" element={<Navigate to="data" replace />} />
+                        <Route path="preferences" element={<Preferences />} />
+                        <Route path="data" element={<DataConfig />} />
+                        <Route path="substrate" element={<SubstrateConfig />} />
+                        <Route path="*" element={<div>未找到子页面</div>} />
+                    </Routes>
                 </Stack>
             </Container>
         </Group>

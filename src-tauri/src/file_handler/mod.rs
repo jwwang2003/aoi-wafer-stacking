@@ -1,5 +1,7 @@
 mod tests;
 
+pub mod file_lock;
+
 use calamine::{open_workbook, Xls};
 use std::fs::{metadata, File};
 use std::io::{self, BufRead, BufReader, Error, ErrorKind, Write};

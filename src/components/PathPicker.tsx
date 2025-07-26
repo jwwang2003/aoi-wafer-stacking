@@ -2,20 +2,25 @@ import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { exists, stat } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
-import { TextInput, Button } from '@mantine/core';
+import { TextInput, ActionIcon } from '@mantine/core';
 import { IconFolder } from '@tabler/icons-react';
 
-interface SubFolderInputProps {
+interface PathPickerProps {
     label: string;
     value: string;
     onChange: (value: string) => void;
+    mode?: 'file' | 'folder';
 }
 
-export default function SubFolderInput({ label, value, onChange }: SubFolderInputProps) {
+export default function PathPicker({
+    label,
+    value,
+    onChange,
+    mode = 'folder',
+}: PathPickerProps) {
     const [error, setError] = useState<string | null>(null);
 
-    // Normalize → resolve → exists → stat
-    const validateDirectory = async (candidate: string) => {
+    const validatePath = async (candidate: string) => {
         try {
             const normalized = await path.normalize(candidate);
             const resolved = await path.resolve(normalized);
@@ -23,25 +28,28 @@ export default function SubFolderInput({ label, value, onChange }: SubFolderInpu
                 return [false, '路径无效或不存在'] as const;
             }
             const info = await stat(resolved);
-            if (!info.isDirectory) {
+            if (mode === 'folder' && !info.isDirectory) {
                 return [false, '路径不是目录'] as const;
+            }
+            if (mode === 'file' && info.isDirectory) {
+                return [false, '请选择文件而不是文件夹'] as const;
             }
             return [true, resolved] as const;
         } catch {
-            return [false, '验证目录时出错'] as const;
+            return [false, '验证路径时出错'] as const;
         }
     };
 
-    // Only way to change the value: open dialog
     const handleSelect = async () => {
         try {
             const selected = await open({
-                directory: true,
+                directory: mode === 'folder',
                 multiple: false,
                 title: `选择 ${label}`,
             });
+
             if (typeof selected === 'string') {
-                const [ok, result] = await validateDirectory(selected);
+                const [ok, result] = await validatePath(selected);
                 if (ok) {
                     onChange(result);
                     setError(null);
@@ -50,29 +58,24 @@ export default function SubFolderInput({ label, value, onChange }: SubFolderInpu
                 }
             }
         } catch (e: any) {
-            setError(`选择目录失败: ${e.message}`);
+            setError(`选择失败: ${e.message}`);
         }
     };
 
     return (
         <TextInput
             label={label}
-            placeholder="点击选择目录"
+            placeholder={mode === 'folder' ? '点击选择目录' : '点击选择文件'}
             value={value}
-            readOnly // disallow typing
-            onClick={handleSelect} // open picker on click anywhere
+            readOnly
+            onClick={handleSelect}
             error={error}
             leftSection={
-                <Button
-                    onClick={handleSelect}
-                    style={{ width: '100%', height: '100%', padding: 0 }}
-                >
-                    <IconFolder size={16} strokeWidth={2} />
-                </Button>
+                <ActionIcon variant="filled" aria-label="Select path" onClick={handleSelect}>
+                    <IconFolder size={16} stroke={2} />
+                </ActionIcon>
             }
-            styles={{
-                input: { cursor: 'pointer' }          // show pointer cursor
-            }}
+            styles={{ input: { cursor: 'pointer' } }}
         />
     );
 }
