@@ -7,7 +7,7 @@ interface RegexInputProps {
   onValidChange?: (newPattern: string) => void;
 }
 
-export function RegexInput({ label, defaultRegex, onValidChange }: RegexInputProps) {
+export default function RegexInput({ label, defaultRegex, onValidChange }: RegexInputProps) {
   // This is the "committed" pattern we actually use
   const [pattern, setPattern] = useState(defaultRegex);
   // Error message if the user’s input fails to parse

@@ -86,7 +86,7 @@ export async function init_user_pref(): Promise<boolean> {
 export async function init_data_source(): Promise<boolean> {
     const appDataDirPath = await appDataDir();
     // Resolve full file path
-    const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
+    const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
     
     try {
         const fileExists = await exists(DATA_SOURCES_CONFIG_FILENAME, { baseDir: BaseDirectory.AppData });

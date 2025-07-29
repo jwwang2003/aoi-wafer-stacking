@@ -5,7 +5,12 @@ import {
     useLocation,
     Link,
 } from 'react-router-dom';
-import { Box, Flex, Button, Tooltip } from '@mantine/core';
+import {
+    Box,
+    Flex,
+    Button,
+    Tooltip
+} from '@mantine/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
 
@@ -50,8 +55,8 @@ export default function App() {
     useEffect(() => {
         toast.info('欢迎使用！', {
             position: 'top-right',
-            autoClose: 10000,           // wait for 10 seconds
-            hideProgressBar: false,
+            autoClose: 7500,            // wait for 7.5 seconds
+            hideProgressBar: true,
             closeOnClick: true,
             pauseOnHover: false,
             draggable: false,

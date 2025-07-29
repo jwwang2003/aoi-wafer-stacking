@@ -5,10 +5,8 @@ import type { FileInfo } from '@tauri-apps/plugin-fs';
 
 export type SourceKey = 
   | 'substrate' 
-  | 'fabCp' 
-  | 'cp1' 
-  | 'wlbi' 
-  | 'cp2' 
+  | 'cp_prober'
+  | 'wlbi'
   | 'aoi';
 
 export interface Entry {
@@ -20,10 +18,8 @@ type InputSourcesState = Record<SourceKey, Entry[]>;
 
 const initialState: InputSourcesState = {
   substrate: [],
-  fabCp:     [],
-  cp1:       [],
+  cp_prober: [],
   wlbi:      [],
-  cp2:       [],
   aoi:       [],
 };
 

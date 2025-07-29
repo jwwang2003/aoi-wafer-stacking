@@ -1,11 +1,11 @@
 // src/store/index.ts
 import { configureStore } from '@reduxjs/toolkit';
-import configReducer from './slices/configSlice';
+import dataSourcePathsconfigReducer from './slices/dataSourcePathsConfigSlice';
 import preferencesReducer from './slices/preferencesSlice';
 
 const store = configureStore({
   reducer: {
-    config: configReducer,
+    dataSourcePathsConfig: dataSourcePathsconfigReducer,
     preferences: preferencesReducer,
   },
   // redux-thunk is included by default, so our async initConfigFilePath thunk will work out of the box

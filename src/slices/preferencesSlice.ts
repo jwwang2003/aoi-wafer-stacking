@@ -34,7 +34,7 @@ export const initPreferences = createAsyncThunk<
                 dataSourcesConfigPath = defaultDataSourcesConfigPath;
             }
 
-            // ✅ Save (or update) preferences.json before returning
+            // Save (or update) preferences.json before returning
             await writeTextFile(preferenceFilePath, JSON.stringify(prefs, null, 2));
 
             return prefs;

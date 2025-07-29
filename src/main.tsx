@@ -12,23 +12,30 @@ import store, { AppDispatch } from './store';
 import { initPreferences } from './slices/preferencesSlice';
 
 import App from "./App";
-import { initialize } from "@/helpers/init";
+import { initialize } from "@/utils/init";
+import { initDataSourceConfig } from "./slices/dataSourcePathsConfigSlice";
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
-    initialize()
-      .then(() => {
-        dispatch(initPreferences())
-          .unwrap()
-          .catch((e) => {
-            console.error(e);
-          });
-      })
-      .catch((e) => {
-        console.error(e);
-      });
+    const runInit = async () => {
+      try {
+        await initialize();
+
+        const { dataSourcesConfigPath } = await dispatch(initPreferences()).unwrap();
+        
+        const dataSourceConfig = await dispatch(
+          initDataSourceConfig({ dataSourcesConfigPath }) // or omit param if defaulted
+        ).unwrap();
+
+        console.log(dataSourceConfig);
+      } catch (e) {
+        console.error('Initialization failed:', e);
+      }
+    };
+
+    runInit();
   }, [dispatch]);
 
   return <>{children}</>;
@@ -38,11 +45,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <MantineProvider>
     <React.StrictMode>
       <Provider store={store}>
-        <BrowserRouter>
-          <AppInitializer>
+        <AppInitializer>
+          <BrowserRouter>
             <App />
-          </AppInitializer>
-        </BrowserRouter>
+          </BrowserRouter>
+        </AppInitializer>
       </Provider>
     </React.StrictMode>
   </MantineProvider>

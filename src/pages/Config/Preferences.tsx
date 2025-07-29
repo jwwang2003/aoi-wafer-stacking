@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useAppDispatch, useAppSelector } from '@/hooks';
-import { setDataSourcesConfigPath, initPreferences } from '@/slices/preferencesSlice';
 import {
     Stack,
     Group,
@@ -13,7 +11,10 @@ import {
 } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import { exists, stat } from '@tauri-apps/plugin-fs';
-import SubFolderInput from '@/components/PathPicker';
+
+import { useAppDispatch, useAppSelector } from '@/hooks';
+import { setDataSourcesConfigPath, initPreferences } from '@/slices/preferencesSlice';
+import { PathPicker } from '@/components';
 
 export default function PreferencesSubpage() {
     const dispatch = useAppDispatch();
@@ -77,7 +78,7 @@ export default function PreferencesSubpage() {
 
             <Title order={2}>数据源配置文件</Title>
             <Stack gap="xs">
-                <SubFolderInput
+                <PathPicker
                     label="数据源配置文件路径(.json)"
                     value={dataSourcesPath}
                     onChange={(e) => dispatch(setDataSourcesConfigPath(e))}
