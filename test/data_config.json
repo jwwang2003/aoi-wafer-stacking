@@ -1,29 +1,33 @@
 {
   "rootPath": "/Users/junweiwang/Documents/github/wafer-overlay/test/data",
-  "rootLastModified": "2025-07-26T18:16:14.184Z",
+  "rootLastModified": "2025-07-30T08:36:52.624Z",
   "paths": {
-    "SubstratePaths": [
-      "/Users/junweiwang/Documents/github/wafer-overlay/test/data/Substrate"
+    "substrate": [
+      "Substrate"
     ],
-    "CpProberPaths": [
-      "/Users/junweiwang/Documents/github/wafer-overlay/test/data/CP-prober-01",
-      "/Users/junweiwang/Documents/github/wafer-overlay/test/data/CP-prober-02",
-      "/Users/junweiwang/Documents/github/wafer-overlay/test/data/CP-prober-03"
+    "cpProber": [
+      "CP-prober-01",
+      "CP-prober-02",
+      "CP-prober-03"
     ],
-    "WlbiPaths": [
-      "/Users/junweiwang/Documents/github/wafer-overlay/test/data/WLBI-02"
+    "fabCp": [
+      "FAB CP"
     ],
-    "AoiPaths": [
-      "/Users/junweiwang/Documents/github/wafer-overlay/test/data/AOI-01"
+    "wlbi": [
+      "WLBI-02"
     ],
-    "lastModified": "2025-07-29T07:49:56.501Z"
+    "aoi": [
+      "AOI-01"
+    ],
+    "lastModified": "2025-07-30T09:04:54.997Z"
   },
   "regex": {
-    "SubstrateRegex": "Substrate",
-    "CpProberRegex": "CP-prober-[A-Za-z0-9]+",
-    "WlbiRegex": "WLBI-[A-Za-z0-9]+",
-    "AoiRegex": "AOI-[A-Za-z0-9]+",
-    "lastModified": "2025-07-27T08:59:00.907Z"
+    "substrate": "Substrate",
+    "cpProber": "CP-prober-[A-Za-z0-9]+",
+    "fabCp": "FAB CP",
+    "wlbi": "WLBI-[A-Za-z0-9]+",
+    "aoi": "AOI-[A-Za-z0-9]+",
+    "lastModified": "2025-07-30T09:05:11.726Z"
   },
-  "lastSaved": "2025-07-29T08:39:08.116Z"
+  "lastSaved": "2025-07-30T09:05:11.782Z"
 }

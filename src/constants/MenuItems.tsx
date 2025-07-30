@@ -21,6 +21,7 @@ import {
 export type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'log' | 'help' | 'about';
 
 export interface MenuItem {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     icon: React.FC<any>;
     label: string;
     value: Mode;

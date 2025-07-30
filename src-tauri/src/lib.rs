@@ -3,6 +3,8 @@ mod file_handler;
 mod parser;
 mod wafer;
 
+mod commands;
+
 use file_handler::file_lock;
 
 #[allow(unused)]
@@ -23,6 +25,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             file_lock::lock_file,
             file_lock::unlock_file,
+            commands::get_file_batch_stat
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

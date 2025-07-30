@@ -7,9 +7,9 @@
     "allowSyntheticDefaultImports": true,
 
     /* Aliases */
-    "baseUrl": ".",
+    "baseUrl": "./src",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./*"]
     }
   },
   "include": ["vite.config.ts"]

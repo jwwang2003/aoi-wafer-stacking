@@ -39,3 +39,18 @@ export function sortBySubfolderName(paths: string[]): string[] {
         return nameA.localeCompare(nameB);
     });
 }
+
+export function arraysAreEqual(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const sortedA = [...a].sort();
+    const sortedB = [...b].sort();
+    return sortedA.every((val, index) => val === sortedB[index]);
+}
+
+/**
+ * Convert absolute path to a path relative to the root directory.
+ */
+export function getRelativePath(rootPath: string, fullPath: string): string {
+    if (!fullPath.startsWith(rootPath)) return fullPath; // fallback, avoid invalid slicing
+    return fullPath.slice(rootPath.length).replace(/^[/\\]/, '');
+}

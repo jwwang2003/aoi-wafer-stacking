@@ -1,12 +1,12 @@
 // src/types/wafer.ts
 
 export interface DefectRecord {
-  "No.": number;
-  "X(mm)": number;
-  "Y(mm)": number;
-  "W(um)": number;
-  "H(um)": number;
-  "Area(um2)": number;
+  'No.': number;
+  'X(mm)': number;
+  'Y(mm)': number;
+  'W(um)': number;
+  'H(um)': number;
+  'Area(um2)': number;
   Class: string;
   Contrast: number;
   Channel: string;

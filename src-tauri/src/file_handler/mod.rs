@@ -1,5 +1,6 @@
 mod tests;
 
+pub mod file_io;
 pub mod file_lock;
 
 use calamine::{open_workbook, Xls};

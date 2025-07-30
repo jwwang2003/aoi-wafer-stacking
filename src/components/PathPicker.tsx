@@ -57,6 +57,7 @@ export default function PathPicker({
                     setError(result);
                 }
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
             setError(`选择失败: ${e.message}`);
         }
@@ -71,7 +72,7 @@ export default function PathPicker({
             onClick={handleSelect}
             error={error}
             leftSection={
-                <ActionIcon variant="filled" aria-label="Select path" onClick={handleSelect}>
+                <ActionIcon variant='filled' aria-label='Select path' onClick={handleSelect}>
                     <IconFolder size={16} stroke={2} />
                 </ActionIcon>
             }

@@ -1,10 +1,8 @@
-// @ts-nocheck
-
 import { Box, Title, Text, List, Anchor, Group } from '@mantine/core';
 
 export default function AboutPage() {
   return (
-    <Box p="md" sx={{ maxWidth: 600 }}>
+    <Box p="md" style={{ maxWidth: 600 }}>
       <Title order={2} mb="md">
         About Wafer Overlay (智能叠图)
       </Title>
@@ -40,16 +38,16 @@ export default function AboutPage() {
       </Title>
       <List>
         <List.Item>
-          <Group spacing="xs">
-            <Text weight={500}>JUN WEI WANG</Text>
+          <Group>
+            <Text size="sm">JUN WEI WANG</Text>
             <Anchor href="https://github.com/jwwang2003" target="_blank">
               @jwwang2003
             </Anchor>
           </Group>
         </List.Item>
         <List.Item>
-          <Group spacing="xs">
-            <Text weight={500}>YI TING</Text>
+          <Group>
+            <Text size="sm">YI TING</Text>
             <Anchor href="https://github.com/ee731" target="_blank">
               @ee731
             </Anchor>

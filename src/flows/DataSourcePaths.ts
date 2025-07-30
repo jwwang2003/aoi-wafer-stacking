@@ -1,14 +1,6 @@
-import {
-    setAoiPaths,
-    setCpProberPaths,
-    setSubstratePaths,
-    setWlbiPaths
-} from '@/slices/dataSourcePathsConfigSlice';
-import { AppDispatch } from '@/store';
-import { DataSourceType } from '@/types/DataSource';
-import React, { useRef } from 'react';
-import { DirectorySelectListRef } from '@/components/DirectorySelectList';
-
+import { setDataSoucePaths } from '@/slices/dataSourcePathsConfigSlice';
+import { AppDispatch, RootState } from '@/store';
+import { DataSourceType, Folder } from '@/types/DataSource';
 /**
  * Represents a data source section in the flow, including type, display name, 
  * path state from the Redux store, and a dispatch-based change handler.
@@ -16,9 +8,9 @@ import { DirectorySelectListRef } from '@/components/DirectorySelectList';
 export interface DataSourceFlowItem {
     type: DataSourceType; // Key used to identify the data source
     name: string;         // Display label for the data source
-    selector: (state: any) => string[]; // Selector to get the current paths from Redux
+    selector: (state: RootState) => Folder[]; // Selector to get the current paths from Redux
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onChange: (newValue: any, dispatch: AppDispatch) => void; // Handler to update paths in Redux
-    ref: React.RefObject<DirectorySelectListRef>
 }
 
 /**
@@ -26,39 +18,36 @@ export interface DataSourceFlowItem {
  * Each entry links to the corresponding Redux state and update action.
  */
 export const DataSources = (): DataSourceFlowItem[] => {
-    const substrateRef = useRef<DirectorySelectListRef>(null);
-    const cpProberRef = useRef<DirectorySelectListRef>(null);
-    const wlbiRef = useRef<DirectorySelectListRef>(null);
-    const aoiRef = useRef<DirectorySelectListRef>(null);
-
     return [
         {
             type: 'substrate',
             name: 'Substrate',
-            selector: (s) => s.dataSourcePathsConfig.paths.SubstratePaths,
-            onChange: (paths, d) => d(setSubstratePaths(paths)),
-            ref: substrateRef,
+            selector: (s) => s.dataSourceState['substrate'],
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'substrate', paths})),
         },
         {
-            type: 'cp-prober',
+            type: 'fabCp',
+            name: 'FAB CP',
+            selector: (s) => s.dataSourceState['fabCp'],
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'fabCp', paths})),
+        },
+        {
+            type: 'cpProber',
             name: 'CP-PROBER',
-            selector: (s) => s.dataSourcePathsConfig.paths.CpProberPaths,
-            onChange: (paths, d) => d(setCpProberPaths(paths)),
-            ref: cpProberRef,
+            selector: (s) => s.dataSourceState['cpProber'],
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'cpProber', paths})),
         },
         {
             type: 'wlbi',
             name: 'WLBI',
-            selector: (s) => s.dataSourcePathsConfig.paths.WlbiPaths,
-            onChange: (paths, d) => d(setWlbiPaths(paths)),
-            ref: wlbiRef,
+            selector: (s) => s.dataSourceState['wlbi'],
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'wlbi', paths})),
         },
         {
             type: 'aoi',
             name: 'AOI',
-            selector: (s) => s.dataSourcePathsConfig.paths.AoiPaths,
-            onChange: (paths, d) => d(setAoiPaths(paths)),
-            ref: aoiRef,
+            selector: (s) => s.dataSourceState['aoi'],
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'aoi', paths})),
         },
     ]
 } 

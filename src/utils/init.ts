@@ -1,7 +1,7 @@
 import {
     PREFERENCES_FILENAME,
     DATA_SOURCES_CONFIG_FILENAME
-} from "@/constants";
+} from '@/constants';
 import { exists, ExistsOptions, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { appDataDir, localDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
@@ -47,7 +47,7 @@ export async function init_user_pref(): Promise<boolean> {
     const appDataDirPath = await appDataDir();
     // Resolve full file path
     const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
-    
+
     try {
         const fileExists = await exists(PREFERENCES_FILENAME, { baseDir: BaseDirectory.AppData });
 
@@ -87,7 +87,7 @@ export async function init_data_source(): Promise<boolean> {
     const appDataDirPath = await appDataDir();
     // Resolve full file path
     const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
-    
+
     try {
         const fileExists = await exists(DATA_SOURCES_CONFIG_FILENAME, { baseDir: BaseDirectory.AppData });
 
@@ -103,7 +103,7 @@ export async function init_data_source(): Promise<boolean> {
 
         return true;
     } catch (err) {
-        console.error(`Failed to initialize data sources file:`, err);
+        console.error('Failed to initialize data sources file:', err);
         return false;
     } finally {
         try {
@@ -143,6 +143,6 @@ export async function get_folder(
 
         return fullPath;
     } catch (error) {
-        throw new Error(`Failed to get or create folder "${path}": ${error}`);
+        throw new Error(`Failed to get or create folder '${path}': ${error}`);
     }
 }

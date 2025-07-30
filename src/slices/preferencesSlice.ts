@@ -3,6 +3,8 @@ import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { appDataDir, resolve, BaseDirectory } from '@tauri-apps/api/path';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
+import { initialPreferencesState as initialState } from '@/constants/default';
+
 export const initPreferences = createAsyncThunk<
     { preferenceFilePath: string; dataSourcesConfigPath: string },
     void,
@@ -18,6 +20,8 @@ export const initPreferences = createAsyncThunk<
 
             let dataSourcesConfigPath: string;
 
+            // TODO: fix any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let prefs: any = {};
 
             try {
@@ -38,25 +42,12 @@ export const initPreferences = createAsyncThunk<
             await writeTextFile(preferenceFilePath, JSON.stringify(prefs, null, 2));
 
             return prefs;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
             return thunkAPI.rejectWithValue(err.message);
         }
     }
 );
-
-interface PreferencesState {
-    preferenceFilePath: string;     // path to preferences.json (read-only)
-    dataSourcesConfigPath: string;        // path to data_sources.json
-    status: 'idle' | 'loading' | 'failed';
-    error: string | null;
-}
-
-const initialState: PreferencesState = {
-    preferenceFilePath: '',
-    dataSourcesConfigPath: '',
-    status: 'idle',
-    error: null,
-};
 
 const preferencesSlice = createSlice({
     name: 'preferences',
@@ -64,7 +55,7 @@ const preferencesSlice = createSlice({
     reducers: {
         setDataSourcesConfigPath(state, action: PayloadAction<string>) {
             state.dataSourcesConfigPath = action.payload;
-            let newState = {
+            const newState = {
                 preferenceFilePath: state.preferenceFilePath,
                 dataSourcesConfigPath: state.dataSourcesConfigPath
             };

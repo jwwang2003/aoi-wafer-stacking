@@ -26,8 +26,9 @@ export default function RegexInput({ label, defaultRegex, onValidChange }: Regex
       new RegExp(pattern); // Try to compile the regex
       setError(null); // No error, valid regex
       onValidChange?.(pattern); // Pass valid pattern to the parent
-    } catch (err) {
-      setError('非法正则表达式'); // Invalid regex, show error
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      setError('非法正则表达式: ' + err); // Invalid regex, show error
     }
   };
 
