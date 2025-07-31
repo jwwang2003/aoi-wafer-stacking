@@ -9,6 +9,7 @@ export const initialPreferencesState: PreferencesState = {
     dataSourcesConfigPath: '',
     status: 'idle',
     error: null,
+    stepper: 0
 };
 
 export const initialDataSourcePathsConfigState: DataSourceConfigState = {

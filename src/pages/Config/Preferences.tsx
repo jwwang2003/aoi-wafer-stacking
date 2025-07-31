@@ -14,7 +14,12 @@ import { exists, stat } from '@tauri-apps/plugin-fs';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { setDataSourcesConfigPath, initPreferences } from '@/slices/preferencesSlice';
+import { initDataSourceConfig } from '@/slices/dataSourcePathsConfigSlice'; // ✅ Add this import
 import { PathPicker } from '@/components';
+import { initDataSourceState } from '@/slices/dataSourceStateSlice';
+
+import { appDataDir, resolve } from '@tauri-apps/api/path';
+import { DATA_SOURCES_CONFIG_FILENAME } from '@/constants'; // make sure you have this
 
 export default function PreferencesSubpage() {
     const dispatch = useAppDispatch();
@@ -26,12 +31,18 @@ export default function PreferencesSubpage() {
     const [fileExists, setFileExists] = useState<boolean>(false);
     const [modifiedTime, setModifiedTime] = useState<string | null>(null);
 
-    // Initialize on mount
+    // Initialize preferences on mount
     useEffect(() => {
         dispatch(initPreferences());
-    }, [dispatch]);
+    }, []);
 
-    // Whenever path changes, check existence and mtime
+    const handleResetDataSourcePath = async () => {
+        const dir = await appDataDir();
+        const defaultPath = await resolve(dir, DATA_SOURCES_CONFIG_FILENAME);
+        await dispatch(setDataSourcesConfigPath(defaultPath));
+    };
+
+    // ✅ When dataSourcesPath changes, check if it exists and update UI
     useEffect(() => {
         let mounted = true;
         async function check() {
@@ -48,6 +59,10 @@ export default function PreferencesSubpage() {
                     const info = await stat(dataSourcesPath);
                     if (!mounted) return;
                     setModifiedTime(info.mtime ? new Date(info.mtime).toLocaleString() : null);
+
+                    // Init data source config now that the file exists
+                    await dispatch(initDataSourceConfig({ dataSourcesConfigPath: dataSourcesPath }));
+                    await dispatch(initDataSourceState());
                 } else {
                     setModifiedTime(null);
                 }
@@ -62,7 +77,7 @@ export default function PreferencesSubpage() {
         return () => {
             mounted = false;
         };
-    }, [dataSourcesPath]);
+    }, [dataSourcesPath, dispatch]); // ✅ include dispatch here too
 
     return (
         <Stack gap="lg">
@@ -74,6 +89,13 @@ export default function PreferencesSubpage() {
                 variant="filled"
                 withAsterisk={false}
             />
+            <Button
+                onClick={() => dispatch(initPreferences())}
+                disabled={status === 'loading'}
+            >
+                加载配置
+            </Button>
+            
             <Divider />
 
             <Title order={2}>数据源配置文件</Title>
@@ -97,12 +119,18 @@ export default function PreferencesSubpage() {
                 </Group>
             </Stack>
 
-            <Button
-                onClick={() => dispatch(initPreferences())}
-                disabled={status === 'loading'}
-            >
-                重置为默认路径
+            <Button onClick={handleResetDataSourcePath}>
+                初始化配置
             </Button>
+
+            <Group>
+                <Button>
+                    迁移数据源配置文件
+                </Button>
+                <Button>
+                    导出数据源配置文件
+                </Button>
+            </Group>
         </Stack>
     );
 }

@@ -34,7 +34,8 @@ export const initDataSourceConfig = createAsyncThunk<
                 const content = await readTextFile(path, {
                     baseDir: BaseDirectory.AppData,
                 });
-                config = JSON.parse(content);
+                const parsed = JSON.parse(content);
+                config = { ...parsed, ...config };
             } catch {
                 // First-time launch, no file exists
             }
@@ -50,6 +51,23 @@ export const initDataSourceConfig = createAsyncThunk<
     }
 );
 
+export const setRootPathAndAdvanceStepper = createAsyncThunk<
+    void,
+    string,
+    { state: RootState }
+>('dataSourcePathsConfig/setRootPathAndAdvanceStepper', async (newPath, thunkAPI) => {
+    const { dispatch, getState } = thunkAPI;
+    const state = getState();
+
+    // Dispatch the root path change
+    dispatch(setRootPath(newPath));
+
+    // If stepper is exactly 1, update to 2
+    if (state.preferences.stepper === 1) {
+        dispatch({ type: 'preferences/setStepperStep', payload: 2 });
+    }
+});
+
 const dataSourcePathsSlice = createSlice({
     name: 'dataSourcePathsConfig',
     initialState,
@@ -62,7 +80,7 @@ const dataSourcePathsSlice = createSlice({
 
         // —— Data source paths reducers ——
         // WARN: all paths stored here should be relative to the root folder path
-        setDataSoucePaths(state, action: PayloadAction<{ type: DataSourceType, paths: string[]}>) {
+        setDataSoucePaths(state, action: PayloadAction<{ type: DataSourceType, paths: string[] }>) {
             const { type, paths } = action.payload;
             const relativePaths = paths.map(p => getRelativePath(state.rootPath, p));
             const sortedPaths = sortBySubfolderName(relativePaths);
@@ -80,7 +98,7 @@ const dataSourcePathsSlice = createSlice({
                 state.paths.lastModified = now();
             }
         },
-        removeDataSourcePath(state, action: PayloadAction<{ type: DataSourceType, path: string}>) {
+        removeDataSourcePath(state, action: PayloadAction<{ type: DataSourceType, path: string }>) {
             const { type, path } = action.payload;
             const relativePath = getRelativePath(state.rootPath, path);
             state.paths[type] = state.paths[type].filter(p => p != relativePath);

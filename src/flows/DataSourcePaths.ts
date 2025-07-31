@@ -23,31 +23,38 @@ export const DataSources = (): DataSourceFlowItem[] => {
             type: 'substrate',
             name: 'Substrate',
             selector: (s) => s.dataSourceState['substrate'],
-            onChange: (paths, d) => d(setDataSoucePaths({ type: 'substrate', paths})),
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'substrate', paths })),
         },
         {
             type: 'fabCp',
             name: 'FAB CP',
             selector: (s) => s.dataSourceState['fabCp'],
-            onChange: (paths, d) => d(setDataSoucePaths({ type: 'fabCp', paths})),
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'fabCp', paths })),
         },
         {
             type: 'cpProber',
             name: 'CP-PROBER',
             selector: (s) => s.dataSourceState['cpProber'],
-            onChange: (paths, d) => d(setDataSoucePaths({ type: 'cpProber', paths})),
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'cpProber', paths })),
         },
         {
             type: 'wlbi',
             name: 'WLBI',
             selector: (s) => s.dataSourceState['wlbi'],
-            onChange: (paths, d) => d(setDataSoucePaths({ type: 'wlbi', paths})),
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'wlbi', paths })),
         },
         {
             type: 'aoi',
             name: 'AOI',
             selector: (s) => s.dataSourceState['aoi'],
-            onChange: (paths, d) => d(setDataSoucePaths({ type: 'aoi', paths})),
+            onChange: (paths, d) => d(setDataSoucePaths({ type: 'aoi', paths })),
         },
     ]
-} 
+}
+
+export const DataSourceFlowSteps = [
+    { label: '配置信息', description: '读取配置信息里的持久化内容' },
+    { label: '根目录', description: '根目录路径有效' },
+    { label: '子目录', description: '成功配置各个谁的数据源（子目录）' },
+    { label: '设备数据', description: '读取设备信息' },
+];

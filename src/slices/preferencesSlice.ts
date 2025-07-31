@@ -4,9 +4,10 @@ import { appDataDir, resolve, BaseDirectory } from '@tauri-apps/api/path';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
 import { initialPreferencesState as initialState } from '@/constants/default';
+import { PreferencesState } from '@/types/Preferences';
 
 export const initPreferences = createAsyncThunk<
-    { preferenceFilePath: string; dataSourcesConfigPath: string },
+    PreferencesState,
     void,
     { rejectValue: string }
 >(
@@ -17,34 +18,37 @@ export const initPreferences = createAsyncThunk<
 
             const preferenceFilePath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
             const defaultDataSourcesConfigPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
-
             let dataSourcesConfigPath: string;
 
-            // TODO: fix any
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            let prefs: any = {};
-
+            let prefs: PreferencesState = { ...initialState, preferenceFilePath };
             try {
                 const prefText = await readTextFile(PREFERENCES_FILENAME, {
                     baseDir: BaseDirectory.AppData,
                 });
-                prefs = JSON.parse(prefText);
-
+                const prefRead = JSON.parse(prefText);
+                prefs = { ...prefRead };
                 dataSourcesConfigPath = prefs.dataSourcesConfigPath || defaultDataSourcesConfigPath;
-
                 if (!prefs.preferenceFilePath) prefs.preferenceFilePath = preferenceFilePath;
                 if (!prefs.dataSourcesConfigPath) prefs.dataSourcesConfigPath = dataSourcesConfigPath;
             } catch {
-                dataSourcesConfigPath = defaultDataSourcesConfigPath;
+                prefs.dataSourcesConfigPath = defaultDataSourcesConfigPath;
             }
 
+            prefs.stepper = 1;
+
             // Save (or update) preferences.json before returning
-            await writeTextFile(preferenceFilePath, JSON.stringify(prefs, null, 2));
+            await writeTextFile(
+                PREFERENCES_FILENAME,
+                JSON.stringify(prefs, null, 2),
+                {
+                    baseDir: BaseDirectory.AppData
+                }
+            );
 
             return prefs;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            return thunkAPI.rejectWithValue(err.message);
+        } catch (err: unknown) {
+            const errorMessage = err as string;
+            return thunkAPI.rejectWithValue(errorMessage);
         }
     }
 );
@@ -58,6 +62,7 @@ const preferencesSlice = createSlice({
             const newState = {
                 preferenceFilePath: state.preferenceFilePath,
                 dataSourcesConfigPath: state.dataSourcesConfigPath
+                // excludes everything else
             };
 
             appDataDir()
@@ -72,6 +77,9 @@ const preferencesSlice = createSlice({
 
             return state;
         },
+        setStepperStep(state, action: PayloadAction<number>) {
+            state.stepper = action.payload;
+        },
     },
     extraReducers: (builder) => {
         builder
@@ -83,6 +91,7 @@ const preferencesSlice = createSlice({
                 state.status = 'idle';
                 state.preferenceFilePath = action.payload.preferenceFilePath;
                 state.dataSourcesConfigPath = action.payload.dataSourcesConfigPath;
+                state.stepper = action.payload.stepper;
             })
             .addCase(initPreferences.rejected, (state, action) => {
                 state.status = 'failed';
@@ -91,5 +100,5 @@ const preferencesSlice = createSlice({
     },
 });
 
-export const { setDataSourcesConfigPath } = preferencesSlice.actions;
+export const { setDataSourcesConfigPath, setStepperStep } = preferencesSlice.actions;
 export default preferencesSlice.reducer;

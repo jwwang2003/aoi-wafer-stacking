@@ -1,32 +1,34 @@
 import { useState } from 'react';
-import { Group, Stack, Stepper, Chip, Button, Title, Divider, Tooltip } from '@mantine/core';
+import { Group, Stack, Chip, Button, Title, Divider, Tooltip } from '@mantine/core';
 import { IconRefresh, IconScanEye } from '@tabler/icons-react';
+import { toast } from 'react-toastify';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import {
-    setRootPath,
     setRegexPattern,
     saveConfig,
     saveConfigToDisk,
     addDataSourcePath,
+    setRootPathAndAdvanceStepper,
 } from '@/slices/dataSourcePathsConfigSlice';
 
 import {
     RegexConfigs,
-    DataSources
+    DataSources,
+    DataSourceFlowSteps
 } from '@/flows';
 
 import {
     RegexInput,
     PathPicker,
     DirectorySelectList,
-    SaveSectionButton
+    SaveSectionButton,
+    FlowStepper
 } from '@/components';
 
 import { DataSourceRegex, DataSourceType } from '@/types/DataSource';
 import { autoRecognizeFoldersByType } from '@/utils/dataSource';
 import { addFolder } from '@/slices/dataSourceStateSlice';
-import { toast } from 'react-toastify';
 
 // ALGOs
 // import { autoRecognizeFoldersByType } from '@/utils/dataSource';
@@ -49,6 +51,9 @@ export default function DataConfigSubpage() {
     const pathsLastModified = useAppSelector((state) => state.dataSourcePathsConfig.paths.lastModified);
     const lastSaved = useAppSelector((state) => state.dataSourcePathsConfig.lastSaved);
 
+    // Stepper
+    const flowStep = useAppSelector((state) => state.preferences.stepper);
+
     // Dirty flags
     // Prompt the user to save the sections that are dirty before allowing them
     // to proced to the next stage or step.
@@ -65,7 +70,6 @@ export default function DataConfigSubpage() {
     };
 
     // UI state management
-    const [flowStep, setFlowStep] = useState(0);
     const [rootFolderStageOptions, setRootFolderStageOptions] = useState<string[]>(['auto']);
 
     // Flows
@@ -138,12 +142,9 @@ export default function DataConfigSubpage() {
 
     return (
         <>
-            <Stepper active={flowStep} onStepClick={setFlowStep}>
-                <Stepper.Step label='配置信息' description='读取配置信息里的持久化内容' />
-                <Stepper.Step label='根目录' description='根目录路径有效' />
-                <Stepper.Step label='子目录' description='成功配置各个谁的数据源（子目录）' />
-                <Stepper.Step label='设备数据' description='读取设备信息' />
-            </Stepper>
+            <FlowStepper active={flowStep} onStepClick={() => {}} steps={DataSourceFlowSteps}>
+                <></>
+            </FlowStepper>
 
             <Divider my='md' />
 
@@ -153,7 +154,7 @@ export default function DataConfigSubpage() {
                 <PathPicker
                     label='根目录'
                     value={rootPath}
-                    onChange={(v) => dispatch(setRootPath(v))}
+                    onChange={(v) => dispatch(setRootPathAndAdvanceStepper(v))}
                 />
                 <SaveSectionButton
                     dirty={rootDirty}

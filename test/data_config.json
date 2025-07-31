@@ -7,8 +7,7 @@
     ],
     "cpProber": [
       "CP-prober-01",
-      "CP-prober-02",
-      "CP-prober-03"
+      "CP-prober-02"
     ],
     "fabCp": [
       "FAB CP"
@@ -19,7 +18,7 @@
     "aoi": [
       "AOI-01"
     ],
-    "lastModified": "2025-07-30T09:04:54.997Z"
+    "lastModified": "2025-07-30T09:16:54.779Z"
   },
   "regex": {
     "substrate": "Substrate",
@@ -29,5 +28,5 @@
     "aoi": "AOI-[A-Za-z0-9]+",
     "lastModified": "2025-07-30T09:05:11.726Z"
   },
-  "lastSaved": "2025-07-30T09:05:11.782Z"
+  "lastSaved": "2025-07-30T09:16:56.701Z"
 }
