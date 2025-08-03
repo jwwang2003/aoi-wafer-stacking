@@ -3,6 +3,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import preferencesReducer from './slices/preferencesSlice';
 import dataSourcePathsConfigReducer from './slices/dataSourcePathsConfigSlice';
 import dataSourceStateReducer from './slices/dataSourceStateSlice';
+import { validationPersistenceMiddleware } from './slices/middleware';
 
 const store = configureStore({
   reducer: {
@@ -10,6 +11,7 @@ const store = configureStore({
     dataSourcePathsConfig: dataSourcePathsConfigReducer,
     dataSourceState: dataSourceStateReducer
   },
+  middleware: (gDM) => gDM().concat(validationPersistenceMiddleware)
   // redux-thunk is included by default, so our async initConfigFilePath thunk will work out of the box
 });
 

@@ -42,7 +42,6 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             });
 
             for (const folder of responses) {
-                console.log(1);
                 if (folder.exists) {
                     const absPath = folder.path;
                     const relPath = getRelativePath(rootPath, folder.path);

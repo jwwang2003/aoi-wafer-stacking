@@ -6,24 +6,20 @@ import { toast } from 'react-toastify';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import {
     setRegexPattern,
-    saveConfig,
-    saveConfigToDisk,
     addDataSourcePath,
-    setRootPathAndAdvanceStepper,
+    setRootPath
 } from '@/slices/dataSourcePathsConfigSlice';
 
 import {
     RegexConfigs,
-    DataSources,
-    DataSourceFlowSteps
+    DataSources
 } from '@/flows';
 
 import {
     RegexInput,
     PathPicker,
     DirectorySelectList,
-    SaveSectionButton,
-    FlowStepper
+    LastSaved
 } from '@/components';
 
 import { DataSourceRegex, DataSourceType } from '@/types/DataSource';
@@ -51,12 +47,9 @@ export default function DataConfigSubpage() {
     const pathsLastModified = useAppSelector((state) => state.dataSourcePathsConfig.paths.lastModified);
     const lastSaved = useAppSelector((state) => state.dataSourcePathsConfig.lastSaved);
 
-    // Stepper
-    const flowStep = useAppSelector((state) => state.preferences.stepper);
-
     // Dirty flags
     // Prompt the user to save the sections that are dirty before allowing them
-    // to proced to the next stage or step.
+    // to proceed to the next stage or step.
     const rootDirty = rootLastModified > lastSaved;
     const regexDirty = regexLastModified > lastSaved;
     const pathsDirty = pathsLastModified > lastSaved;
@@ -135,32 +128,21 @@ export default function DataConfigSubpage() {
         }
     };
 
-    const persistDataSourceConfig = () => {
-        dispatch(saveConfig())
-        dispatch(saveConfigToDisk())
-    }
-
     return (
         <>
-            <FlowStepper active={flowStep} onStepClick={() => {}} steps={DataSourceFlowSteps}>
-                <></>
-            </FlowStepper>
-
-            <Divider my='md' />
-
             {/* Section: Root Directory */}
             <Stack align='stretch' gap='md'>
                 <Title order={2}>根目录选择</Title>
                 <PathPicker
                     label='根目录'
                     value={rootPath}
-                    onChange={(v) => dispatch(setRootPathAndAdvanceStepper(v))}
+                    onChange={(u) => dispatch(setRootPath(u))}
                 />
-                <SaveSectionButton
+                <LastSaved
                     dirty={rootDirty}
                     lastModified={rootLastModified}
                     lastSaved={lastSaved}
-                    onSave={persistDataSourceConfig}
+                    // onSave={persistDataSourceConfig}
                 />
 
                 <Group justify='flex-start'>
@@ -191,11 +173,11 @@ export default function DataConfigSubpage() {
                             />
                         ))}
                     </Stack>
-                    <SaveSectionButton
+                    <LastSaved
                         dirty={regexDirty}
                         lastModified={regexLastModified}
                         lastSaved={lastSaved}
-                        onSave={persistDataSourceConfig}
+                        // onSave={persistDataSourceConfig}
                     />
                 </Stack>
             )}
@@ -227,21 +209,15 @@ export default function DataConfigSubpage() {
                     );
                 })}
             </Stack>
-            <SaveSectionButton
+            <LastSaved
                 dirty={pathsDirty}
                 lastModified={pathsLastModified}
                 lastSaved={lastSaved}
-                onSave={persistDataSourceConfig}
+                // onSave={persistDataSourceConfig}
             />
 
             {/* Section: Data source stats */}
-            <Divider my='sm' />
-            <Stack align='stretch' gap='md'>
-                <Title order={2}>数据预览与统计</Title>
-                <Group>
-                    <Button>刷新</Button>
-                </Group>
-            </Stack>
+            {/* NOTE: moved to another page */}
         </>
     );
 }

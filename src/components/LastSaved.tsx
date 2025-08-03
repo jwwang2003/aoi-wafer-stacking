@@ -1,27 +1,28 @@
-import { Button, Group, Indicator, Stack, Text } from '@mantine/core';
+// import { Button, Indicator } from '@mantine/core';
+import { Group, Stack, Text } from '@mantine/core';
 
-interface SaveSectionProps {
+interface LastSavedSectionProps {
     dirty: boolean;
     lastModified: string;
     lastSaved: string;
-    onSave: () => void;
-    label?: string;
+    // onSave: () => void;
+    // label?: string;
 }
 
-export default function SaveSectionButton({
+export default function LastSavedSection({
     dirty,
     lastModified,
     lastSaved,
-    onSave,
-    label = '保存',
-}: SaveSectionProps) {
+    // onSave,
+    // label = '保存',
+}: LastSavedSectionProps) {
     return (
         <Group align="flex-start">
-            <Indicator color="blue" withBorder disabled={!dirty}>
+            {/* <Indicator color="blue" withBorder disabled={!dirty}>
                 <Button color={dirty ? 'green' : undefined} onClick={onSave}>
                     {label}
                 </Button>
-            </Indicator>
+            </Indicator> */}
             <Stack gap={0} style={{ lineHeight: 1.2 }}>
                 <Text size="xs" c="dimmed">
                     最后修改: {new Date(lastModified).toLocaleString()}

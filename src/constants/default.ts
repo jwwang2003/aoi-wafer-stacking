@@ -1,15 +1,27 @@
 import { PreferencesState } from '@/types/Preferences';
 import { DataSourceConfigState, FolderGroupsState } from '@/types/DataSource';
-
+import { ConfigStepperState } from '@/types/Stepper';
 
 export const now = () => new Date().toISOString();
 
 export const initialPreferencesState: PreferencesState = {
     preferenceFilePath: '',
-    dataSourcesConfigPath: '',
+    dataSourceConfigPath: '',
+    offsets: {
+        xOffset: 0,
+        yOffset: 0,
+        leftOffset: 0,
+        rightOffset: 0,
+        topOffset: 0,
+        bottomOffset: 0,
+        scale: 1,
+        warp: 0,
+    },
+
+    // NOTE: DO NOT PERSIST
+    stepper: ConfigStepperState.Initial,
     status: 'idle',
     error: null,
-    stepper: 0
 };
 
 export const initialDataSourcePathsConfigState: DataSourceConfigState = {

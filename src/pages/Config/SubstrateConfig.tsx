@@ -1,7 +1,18 @@
-import { useState } from 'react';
-import { Button, Group, NumberInput, Slider, Stack, Text, Title, Box, Flex } from '@mantine/core';
+import { useAppDispatch, useAppSelector } from '@/hooks';
+import { setOffsets } from '@/slices/preferencesSlice';
+import { OffsetConfig } from '@/types/Preferences';
+import {
+    Group,
+    NumberInput,
+    Slider,
+    Stack,
+    Text,
+    Title,
+    Box,
+    Flex,
+} from '@mantine/core';
 
-// Stub ThreeJS Canvas (replace this with actual rendering logic)
+// Stubbed ThreeJS Canvas
 function SubstrateThreeView({
     xOffset,
     yOffset,
@@ -11,16 +22,7 @@ function SubstrateThreeView({
     bottomOffset,
     scale,
     warp,
-}: {
-    xOffset: number;
-    yOffset: number;
-    leftOffset: number;
-    rightOffset: number;
-    topOffset: number;
-    bottomOffset: number;
-    scale: number;
-    warp: number;
-}) {
+}: OffsetConfig) {
     return (
         <Box
             style={{
@@ -39,32 +41,16 @@ function SubstrateThreeView({
 }
 
 export default function SubstrateConfigPage() {
-    const [xOffset, setXOffset] = useState<number>(0);
-    const [yOffset, setYOffset] = useState<number>(0);
-    const [leftOffset, setLeftOffset] = useState<number>(0);
-    const [rightOffset, setRightOffset] = useState<number>(0);
-    const [topOffset, setTopOffset] = useState<number>(0);
-    const [bottomOffset, setBottomOffset] = useState<number>(0);
-    const [scale, setScale] = useState<number>(1);
-    const [warp, setWarp] = useState<number>(0);
+    const dispatch = useAppDispatch();
+    const offset = useAppSelector((state) => state.preferences.offsets);
 
-    const handleSave = () => {
-        console.log('保存衬底配置：', {
-            xOffset,
-            yOffset,
-            leftOffset,
-            rightOffset,
-            topOffset,
-            bottomOffset,
-            scale,
-            warp,
-        });
+    const updateOffset = async (key: keyof OffsetConfig, value: number) => {
+        await dispatch(setOffsets({ [key]: value }));
     };
 
     const renderControl = (
         label: string,
-        value: number,
-        setValue: (val: number) => void,
+        key: keyof OffsetConfig,
         min: number,
         max: number,
         step: number
@@ -72,16 +58,16 @@ export default function SubstrateConfigPage() {
         <Group align="center">
             <NumberInput
                 label={label}
-                value={value}
-                onChange={(val) => setValue(Number(val))}
+                value={offset[key] || 0}
+                onChange={(val) => updateOffset(key, Number(val))}
                 min={min}
                 max={max}
                 step={step}
                 w={120}
             />
             <Slider
-                value={value}
-                onChange={(val) => setValue(val)}
+                value={offset[key] || 0}
+                onChange={(val) => updateOffset(key, val)}
                 min={min}
                 max={max}
                 step={step}
@@ -97,34 +83,23 @@ export default function SubstrateConfigPage() {
                 <Title order={2}>衬底配置</Title>
                 <Text>在此处调整衬底的偏移量、缩放和扭曲强度。</Text>
 
-                {renderControl('X 偏移量', xOffset, setXOffset, -100, 100, 1)}
-                {renderControl('Y 偏移量', yOffset, setYOffset, -100, 100, 1)}
-                {renderControl('左侧偏移', leftOffset, setLeftOffset, -100, 100, 1)}
-                {renderControl('右侧偏移', rightOffset, setRightOffset, -100, 100, 1)}
-                {renderControl('顶部偏移', topOffset, setTopOffset, -100, 100, 1)}
-                {renderControl('底部偏移', bottomOffset, setBottomOffset, -100, 100, 1)}
-                {/* {renderControl('缩放 (Scale)', scale, setScale, 0.1, 10, 0.1)}
-                {renderControl('扭曲 (Warp)', warp, setWarp, -100, 100, 1)} */}
+                {renderControl('X 偏移量', 'xOffset', -100, 100, 1)}
+                {renderControl('Y 偏移量', 'yOffset', -100, 100, 1)}
+                {renderControl('左侧偏移', 'leftOffset', -100, 100, 1)}
+                {renderControl('右侧偏移', 'rightOffset', -100, 100, 1)}
+                {renderControl('顶部偏移', 'topOffset', -100, 100, 1)}
+                {renderControl('底部偏移', 'bottomOffset', -100, 100, 1)}
+                {renderControl('缩放 (Scale)', 'scale', 0.1, 10, 0.1)}
+                {renderControl('扭曲 (Warp)', 'warp', -100, 100, 1)}
 
-                <Button onClick={handleSave}>保存配置</Button>
-                <Group >
-                    <Button onClick={handleSave}>导出配置</Button>
-                    <Button onClick={handleSave}>导入配置</Button>
-                </Group>
+                <Text size="sm" c="dimmed" mt="xs">
+                    所有更改都会自动保存，无需手动操作。
+                </Text>
             </Stack>
 
             {/* Right Panel: Three.js Canvas */}
             <Box w="50%">
-                <SubstrateThreeView
-                    xOffset={xOffset}
-                    yOffset={yOffset}
-                    leftOffset={leftOffset}
-                    rightOffset={rightOffset}
-                    topOffset={topOffset}
-                    bottomOffset={bottomOffset}
-                    scale={scale}
-                    warp={warp}
-                />
+                <SubstrateThreeView {...offset} />
             </Box>
         </Flex>
     );

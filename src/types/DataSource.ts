@@ -20,7 +20,7 @@ export interface DataSourceRegexState extends DataSourceRegex {
     lastModified: string;
 }
 
-// Main data structure to presist data source paths config
+// Main data structure to persist data source paths config
 export interface DataSourceConfigState {
     rootPath: string;
     rootLastModified: string;

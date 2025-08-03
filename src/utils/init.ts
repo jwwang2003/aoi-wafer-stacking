@@ -24,12 +24,10 @@ export async function initialize() {
         // Ensure AppData folder exists
         await get_folder('', { baseDir: appDataBaseDir });
         console.debug('AppData directory initialized at:', await appDataDir());
-
         // Ensure LocalData folder exists
         await get_folder('', { baseDir: localDataBaseDir });
         console.debug('LocalData directory initialized at:', await localDataDir());
-
-        await init_user_pref();
+        await init_pref();
         await init_data_source();
     } catch (e) {
         console.error('Initialization error:', e);
@@ -43,7 +41,7 @@ export async function initialize() {
  * Locks the file at the start and unlocks at the end.
  * Base: BaseDirectory.AppData, appDataDir()
  */
-export async function init_user_pref(): Promise<boolean> {
+export async function init_pref(): Promise<boolean> {
     const appDataDirPath = await appDataDir();
     // Resolve full file path
     const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);

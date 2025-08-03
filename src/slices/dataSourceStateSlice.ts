@@ -7,7 +7,6 @@ import { initialDataSourceState as initialState } from '@/constants/default';
 import { invoke } from '@tauri-apps/api/core';
 import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
-import { setStepperStep } from './preferencesSlice';
 
 // Specifically for the folder type
 function sortFoldersByName(folders: Folder[]): Folder[] {
@@ -56,7 +55,7 @@ export const initDataSourceState = createAsyncThunk<
             break;
         }
     }
-    if (flag) thunkAPI.dispatch(setStepperStep(3));
+    // if (flag) thunkAPI.dispatch(setStepperStep(3));
 
     return result;
 });

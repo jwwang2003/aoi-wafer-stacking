@@ -1,47 +1,83 @@
 /**
  * The data source paths config slice only keeps track of the path strings
  * relative to the root folder. It does not track the state of the folder, such
- * as whether is exists or not. To track the status of a data source folde , we
+ * as whether is exists or not. To track the status of a data source folder, we
  * refer to the data source state slice.
  */
 
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { appDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
-import { DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
+import { baseDir, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
 import { RootState } from '@/store';
 import { DataSourceConfigState, DataSourceType } from '@/types/DataSource';
 import { arraysAreEqual, getRelativePath, sortBySubfolderName } from '@/utils/fs';
 
 import { initialDataSourcePathsConfigState as initialState, now } from '@/constants/default';
+import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper';
+import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
+import { setStepper } from './preferencesSlice';
+import { ConfigStepperState } from '@/types/Stepper';
 
 export const initDataSourceConfig = createAsyncThunk<
     DataSourceConfigState,
-    { dataSourcesConfigPath: string },
-    { rejectValue: string }
+    void,
+    { state: RootState, rejectValue: string }
 >(
     'dataSourcePathsConfig/init',
-    async ({ dataSourcesConfigPath }, thunkAPI) => {
+    async (_, thunkAPI) => {
+        let config: DataSourceConfigState = { ...initialState };
         try {
-            const appDataDirPath = await appDataDir();
-            const path = await resolve(appDataDirPath, dataSourcesConfigPath || DATA_SOURCES_CONFIG_FILENAME);
+            const { preferences } = thunkAPI.getState();
+            const { dataSourceConfigPath } = preferences;
+            config = await createDefaultDataSourceConfig();
 
-            let config: DataSourceConfigState = initialState;
-
+            let parsed: unknown = null;
             try {
-                const content = await readTextFile(path, {
-                    baseDir: BaseDirectory.AppData,
-                });
-                const parsed = JSON.parse(content);
-                config = { ...parsed, ...config };
-            } catch {
-                // First-time launch, no file exists
+                const raw = await readTextFile(
+                    dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME, { baseDir }
+                );
+                parsed = JSON.parse(raw);
+            } catch (err: unknown) {
+                console.debug('[DATA SOURCE CONF. file check] assuming file DNE', err);
+                console.debug('Creating data source config file...');
+                const data = JSON.stringify(config);
+                await writeTextFile(
+                    dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME, data, { baseDir }
+                );
+                const result = await readTextFile(
+                    dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME, { baseDir }
+                );
+                parsed = JSON.parse(result);
             }
 
-            // Always write (normalize structure or create file)
-            await writeTextFile(path, JSON.stringify(config, null, 2));
+            if (isValidDataSourceConfig(parsed)) {
+                config = mergeDefinedKeys(config, parsed);
+            } else {
+                console.warn('[DATA SOURCE CONF. validation] invalid config structure, using defaults');
+            }
+
+            await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
+
+            // check if the root path is defined and valid
+            if (config.rootPath && await isDataSourceRootValid(config)) {
+                const { preferences } = thunkAPI.getState();
+                const { stepper } = preferences;
+                // advance stepper
+                if (stepper <= ConfigStepperState.RootDirectory) {
+                    await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory + 1));
+                }
+            }
+
+            if (config.paths && isDataSourcePathsValid(config.paths)) {
+                const { preferences } = thunkAPI.getState();
+                const { stepper } = preferences;
+                // advance stepper
+                if (stepper <= ConfigStepperState.Subdirectories) {
+                    await thunkAPI.dispatch(setStepper(ConfigStepperState.Subdirectories + 1));
+                }
+            }
 
             return config;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,22 +87,13 @@ export const initDataSourceConfig = createAsyncThunk<
     }
 );
 
-export const setRootPathAndAdvanceStepper = createAsyncThunk<
-    void,
-    string,
-    { state: RootState }
->('dataSourcePathsConfig/setRootPathAndAdvanceStepper', async (newPath, thunkAPI) => {
-    const { dispatch, getState } = thunkAPI;
-    const state = getState();
+// export const revalidateDataSourcePaths = createAsyncThunk<
+//     {},
+//     void,
+//     { state: RootState, rejectValue: string}
+// >('dataSourcePathsConfig/revalidate', async (_, thunkAPI) => {
 
-    // Dispatch the root path change
-    dispatch(setRootPath(newPath));
-
-    // If stepper is exactly 1, update to 2
-    if (state.preferences.stepper === 1) {
-        dispatch({ type: 'preferences/setStepperStep', payload: 2 });
-    }
-});
+// });
 
 const dataSourcePathsSlice = createSlice({
     name: 'dataSourcePathsConfig',
@@ -80,7 +107,7 @@ const dataSourcePathsSlice = createSlice({
 
         // —— Data source paths reducers ——
         // WARN: all paths stored here should be relative to the root folder path
-        setDataSoucePaths(state, action: PayloadAction<{ type: DataSourceType, paths: string[] }>) {
+        setDataSourcePaths(state, action: PayloadAction<{ type: DataSourceType, paths: string[] }>) {
             const { type, paths } = action.payload;
             const relativePaths = paths.map(p => getRelativePath(state.rootPath, p));
             const sortedPaths = sortBySubfolderName(relativePaths);
@@ -121,15 +148,18 @@ const dataSourcePathsSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
-            .addCase(initDataSourceConfig.fulfilled, (_state, action) => {
+            .addCase(initDataSourceConfig.fulfilled, (_, action) => {
                 return action.payload;
+            })
+            .addCase(initDataSourceConfig.rejected, () => {
+                return;
             });
     }
 });
 
 export const {
     setRootPath,
-    setDataSoucePaths,
+    setDataSourcePaths,
     addDataSourcePath,
     removeDataSourcePath,
     setRegexPattern,
@@ -137,27 +167,3 @@ export const {
 } = dataSourcePathsSlice.actions;
 
 export default dataSourcePathsSlice.reducer;
-
-export const saveConfigToDisk = createAsyncThunk<
-    void,
-    void,
-    { state: RootState }
->(
-    'dataSourcePathsConfig/saveToDisk',
-    async (_, thunkAPI) => {
-        const state = thunkAPI.getState();
-        const config = state.dataSourcePathsConfig;
-        const preferences = state.preferences;
-
-        await persistConfig(config, preferences.dataSourcesConfigPath);
-    }
-);
-
-async function persistConfig(
-    state: DataSourceConfigState,
-    dataSourcesConfigPath?: string
-) {
-    const dir = await appDataDir();
-    const path = await resolve(dir, dataSourcesConfigPath || DATA_SOURCES_CONFIG_FILENAME);
-    await writeTextFile(path, JSON.stringify(state, null, 2));
-}

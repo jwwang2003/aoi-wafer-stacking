@@ -9,7 +9,9 @@ export default tseslint.config(
     {
         rules: {
             quotes: ['error', 'single'],
-            '@typescript-eslint/no-explicit-any': ['error', { 'ignoreRestArgs': true }]
+            '@typescript-eslint/no-explicit-any': ['error', { 'ignoreRestArgs': true }],
+            '@typescript-eslint/ban-types': ['off'],
+            '@typescript-eslint/no-empty-object-type': ['off']
         },
     }
 );

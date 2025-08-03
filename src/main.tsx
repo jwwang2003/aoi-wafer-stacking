@@ -25,32 +25,29 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
         const runInit = async () => {
             try {
                 await initialize();
-
-                const { dataSourcesConfigPath } = await dispatch(initPreferences()).unwrap();
-
-                const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig({ dataSourcesConfigPath })).unwrap();
+                await dispatch(initPreferences()).unwrap();
+                const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig()).unwrap();
                 const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
 
                 if (import.meta.env.DEV) {
-                    console.debug(dataSourceConfig);
-                    console.debug(dataSourceState);
+                    console.debug('[INIT]', dataSourceConfig);
+                    console.debug('[INIT]', dataSourceState);
                 }
 
                 setInterval(() => {
                     try {
                         dispatch(refreshFolderStatuses());
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    } catch (err: any) {   
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    } catch (err: any) {
                         console.error(err);
-                    } 
+                    }
                 }, 1000);
             } catch (e) {
                 console.error('Initialization failed:', e);
             }
         };
-
         runInit();
-    }, [dispatch]);
+    }, []);
 
     return <>{children}</>;
 }
