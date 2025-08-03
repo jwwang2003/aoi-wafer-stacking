@@ -64,7 +64,8 @@ export const initPreferences = createAsyncThunk<
             } catch (err: unknown) {
                 console.debug('[DataSourcePaths file check] assuming file DNE', err);
             }
-
+            
+            console.debug('Finished initializing preferences...', preferences);
             return preferences;
         } catch (err: unknown) {
             return thunkAPI.rejectWithValue(err instanceof Error ? err.message : 'Unknown error');

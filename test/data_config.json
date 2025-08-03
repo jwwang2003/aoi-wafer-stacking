@@ -1,1 +1,32 @@
-{"rootPath":"/Users/junweiwang/Documents/github/wafer-overlay/test/data","rootLastModified":"2025-08-02T14:30:14.509Z","paths":{"substrate":["Substrate"],"cpProber":["CP-prober-01","CP-prober-02"],"fabCp":["FAB CP"],"wlbi":["WLBI-02"],"aoi":["AOI-01"],"lastModified":"2025-08-02T06:37:49.719Z"},"regex":{"substrate":"Substrate","cpProber":"CP-prober-[A-Za-z0-9]+","fabCp":"FAB CP","wlbi":"WLBI-[A-Za-z0-9]+","aoi":"AOI-[A-Za-z0-9]+","lastModified":"2025-08-02T14:30:06.219Z"},"lastSaved":"2025-08-03T04:40:37.077Z"}
+{
+  "rootPath": "/Users/junweiwang/Documents/github/wafer-overlay/test/data",
+  "rootLastModified": "2025-08-03T10:55:41.666Z",
+  "paths": {
+    "substrate": [
+      "Substrate"
+    ],
+    "cpProber": [
+      "CP-prober-01",
+      "CP-prober-02"
+    ],
+    "fabCp": [
+      "FAB CP"
+    ],
+    "wlbi": [
+      "WLBI-02"
+    ],
+    "aoi": [
+      "AOI-01"
+    ],
+    "lastModified": "2025-08-03T10:55:42.023Z"
+  },
+  "regex": {
+    "substrate": "Substrate",
+    "cpProber": "CP-prober-[A-Za-z0-9]+",
+    "fabCp": "FAB CP",
+    "wlbi": "WLBI-[A-Za-z0-9]+",
+    "aoi": "AOI-[A-Za-z0-9]+",
+    "lastModified": "2025-08-03T10:55:35.541Z"
+  },
+  "lastSaved": "2025-08-03T14:14:38.104Z"
+}

@@ -31,6 +31,7 @@ export async function autoRecognizeFoldersByType(
     };
 
     for (const [key, regexStr] of Object.entries(regexMap)) {
+        if (key === 'lastModified') continue;
         try {
             const regex = new RegExp(regexStr);
             const matchedPaths = subfolders.filter((folderPath) => {

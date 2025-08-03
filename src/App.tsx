@@ -15,7 +15,15 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
 
 import { menuItems } from '@/constants/MenuItems';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from './store';
+import { initialize } from './utils/init';
+import { initPreferences } from './slices/preferencesSlice';
+import { DataSourceConfigState, FolderGroups } from './types/DataSource';
+import { initDataSourceConfig } from './slices/dataSourcePathsConfigSlice';
+import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
 
+// Small helper function
 function getTopLevelPath(pathname: string): string {
     const segments = pathname.split('/').filter(Boolean);
     return '/' + (segments[0] || '');
@@ -34,7 +42,7 @@ export function AnimatedRoutes() {
                 exit={{ opacity: 0, y: -5 }}
                 transition={{ duration: 0.10 }}
                 style={{ flex: 1, overflow: 'auto' }}
-            >   
+            >
                 {/* The app router is located here! */}
                 <Routes location={location}>
                     {menuItems.map(({ path, component: Component }) => (
@@ -50,6 +58,7 @@ export function AnimatedRoutes() {
 export default function App() {
     const [hovered, setHovered] = useState<string | null>(null);
     const location = useLocation();
+    const dispatch = useDispatch<AppDispatch>();
 
     // A welcome message whenever the UI is loaded!
     useEffect(() => {
@@ -61,6 +70,42 @@ export default function App() {
             pauseOnHover: false,
             draggable: false,
         });
+    }, []);
+
+    useEffect(() => {
+        const runInit = async () => {
+            try {
+                console.debug('Initializing...');
+                await initialize();
+                console.debug('Initialized!');
+                await dispatch(initPreferences()).unwrap();
+                console.debug('Initialized preferences!');
+                const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig()).unwrap();
+                const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
+
+                if (import.meta.env.DEV) {
+                    console.debug('[INIT]', dataSourceConfig);
+                    console.debug('[INIT]', dataSourceState);
+                }
+
+                setInterval(() => {
+                    try {
+                        dispatch(refreshFolderStatuses());
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }, 1000);
+            } catch (e) {
+                console.error('Initialization failed:', e);
+            }
+        };
+        runInit();
+        // if (import.meta.hot) {
+        //     import.meta.hot.accept(async () => {
+        //         console.debug('[HMR] Re-running init...');
+        //         runInit();
+        //     });
+        // }
     }, []);
 
     return (

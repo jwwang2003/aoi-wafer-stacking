@@ -5,6 +5,9 @@ import {
     Divider
 } from '@mantine/core';
 import { IconLoader } from '@tabler/icons-react';
+import { useDispatch } from 'react-redux';
+import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
+import { AppDispatch } from '@/store';
 
 interface OverlayRecord {
     id: number;
@@ -16,6 +19,8 @@ interface OverlayRecord {
 }
 
 export default function Preview() {
+    const dispatch = useDispatch<AppDispatch>();
+
     const [data, setData] = useState<OverlayRecord[]>([]);
     const [waferId, setWaferId] = useState('');
     const [chipId, setChipId] = useState('');
@@ -36,13 +41,20 @@ export default function Preview() {
             //     retryMax,
             // });
             // setData(result);
+            dispatch(fetchWaferMetadata())
+                .then((result) => {
+                    console.log(result);
+                })
+                .catch((error) => {
+                    console.error(error);
+                })
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchData();
+        // fetchData();
     }, [waferId, chipId, stage, retryMin, retryMax]);
 
     return (

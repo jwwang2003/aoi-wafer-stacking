@@ -3,7 +3,6 @@ import {
     DATA_SOURCES_CONFIG_FILENAME
 } from '@/constants';
 import { exists, ExistsOptions, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
-import { invoke } from '@tauri-apps/api/core';
 import { appDataDir, localDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
 
 /**
@@ -48,7 +47,6 @@ export async function init_pref(): Promise<boolean> {
 
     try {
         const fileExists = await exists(PREFERENCES_FILENAME, { baseDir: BaseDirectory.AppData });
-
         if (!fileExists) {
             await writeTextFile(
                 PREFERENCES_FILENAME,
@@ -56,22 +54,21 @@ export async function init_pref(): Promise<boolean> {
                 { baseDir: BaseDirectory.AppData }
             );
         }
-
-        // ! Lock the file using Tauri backend command
-        await invoke('lock_file', { path: fullPath });
-
+        // Lock the file using Tauri backend command
+        // TODO: Implement locks?
+        // await invoke('lock_file', { path: fullPath });
         return true;
     } catch (err) {
         console.error(`Failed to initialize preferences file in ${fullPath}:`, err);
         return false;
     } finally {
-        // ! Always try to unlock even if an error occurs
-        try {
-            const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
-            await invoke('unlock_file', { path: fullPath });
-        } catch (unlockErr) {
-            console.warn('Failed to unlock preferences file:', unlockErr);
-        }
+        // Always try to unlock even if an error occurs
+        // try {
+        //     const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
+        //     await invoke('unlock_file', { path: fullPath });
+        // } catch (unlockErr) {
+        //     console.warn('Failed to unlock preferences file:', unlockErr);
+        // }
     }
 }
 
@@ -82,13 +79,12 @@ export async function init_pref(): Promise<boolean> {
  * Base: BaseDirectory.AppData, appDataDir()
  */
 export async function init_data_source(): Promise<boolean> {
-    const appDataDirPath = await appDataDir();
     // Resolve full file path
-    const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
+    // const appDataDirPath = await appDataDir();
+    // const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
 
     try {
         const fileExists = await exists(DATA_SOURCES_CONFIG_FILENAME, { baseDir: BaseDirectory.AppData });
-
         if (!fileExists) {
             await writeTextFile(
                 DATA_SOURCES_CONFIG_FILENAME,
@@ -96,20 +92,19 @@ export async function init_data_source(): Promise<boolean> {
                 { baseDir: BaseDirectory.AppData }
             );
         }
-
-        await invoke('lock_file', { path: fullPath });
-
+        // TODO: Implement locks?
+        // await invoke('lock_file', { path: fullPath });
         return true;
     } catch (err) {
         console.error('Failed to initialize data sources file:', err);
         return false;
     } finally {
-        try {
-            const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
-            await invoke('unlock_file', { path: fullPath });
-        } catch (unlockErr) {
-            console.warn('Failed to unlock data sources file:', unlockErr);
-        }
+        // try {
+        //     const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
+        //     await invoke('unlock_file', { path: fullPath });
+        // } catch (unlockErr) {
+        //     console.warn('Failed to unlock data sources file:', unlockErr);
+        // }
     }
 }
 

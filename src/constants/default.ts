@@ -1,6 +1,7 @@
 import { PreferencesState } from '@/types/Preferences';
 import { DataSourceConfigState, FolderGroupsState } from '@/types/DataSource';
 import { ConfigStepperState } from '@/types/Stepper';
+import { WaferMetadataState } from '@/types/Wafer';
 
 export const now = () => new Date().toISOString();
 
@@ -55,4 +56,15 @@ export const initialDataSourceState: FolderGroupsState = {
     cpProber: [],
     wlbi: [],
     aoi: [],
+};
+
+export const initialWaferMetadataState: WaferMetadataState = {
+    data: {
+        substrate: [],
+        fabCp: [],
+        cpProber: [],
+        wlbi: [],
+        aoi: [],
+    },
+    lastSaved: now(),
 };

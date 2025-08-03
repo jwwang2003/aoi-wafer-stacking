@@ -95,7 +95,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
         path = preferences.preferenceFilePath;
     }
     else if (dataSourceTypes.includes(acc.type)) {
-        data = JSON.stringify(dataSourcePathsConfig);
+        data = JSON.stringify(dataSourcePathsConfig, null, 2);
         path = preferences.dataSourceConfigPath;
         storeApi.dispatch(saveConfig());
     }
