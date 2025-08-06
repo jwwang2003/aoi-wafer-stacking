@@ -14,7 +14,7 @@ import { RootState } from '@/store';
 import { DataSourceConfigState, DataSourceType } from '@/types/DataSource';
 import { arraysAreEqual, getRelativePath, sortBySubfolderName } from '@/utils/fs';
 
-import { initialDataSourcePathsConfigState as initialState, now } from '@/constants/default';
+import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
 import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper';
 import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
 import { setStepper } from './preferencesSlice';
@@ -25,7 +25,7 @@ export const initDataSourceConfig = createAsyncThunk<
     void,
     { state: RootState, rejectValue: string }
 >(
-    'dataSourcePathsConfig/init',
+    'dataSourceConfig/init',
     async (_, thunkAPI) => {
         let config: DataSourceConfigState = { ...initialState };
         try {
@@ -87,16 +87,61 @@ export const initDataSourceConfig = createAsyncThunk<
     }
 );
 
-// export const revalidateDataSourcePaths = createAsyncThunk<
-//     {},
-//     void,
-//     { state: RootState, rejectValue: string}
-// >('dataSourcePathsConfig/revalidate', async (_, thunkAPI) => {
+export const revalidateDataSource = createAsyncThunk<
+    { dataSourceConfig: DataSourceConfigState; valid: boolean },
+    void,
+    { state: RootState, rejectValue: string }
+>('dataSourceConfig/revalidate', async (_, thunkAPI) => {
+    try {
+        const { preferences, dataSourceConfig } = thunkAPI.getState();
+        const { dataSourceConfigPath } = preferences;
+        const defaultConfig = { ...initialDataSourceConfigState };
 
-// });
+        let raw = null;
+        if (dataSourceConfigPath) {
+            raw = await readTextFile(dataSourceConfigPath);
+        } else {
+            raw = await readTextFile(DATA_SOURCES_CONFIG_FILENAME, { baseDir });
+        }
+        const parsed = JSON.parse(raw);
 
-const dataSourcePathsSlice = createSlice({
-    name: 'dataSourcePathsConfig',
+        if (!isValidDataSourceConfig(parsed)) {
+            return {
+                valid: false,
+                dataSourceConfig: defaultConfig,
+            };
+        }
+
+        const merged = mergeDefinedKeys(defaultConfig, parsed);
+        if (!isValidDataSourceConfig(merged)) {
+            return {
+                valid: false,
+                dataSourceConfig: defaultConfig,
+            };
+        }
+
+        const parsedLastSaved = merged.lastSaved ?? 0;
+        const localLastSaved = dataSourceConfig.lastSaved ?? 0;
+
+        // Compare timestamps and decide which config to use
+        const useLocal = localLastSaved > parsedLastSaved;
+
+        return {
+            valid: true,
+            dataSourceConfig: useLocal ? dataSourceConfig : merged,
+        };
+    } catch (err: unknown) {
+        // const fallback = await createDefaultPreferences();
+        if (err instanceof Error)
+            return thunkAPI.rejectWithValue(err.message);
+        else if (typeof err === 'string')
+            return thunkAPI.rejectWithValue(err);
+        return thunkAPI.rejectWithValue('');
+    }
+});
+
+const dataSourceSlice = createSlice({
+    name: 'dataSourceConfig',
     initialState,
     reducers: {
         // —— Root path reducer ——
@@ -153,7 +198,17 @@ const dataSourcePathsSlice = createSlice({
             })
             .addCase(initDataSourceConfig.rejected, () => {
                 return;
-            });
+            })
+
+            .addCase(revalidateDataSource.fulfilled, (state, action) => {
+                if (!action.payload.valid) {
+                    console.error('Something went really wrong... dataSourceConfig was not valid!');
+                }
+                state = action.payload.dataSourceConfig;
+            })
+            .addCase(revalidateDataSource.rejected, (_, action) => {
+                console.error(action.payload ?? 'Unknown error');
+            })
     }
 });
 
@@ -164,6 +219,6 @@ export const {
     removeDataSourcePath,
     setRegexPattern,
     saveConfig,
-} = dataSourcePathsSlice.actions;
+} = dataSourceSlice.actions;
 
-export default dataSourcePathsSlice.reducer;
+export default dataSourceSlice.reducer;

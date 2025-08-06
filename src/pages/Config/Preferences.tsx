@@ -28,7 +28,7 @@ export default function PreferencesSubpage() {
     const preferences = useAppSelector((state) => state.preferences);
     const { preferenceFilePath, dataSourceConfigPath, status, error } = preferences;
 
-    const dataSourceConfig = useAppSelector((state) => state.dataSourcePathsConfig);
+    const dataSourceConfig = useAppSelector((state) => state.dataSourceConfig);
 
     const [fileExists, setFileExists] = useState<boolean>(false);
     const [modifiedTime, setModifiedTime] = useState<string | null>(null);

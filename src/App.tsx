@@ -20,7 +20,7 @@ import { AppDispatch } from './store';
 import { initialize } from './utils/init';
 import { initPreferences } from './slices/preferencesSlice';
 import { DataSourceConfigState, FolderGroups } from './types/DataSource';
-import { initDataSourceConfig } from './slices/dataSourcePathsConfigSlice';
+import { initDataSourceConfig } from './slices/dataSourceConfigSlice';
 import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
 import { initConsoleInterceptor } from './utils/log';
 import { PreferencesState } from './types/Preferences';

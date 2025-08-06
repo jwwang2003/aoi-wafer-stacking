@@ -82,7 +82,7 @@ export const revalidatePreferencesFile = createAsyncThunk<
     { preferences: PreferencesState; valid: boolean },
     void,
     { state: RootState, rejectValue: string }
->('preferences/revalidatePreferencesFile', async (_, thunkAPI) => {
+>('preferences/revalidate', async (_, thunkAPI) => {
     try {
         const { preferences } = thunkAPI.getState();
         const defaultPref = await createDefaultPreferences();

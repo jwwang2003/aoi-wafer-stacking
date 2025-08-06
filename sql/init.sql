@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS product_defect_map (
     wafer_id TEXT NOT NULL,
     sub_id TEXT NOT NULL,
 
+    file_path TEXT NOT NULL,
+
     PRIMARY KEY (product_id, lot_id, wafer_id),
     FOREIGN KEY (product_id) REFERENCES oem_product_map(product_id),
     FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id)
@@ -42,7 +44,6 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
     time INTEGER,
     
     file_path TEXT NOT NULL,
-    last_mtime INTEGER,
 
     PRIMARY KEY (product_id, batch_id, wafer_id),
     FOREIGN KEY (product_id, batch_id, wafer_id)

@@ -22,8 +22,8 @@ export const initDataSourceState = createAsyncThunk<
     void,
     { state: RootState }
 >('dataSourceState/init', async (_, thunkAPI) => {
-    const { dataSourcePathsConfig } = thunkAPI.getState();
-    const { rootPath, paths } = dataSourcePathsConfig;
+    const { dataSourceConfig } = thunkAPI.getState();
+    const { rootPath, paths } = dataSourceConfig;
 
     const result: FolderGroupsState = { ...initialState };
 

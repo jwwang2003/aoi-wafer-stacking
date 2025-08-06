@@ -1,0 +1,84 @@
+"filename", "language", "JSON", "HTML", "MS SQL", "TypeScript", "TypeScript JSX", "JavaScript", "JSON with Comments", "Markdown", "XML", "Rust", "comment", "blank", "total"
+"/Users/junweiwang/Documents/github/wafer-overlay/README.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, 51, 0, 0, 0, 29, 80
+"/Users/junweiwang/Documents/github/wafer-overlay/eslint.config.mjs", "JavaScript", 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 1, 2, 17
+"/Users/junweiwang/Documents/github/wafer-overlay/index.html", "HTML", 0, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 15
+"/Users/junweiwang/Documents/github/wafer-overlay/package.json", "JSON", 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 51
+"/Users/junweiwang/Documents/github/wafer-overlay/postcss.config.cjs", "JavaScript", 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 14
+"/Users/junweiwang/Documents/github/wafer-overlay/public/tauri.svg", "XML", 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 1, 7
+"/Users/junweiwang/Documents/github/wafer-overlay/public/vite.svg", "XML", 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1
+"/Users/junweiwang/Documents/github/wafer-overlay/spec.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, 185, 0, 0, 0, 61, 246
+"/Users/junweiwang/Documents/github/wafer-overlay/sql/init.sql", "MS SQL", 0, 0, 57, 0, 0, 0, 0, 0, 0, 0, 15, 25, 97
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/build.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 1, 4
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/capabilities/default.json", "JSON", 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 31
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/commands.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 0, 6, 43
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/crypto/mod.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 2, 2, 22
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/file/file_io.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 109, 3, 22, 134
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/file/file_lock.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 39, 10, 93
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/file/mod.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 63, 10, 114
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/file/tests/mod.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 68, 9, 14, 91
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/lib.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 46, 13, 10, 69
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/main.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1, 1, 6
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/parser/mod.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 57, 247, 32, 336
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/parser/tests/mod.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 21, 15, 87
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/wafer/ds.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 364, 21, 30, 415
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/src/wafer/mod.rs", "Rust", 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 2
+"/Users/junweiwang/Documents/github/wafer-overlay/src-tauri/tauri.conf.json", "JSON", 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 54
+"/Users/junweiwang/Documents/github/wafer-overlay/src/App.tsx", "TypeScript JSX", 0, 0, 0, 0, 176, 0, 0, 0, 0, 0, 14, 16, 206
+"/Users/junweiwang/Documents/github/wafer-overlay/src/WaferScene.tsx", "TypeScript JSX", 0, 0, 0, 0, 54, 0, 0, 0, 0, 0, 5, 11, 70
+"/Users/junweiwang/Documents/github/wafer-overlay/src/Workflows.ts", "TypeScript", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 1, 10
+"/Users/junweiwang/Documents/github/wafer-overlay/src/api/fs.ts", "TypeScript", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1
+"/Users/junweiwang/Documents/github/wafer-overlay/src/api/tauri/wafer.ts", "TypeScript", 0, 0, 0, 19, 0, 0, 0, 0, 0, 0, 1, 6, 26
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/DirectorySelectList.tsx", "TypeScript JSX", 0, 0, 0, 0, 171, 0, 0, 0, 0, 0, 2, 17, 190
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/FlowStepper.tsx", "TypeScript JSX", 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 3, 34
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/LastSaved.tsx", "TypeScript JSX", 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 10, 2, 36
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/PathPicker.tsx", "TypeScript JSX", 0, 0, 0, 0, 75, 0, 0, 0, 0, 0, 1, 6, 82
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/ProcessRouteStepper.tsx", "TypeScript JSX", 0, 0, 0, 0, 47, 0, 0, 0, 0, 0, 0, 5, 52
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/RegexInput.tsx", "TypeScript JSX", 0, 0, 0, 0, 35, 0, 0, 0, 0, 0, 5, 5, 45
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/Wafer/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 1, 6
+"/Users/junweiwang/Documents/github/wafer-overlay/src/components/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 1, 1, 8
+"/Users/junweiwang/Documents/github/wafer-overlay/src/constants/MenuItems.tsx", "TypeScript JSX", 0, 0, 0, 0, 84, 0, 0, 0, 0, 0, 1, 4, 89
+"/Users/junweiwang/Documents/github/wafer-overlay/src/constants/default.ts", "TypeScript", 0, 0, 0, 58, 0, 0, 0, 0, 0, 0, 4, 8, 70
+"/Users/junweiwang/Documents/github/wafer-overlay/src/constants/index.ts", "TypeScript", 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 3, 3, 11
+"/Users/junweiwang/Documents/github/wafer-overlay/src/flows/DataSourcePaths.ts", "TypeScript", 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 14, 2, 65
+"/Users/junweiwang/Documents/github/wafer-overlay/src/flows/RegexPathPatterns.ts", "TypeScript", 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 3, 1, 12
+"/Users/junweiwang/Documents/github/wafer-overlay/src/flows/index.ts", "TypeScript", 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2
+"/Users/junweiwang/Documents/github/wafer-overlay/src/hooks.ts", "TypeScript", 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 5
+"/Users/junweiwang/Documents/github/wafer-overlay/src/main.tsx", "TypeScript JSX", 0, 0, 0, 0, 19, 0, 0, 0, 0, 0, 1, 5, 25
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/About/Preferences.tsx", "TypeScript JSX", 0, 0, 0, 0, 115, 0, 0, 0, 0, 0, 4, 14, 133
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/About/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 55, 0, 0, 0, 0, 0, 0, 5, 60
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/ComingSoon/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 1, 32
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Config/DataConfig.tsx", "TypeScript JSX", 0, 0, 0, 0, 172, 0, 0, 0, 0, 0, 19, 32, 223
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Config/Preferences.tsx", "TypeScript JSX", 0, 0, 0, 0, 148, 0, 0, 0, 0, 0, 1, 16, 165
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Config/Preview.tsx", "TypeScript JSX", 0, 0, 0, 0, 177, 0, 0, 0, 0, 0, 3, 20, 200
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Config/SubstrateConfig.tsx", "TypeScript JSX", 0, 0, 0, 0, 95, 0, 0, 0, 0, 0, 3, 8, 106
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Config/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 62, 0, 0, 0, 0, 0, 4, 7, 73
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Log/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 121, 0, 0, 0, 0, 0, 3, 17, 141
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/WaferStacking/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 106, 0, 0, 0, 0, 0, 3, 13, 122
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/Welcome/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 1, 41
+"/Users/junweiwang/Documents/github/wafer-overlay/src/pages/index.tsx", "TypeScript JSX", 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 2, 16
+"/Users/junweiwang/Documents/github/wafer-overlay/src/slices/dataSourcePathsConfigSlice.ts", "TypeScript", 0, 0, 0, 130, 0, 0, 0, 0, 0, 0, 21, 18, 169
+"/Users/junweiwang/Documents/github/wafer-overlay/src/slices/dataSourceStateSlice.ts", "TypeScript", 0, 0, 0, 118, 0, 0, 0, 0, 0, 0, 21, 20, 159
+"/Users/junweiwang/Documents/github/wafer-overlay/src/slices/logSlice.ts", "TypeScript", 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 1, 4, 22
+"/Users/junweiwang/Documents/github/wafer-overlay/src/slices/middleware.ts", "TypeScript", 0, 0, 0, 102, 0, 0, 0, 0, 0, 0, 13, 9, 124
+"/Users/junweiwang/Documents/github/wafer-overlay/src/slices/preferencesSlice.ts", "TypeScript", 0, 0, 0, 189, 0, 0, 0, 0, 0, 0, 34, 22, 245
+"/Users/junweiwang/Documents/github/wafer-overlay/src/slices/waferMetadataSlice.ts", "TypeScript", 0, 0, 0, 315, 0, 0, 0, 0, 0, 0, 122, 76, 513
+"/Users/junweiwang/Documents/github/wafer-overlay/src/sqlDB.ts", "TypeScript", 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 2, 1, 6
+"/Users/junweiwang/Documents/github/wafer-overlay/src/store.ts", "TypeScript", 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 3, 3, 26
+"/Users/junweiwang/Documents/github/wafer-overlay/src/types/DataSource.ts", "TypeScript", 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 39, 18, 97
+"/Users/junweiwang/Documents/github/wafer-overlay/src/types/Log.ts", "TypeScript", 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 1, 2, 12
+"/Users/junweiwang/Documents/github/wafer-overlay/src/types/Preferences.ts", "TypeScript", 0, 0, 0, 19, 0, 0, 0, 0, 0, 0, 1, 3, 23
+"/Users/junweiwang/Documents/github/wafer-overlay/src/types/Stepper.ts", "TypeScript", 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 1, 0, 8
+"/Users/junweiwang/Documents/github/wafer-overlay/src/types/Wafer.ts", "TypeScript", 0, 0, 0, 119, 0, 0, 0, 0, 0, 0, 57, 31, 207
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/dataSource.ts", "TypeScript", 0, 0, 0, 41, 0, 0, 0, 0, 0, 0, 12, 6, 59
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/fs.ts", "TypeScript", 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 19, 7, 56
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/helper.ts", "TypeScript", 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 2, 7, 58
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/init.ts", "TypeScript", 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 50, 17, 163
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/log.ts", "TypeScript", 0, 0, 0, 11, 0, 0, 0, 0, 0, 0, 1, 3, 15
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/tracker.ts", "TypeScript", 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 19, 90
+"/Users/junweiwang/Documents/github/wafer-overlay/src/utils/validators.ts", "TypeScript", 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 1, 9, 59
+"/Users/junweiwang/Documents/github/wafer-overlay/src/vite-env.d.ts", "TypeScript", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"/Users/junweiwang/Documents/github/wafer-overlay/test/data_config.json", "JSON", 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32
+"/Users/junweiwang/Documents/github/wafer-overlay/tsconfig.json", "JSON with Comments", 0, 0, 0, 0, 0, 0, 25, 0, 0, 0, 3, 4, 32
+"/Users/junweiwang/Documents/github/wafer-overlay/tsconfig.node.json", "JSON", 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 17
+"/Users/junweiwang/Documents/github/wafer-overlay/vite.config.ts", "TypeScript", 0, 0, 0, 28, 0, 0, 0, 0, 0, 0, 7, 5, 40
+"Total", "-", 173, 13, 57, 1608, 1863, 28, 25, 236, 7, 843, 962, 805, 6620

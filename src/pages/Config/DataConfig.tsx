@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Group, Stack, Chip, Button, Title, Divider, Tooltip } from '@mantine/core';
 import { IconRefresh, IconScanEye } from '@tabler/icons-react';
 import { toast } from 'react-toastify';
@@ -7,8 +7,9 @@ import { useAppDispatch, useAppSelector } from '@/hooks';
 import {
     setRegexPattern,
     addDataSourcePath,
-    setRootPath
-} from '@/slices/dataSourcePathsConfigSlice';
+    setRootPath,
+    revalidateDataSource
+} from '@/slices/dataSourceConfigSlice';
 
 import {
     RegexConfigs,
@@ -18,7 +19,7 @@ import {
 import {
     RegexInput,
     PathPicker,
-    DirectorySelectList,
+    DataSourceDirectorySelectList,
     LastSaved
 } from '@/components';
 
@@ -33,7 +34,7 @@ export function SubfolderSelectorSection({ title, type }: { title: string, type:
     return (
         <div style={{ marginBottom: 24 }}>
             <Title order={3}>{title}</Title>
-            <DirectorySelectList type={type} />
+            <DataSourceDirectorySelectList type={type} />
         </div>
     );
 }
@@ -42,10 +43,10 @@ export default function DataConfigSubpage() {
     // React-Redux stuff
     const dispatch = useAppDispatch();
 
-    const { rootPath, rootLastModified } = useAppSelector((state) => state.dataSourcePathsConfig);
-    const regexLastModified = useAppSelector((state) => state.dataSourcePathsConfig.regex.lastModified);
-    const pathsLastModified = useAppSelector((state) => state.dataSourcePathsConfig.paths.lastModified);
-    const lastSaved = useAppSelector((state) => state.dataSourcePathsConfig.lastSaved);
+    const { rootPath, rootLastModified } = useAppSelector((state) => state.dataSourceConfig);
+    const regexLastModified = useAppSelector((state) => state.dataSourceConfig.regex.lastModified);
+    const pathsLastModified = useAppSelector((state) => state.dataSourceConfig.paths.lastModified);
+    const lastSaved = useAppSelector((state) => state.dataSourceConfig.lastSaved);
 
     // Dirty flags
     // Prompt the user to save the sections that are dirty before allowing them
@@ -55,7 +56,7 @@ export default function DataConfigSubpage() {
     const pathsDirty = pathsLastModified > lastSaved;
 
     // Regex patterns from Redux
-    const regexPatterns = useAppSelector((state) => state.dataSourcePathsConfig.regex);
+    const regexPatterns = useAppSelector((state) => state.dataSourceConfig.regex);
 
     // Redux edit handlers
     const handleRegexChange = (newPattern: string, type: keyof DataSourceRegex) => {
@@ -69,7 +70,7 @@ export default function DataConfigSubpage() {
     const regexConfig = RegexConfigs;   // Regex flows
     const dataSourceFlow = DataSources();   // Path flows
 
-    const dataSourcePaths = useAppSelector((state) => state.dataSourcePathsConfig.paths);
+    const dataSourcePaths = useAppSelector((state) => state.dataSourceConfig.paths);
     const dataSourceState = useAppSelector((state) => state.dataSourceState);
 
     const handleAutoFolderRecognition = async () => {
@@ -127,6 +128,13 @@ export default function DataConfigSubpage() {
             });
         }
     };
+
+    useEffect(() => {
+        dispatch(revalidateDataSource())
+            .then((result) => {
+                console.log(result);
+            })
+    }, []);
 
     return (
         <>

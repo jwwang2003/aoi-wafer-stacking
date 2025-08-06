@@ -6,7 +6,7 @@ import {
     setRootPath,
     setRegexPattern,
     saveConfig,
-} from '@/slices/dataSourcePathsConfigSlice';
+} from '@/slices/dataSourceConfigSlice';
 import { resetPreferencesToDefault, setDataSourceConfigPath, setOffsets, setStepper } from './preferencesSlice';
 import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, resolve } from '@tauri-apps/api/path';
@@ -24,14 +24,14 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     const state = storeApi.getState();
     const {
         preferences,
-        dataSourcePathsConfig,
+        dataSourceConfig,
         dataSourceState,
     } = state;
 
     // Match only path-related reducers
     const prefTypes: string[] = [
         // Preference files config types
-        setDataSourceConfigPath.type,
+        dataSourceConfig.type,
         setOffsets.type,
         resetPreferencesToDefault.typePrefix,
     ];
@@ -63,7 +63,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
             break;
         }
         case setRootPath.type: {
-            isDataSourceRootValid(dataSourcePathsConfig)
+            isDataSourceRootValid(dataSourceConfig)
                 .then((result) => {
                     if (result) {
                         storeApi.dispatch(setStepper(ConfigStepperState.RootDirectory + 1));
@@ -95,7 +95,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
         path = preferences.preferenceFilePath;
     }
     else if (dataSourceTypes.includes(acc.type)) {
-        data = JSON.stringify(dataSourcePathsConfig, null, 2);
+        data = JSON.stringify(dataSourceConfig, null, 2);
         path = preferences.dataSourceConfigPath;
         storeApi.dispatch(saveConfig());
     } else {
@@ -104,10 +104,10 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
 
     persistHelper(data!, path!)
         .then(() => {
-
+            // TODO:
         })
         .catch(() => {
-
+            // TODO:
         });
 
     return result;

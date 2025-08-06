@@ -1,4 +1,4 @@
-import { setDataSourcePaths } from '@/slices/dataSourcePathsConfigSlice';
+import { setDataSourcePaths } from '@/slices/dataSourceConfigSlice';
 import { AppDispatch, RootState } from '@/store';
 import { DataSourceType, Folder } from '@/types/DataSource';
 /**

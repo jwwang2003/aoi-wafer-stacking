@@ -10,7 +10,7 @@ import { RootState } from '@/store';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
- * Whenever a change happens to dataSourcePathsConfig.paths[...] (... is a stage), the same
+ * Whenever a change happens to dataSourceConfig.paths[...] (... is a stage), the same
  * change should be applied here. For example, a new path gets added or an old path gets deleted.
  */
 
@@ -22,10 +22,10 @@ export const fetchWaferMetadata = createAsyncThunk<
 >('waferMetadata/fetch', async (_, thunkAPI) => {
     try {
         const state = thunkAPI.getState();
-        const { dataSourcePathsConfig } = state;
+        const { dataSourceConfig } = state;
 
         console.time('Read&ParseWaferMetadata');
-        const dataSourcePaths = await getDataSourcePathsFolders(dataSourcePathsConfig);
+        const dataSourcePaths = await getDataSourcePathsFolders(dataSourceConfig);
         const parsed: RawWaferMetadataCollection = await readFolderData(dataSourcePaths);
         console.timeEnd('Read&ParseWaferMetadata');
 

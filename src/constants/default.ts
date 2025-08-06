@@ -26,7 +26,7 @@ export const initialPreferencesState: PreferencesState = {
     error: null,
 };
 
-export const initialDataSourcePathsConfigState: DataSourceConfigState = {
+export const initialDataSourceConfigState: DataSourceConfigState = {
     rootPath: '',
     rootLastModified: now(),
     paths: {

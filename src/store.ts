@@ -1,7 +1,7 @@
 // src/store/index.ts
 import { configureStore } from '@reduxjs/toolkit';
 import preferencesReducer from './slices/preferencesSlice';
-import dataSourcePathsConfigReducer from './slices/dataSourcePathsConfigSlice';
+import dataSourceConfigReducer from './slices/dataSourceConfigSlice';
 import dataSourceStateReducer from './slices/dataSourceStateSlice';
 import waferMetadataReducer from './slices/waferMetadataSlice';
 import loggingReducer from './slices/logSlice';
@@ -10,7 +10,7 @@ import { validationPersistenceMiddleware } from './slices/middleware';
 const store = configureStore({
   reducer: {
     preferences: preferencesReducer,
-    dataSourcePathsConfig: dataSourcePathsConfigReducer,
+    dataSourceConfig: dataSourceConfigReducer,
     dataSourceState: dataSourceStateReducer,
     waferMetadata: waferMetadataReducer,
     log: loggingReducer,

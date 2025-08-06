@@ -12,7 +12,7 @@ import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { addFolder, removeFolder } from '@/slices/dataSourceStateSlice';
 import { DataSourceType, FolderResult } from '@/types/DataSource';
-import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourcePathsConfigSlice';
+import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
 import { invoke } from '@tauri-apps/api/core';
 import { getRelativePath } from '@/utils/fs';
 
@@ -22,9 +22,9 @@ interface DirectorySelectListProps {
 
 export default function DirectorySelectList({ type }: DirectorySelectListProps) {
     const dispatch = useAppDispatch();
-    const rootPath = useAppSelector((state) => state.dataSourcePathsConfig.rootPath);
+    const rootPath = useAppSelector((state) => state.dataSourceConfig.rootPath);
     const folders = useAppSelector((state) => state.dataSourceState[type]);             // internal (system abs path)
-    const paths = useAppSelector((state) => state.dataSourcePathsConfig.paths[type]);   // config file (relative path)
+    const paths = useAppSelector((state) => state.dataSourceConfig.paths[type]);   // config file (relative path)
     const [selected, setSelected] = useState<string[]>([]);
 
     const handleAdd = async () => {
