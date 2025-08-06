@@ -48,10 +48,10 @@ export const initDataSourceState = createAsyncThunk<
         result[typed] = sortFoldersByName(resolved);
     }
 
-    let flag = false;
+    // let flag = false;
     for (const value of Object.values(result)) {
         if (value.length > 0) {
-            flag = true;
+            // flag = true;
             break;
         }
     }

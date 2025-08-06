@@ -20,6 +20,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "~2",
     "console-feed": "^3.8.0",
+    "crypto-js": "^4.2.0",
     "framer-motion": "^12.23.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tauri-apps/cli": "^2",
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.177.0",

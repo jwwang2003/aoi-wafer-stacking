@@ -42,6 +42,10 @@ export interface ExcelData {
     info: FileInfo;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// NOTE: Wafer Metadata
+////////////////////////////////////////////////////////////////////////////////
+
 /**
  * Metadata extracted from a wafer-related file path or filename.
  */
@@ -65,6 +69,26 @@ export interface WaferFileMetadata {
     /** Full file path */
     filePath: string;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// NOTE: WaferMetadata slice
+////////////////////////////////////////////////////////////////////////////////
+
+export type FolderCollection = { [K in DataSourceType]: FolderResult[] };
+export type RawWaferMetadata = ExcelData | WaferFileMetadata;
+export type RawWaferMetadataCollection = RawWaferMetadata[];
+
+export interface WaferMetadataState {
+    // data: {
+    //     [K in DataSourceType]: RawWaferMetadata[];
+    // };
+    data: RawWaferMetadataCollection;
+    lastSaved: string;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// NOTE: Tauri IPC
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Data read from the substrate .xls file
@@ -180,20 +204,4 @@ export interface WaferMapData {
         totalDiesPassed: number;
         binCounts: BinCounts;
     };
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// NOTE: WaferMetadata slice
-////////////////////////////////////////////////////////////////////////////////
-
-export type FolderCollection = { [K in DataSourceType]: FolderResult[] };
-export type RawWaferMetadata = ExcelData | WaferFileMetadata;
-export type RawWaferMetadataCollection = RawWaferMetadata[];
-
-export interface WaferMetadataState {
-    // data: {
-    //     [K in DataSourceType]: RawWaferMetadata[];
-    // };
-    data: RawWaferMetadataCollection;
-    lastSaved: string;
 }

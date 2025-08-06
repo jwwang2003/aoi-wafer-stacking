@@ -1,21 +1,8 @@
 // src/store/slices/consoleLogSlice.ts
+import { Log } from '@/types/Log';
+import { initialLogState as initialState } from '@/constants/default';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Methods } from 'console-feed/lib/definitions/Methods';
 
-export interface Log {
-    method: Methods;
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    data: any[];
-    date?: string;
-}
-
-interface ConsoleLogState {
-    logs: Log[];
-}
-
-const initialState: ConsoleLogState = {
-    logs: [],
-};
 
 const consoleLogSlice = createSlice({
     name: 'consoleLog',

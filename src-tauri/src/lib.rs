@@ -2,6 +2,7 @@
 mod file;
 mod parser;
 mod wafer;
+mod crypto;
 
 mod commands;
 
@@ -9,7 +10,7 @@ use file::file_lock;
 
 #[allow(unused)]
 use tauri::{Manager, RunEvent};
-use tauri_plugin_sql::{Builder, Migration, MigrationKind};
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 /**
  * Developer notes:
@@ -34,12 +35,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            file_lock::lock_file,
-            file_lock::unlock_file,
-            commands::get_file_batch_stat
+            // file_lock::lock_file,
+            // file_lock::unlock_file,
+            commands::get_file_batch_stat,
+            commands::rust_sha1,
+            commands::rust_sha256,
         ])
         .build(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("error while running Tauri application");
 
     app.run(move |_app_handle, _event| {
         match &_event {
@@ -51,11 +54,13 @@ pub fn run() {
                 // an exit request is initiated.
 
                 // Start performing exit logic
-                println!("Applicaiton closing...");
+                println!("Application closing...");
 
                 // Start performing cleanup logic
                 println!("Performing cleanup..;");
                 file_lock::clear_all_locks();
+
+                println!("Thank you for using our software!");
             }
             _ => (),
         }

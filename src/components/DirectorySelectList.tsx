@@ -58,7 +58,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
     const handleRemoveSelected = () => {
         for (const path of selected) {
-            dispatch(removeDataSourcePath({ type, path}));
+            dispatch(removeDataSourcePath({ type, path }));
             dispatch(removeFolder({ type, path }));
         }
         setSelected([]);

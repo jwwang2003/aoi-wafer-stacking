@@ -23,6 +23,7 @@ import { DataSourceConfigState, FolderGroups } from './types/DataSource';
 import { initDataSourceConfig } from './slices/dataSourcePathsConfigSlice';
 import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
 import { initConsoleInterceptor } from './utils/log';
+import { PreferencesState } from './types/Preferences';
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -71,6 +72,7 @@ export default function App() {
             pauseOnHover: false,
             draggable: false,
         });
+        console.log('Hello, world!');
     }, []);
 
     useEffect(() => {
@@ -78,19 +80,27 @@ export default function App() {
             try {
                 await initConsoleInterceptor();
 
-                console.debug('Initializing...');
+                console.info('Initializing...');
+                console.time('initialize');
+                // Initializes the configuration folder structure & initializes the database
                 await initialize();
-                console.debug('Initialized!');
-                await dispatch(initPreferences()).unwrap();
-                console.debug('Initialized preferences!');
+                const preferences: PreferencesState = await dispatch(initPreferences()).unwrap();
+                console.info('%cInitialized preferences!', 'color: orange', preferences);
                 const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig()).unwrap();
+                console.info('%cInitialized dataSourceConfig!', 'color: orange', dataSourceConfig);
                 const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
+                console.info('%cInitialized dataSourceState!', 'color: orange', dataSourceState);
 
-                if (import.meta.env.DEV) {
-                    console.debug('[INIT]', dataSourceConfig);
-                    console.debug('[INIT]', dataSourceState);
-                }
+                // if (import.meta.env.DEV) {
+                //     console.debug('[INIT]', dataSourceConfig);
+                //     console.debug('[INIT]', dataSourceState);
+                // }
 
+                console.info('%cInitialization complete!', 'color: blue');
+                console.timeEnd('initialize');
+                
+                // Constantly check for a change in the folder status of the root folder
+                // TODO: Change this pooling method into a event based method!
                 setInterval(() => {
                     try {
                         dispatch(refreshFolderStatuses());
@@ -99,7 +109,7 @@ export default function App() {
                     }
                 }, 1000);
             } catch (e) {
-                console.error('Initialization failed:', e);
+                console.error('Initialization failed!', e);
             }
         };
         runInit();

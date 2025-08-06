@@ -25,10 +25,11 @@ export async function initialize() {
     try {
         // Ensure AppData folder exists
         await get_folder('', { baseDir: appDataBaseDir });
-        console.debug('AppData directory initialized at:', await appDataDir());
+        console.info('AppData directory initialized at:', await appDataDir());
         // Ensure LocalData folder exists
         await get_folder('', { baseDir: localDataBaseDir });
-        console.debug('LocalData directory initialized at:', await localDataDir());
+        console.info('LocalData directory initialized at:', await localDataDir());
+
         await init_pref();
         await init_data_source();
         await init_db();
@@ -121,28 +122,15 @@ export async function init_db(): Promise<void> {
         const dir = await appDataDir();
         const dbPath = await resolve(dir, DB_FILENAME);
 
-        // const dbExists = await exists(DB_FILENAME, { baseDir });
+        const dbExists = await exists(DB_FILENAME, { baseDir });
 
         // Load the SQLite database from appDataDir
         const db = await Database.load(`sqlite:${dbPath}`);
-        // await db.close();
 
-        console.info('Creating new SQLite database at:', dbPath);
-        // const test = await db.execute(`
-        //     INSERT INTO users (name, email)
-        //     VALUES ('Alice Zhang', 'alice@example.com');
-        // `);
-        // console.log(test);
-        // await db.execute(`
-        //     CREATE TABLE IF NOT EXISTS overlay_info (
-        //         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        //         wafer_id TEXT,
-        //         chip_id TEXT,
-        //         process_stage TEXT,
-        //         file_path TEXT,
-        //         last_modified TEXT
-        //     );
-        // `);
+        if (dbExists && db) {
+            console.log('%cInitialized database!', 'color: orange', dbPath);
+            await db.close();
+        }
     } catch (err) {
         console.error('Database initialization failed:', err);
         throw err;

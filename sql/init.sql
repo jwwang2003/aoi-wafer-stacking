@@ -49,6 +49,17 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
         REFERENCES product_defect_map(product_id, lot_id, wafer_id)
 );
 
+CREATE TABLE IF NOT EXISTS file_index (
+    file_path TEXT PRIMARY KEY,       -- Absolute or relative file path
+    last_mtime INTEGER NOT NULL,      -- From `metadata(filePath).modified`
+    file_hash TEXT                    -- Optional: SHA-1, SHA-256, etc.
+);
+
+CREATE TABLE folder_index (
+    folder_path TEXT PRIMARY KEY,
+    last_mtime INTEGER
+);
+
 -- =======================================
 -- Indexes for Faster Lookup
 -- =======================================
@@ -68,3 +79,18 @@ ON wafer_maps (file_path);
 -- Optional: search wafer maps by stage
 CREATE INDEX IF NOT EXISTS idx_wafer_stage
 ON wafer_maps (stage);
+
+
+
+CREATE INDEX IF NOT EXISTS idx_file_index_path
+ON file_index (file_path);
+
+CREATE INDEX IF NOT EXISTS idx_file_index_hash
+ON file_index (file_hash);
+
+
+CREATE INDEX IF NOT EXISTS idx_folder_index_path
+ON folder_index (folder_path);
+
+CREATE INDEX IF NOT EXISTS idx_stage_product
+ON wafer_maps (stage, product_id);

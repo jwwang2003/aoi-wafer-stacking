@@ -101,7 +101,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     } else {
         return result;
     }
-    
+
     persistHelper(data!, path!)
         .then(() => {
 

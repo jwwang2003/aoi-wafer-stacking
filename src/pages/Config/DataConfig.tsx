@@ -142,7 +142,7 @@ export default function DataConfigSubpage() {
                     dirty={rootDirty}
                     lastModified={rootLastModified}
                     lastSaved={lastSaved}
-                    // onSave={persistDataSourceConfig}
+                // onSave={persistDataSourceConfig}
                 />
 
                 <Group justify='flex-start'>
@@ -177,7 +177,7 @@ export default function DataConfigSubpage() {
                         dirty={regexDirty}
                         lastModified={regexLastModified}
                         lastSaved={lastSaved}
-                        // onSave={persistDataSourceConfig}
+                    // onSave={persistDataSourceConfig}
                     />
                 </Stack>
             )}
@@ -213,7 +213,7 @@ export default function DataConfigSubpage() {
                 dirty={pathsDirty}
                 lastModified={pathsLastModified}
                 lastSaved={lastSaved}
-                // onSave={persistDataSourceConfig}
+            // onSave={persistDataSourceConfig}
             />
 
             {/* Section: Data source stats */}

@@ -50,7 +50,7 @@ export default function ConfigPage() {
                     <FlowStepper active={flowStep} onStepClick={() => { }} steps={DataSourceFlowSteps}>
                         <></>
                     </FlowStepper>
-                    <Button variant="outline" onClick={() => {}}>
+                    <Button variant="outline" onClick={() => { }}>
                         验证
                     </Button>
                     <SegmentedControl
@@ -59,7 +59,7 @@ export default function ConfigPage() {
                         onChange={handleChange}
                     />
                     <Routes>
-                        <Route path="/" element={<Navigate to="data" replace />} />
+                        <Route path="/" element={<Navigate to="preferences" replace />} />
                         <Route path="preferences" element={<Preferences />} />
                         <Route path="data" element={<DataConfig />} />
                         <Route path="db-preview" element={<Preview />} />

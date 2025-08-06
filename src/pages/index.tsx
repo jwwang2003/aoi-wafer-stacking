@@ -6,10 +6,10 @@ import About from './About';
 import ComingSoon from './ComingSoon';
 
 export {
-  Welcome,
-  Config,
-  WaferStacking,
-  Log,
-  About,
-  ComingSoon
+    Welcome,
+    Config,
+    WaferStacking,
+    Log,
+    About,
+    ComingSoon
 }
