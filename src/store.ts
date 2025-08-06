@@ -13,7 +13,7 @@ const store = configureStore({
     dataSourceState: dataSourceStateReducer,
     waferMetadata: waferMetadataReducer,
   },
-  middleware: (gDM) => gDM().concat(validationPersistenceMiddleware)
+  middleware: (gDM) => gDM({ serializableCheck: false }).concat(validationPersistenceMiddleware)
   // redux-thunk is included by default, so our async initConfigFilePath thunk will work out of the box
 });
 

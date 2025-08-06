@@ -1,14 +1,28 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "wafer-overlay",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.wafer-overlay",
+
+  "plugins": {
+    "sql": {
+      "default": ["sqlite"],
+      "preload": [
+        "sqlite:data.db"
+      ],
+      "sqlite": {
+        "lib": "sqlite"
+      }
+    }
+  },
+
   "build": {
     "beforeDevCommand": "yarn dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "yarn build",
     "frontendDist": "../dist"
   },
+
   "app": {
     "windows": [
       {
@@ -21,6 +35,7 @@
       "csp": null
     }
   },
+
   "bundle": {
     "active": true,
     "targets": "all",

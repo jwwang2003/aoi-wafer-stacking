@@ -193,7 +193,7 @@ export interface WaferMapData {
     - `Defect List`
         - `编号.xls`
     - `代工厂产品型号_年月日时分秒.xlsx`
-    - `对应关系.xlsx`
+    - `Product list.xlsx`
 - `CP-prober-XX`
     - `产品型号_批次号_工序_复测次数`
         - `产品型号_批次号_片号`
@@ -205,7 +205,7 @@ export interface WaferMapData {
 - `AOI-XX`
     - `产品型号_批次号`
         - `片号`
-        - `产品型号_批次号_18_年月日时分秒.txt`
+        - `产品型号_批次号_片号_年月日时分秒.txt`
 
 ---
 

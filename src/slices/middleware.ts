@@ -98,8 +98,10 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
         data = JSON.stringify(dataSourcePathsConfig, null, 2);
         path = preferences.dataSourceConfigPath;
         storeApi.dispatch(saveConfig());
+    } else {
+        return result;
     }
-
+    
     persistHelper(data!, path!)
         .then(() => {
 

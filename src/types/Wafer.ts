@@ -20,24 +20,25 @@ export const enum DirectionAllCap {
 ////////////////////////////////////////////////////////////////////////////////
 
 export enum ExcelType {
-    Mapping = 'Mapping',       // Product list (e.g., from OEM or internal record)
-    DefectList = 'DefectList', // Defect sheet
-    Wafer = 'Wafer',           // Wafer-level metadata
+    Mapping = 'Mapping',            // Product list (e.g., from OEM or internal record)
+    Product = 'Product',            // Product metadata
+    DefectList = 'DefectList',      // Defect sheet
 }
 
 /**
  * Metadata and context for an Excel file.
  */
 export interface ExcelData {
+    stage: DataSourceType;
     type: ExcelType;
 
     /** Optional extracted timestamp from filename or context (e.g., "20250709_120302") */
+    id?: string;
+    oem?: string;
     time?: string;
 
-    /** File last modified time (preferred: ISO format) */
-    fileTime: string;
-
     /** Detailed file info from the filesystem */
+    filePath: string;
     info: FileInfo;
 }
 
@@ -190,8 +191,9 @@ export type RawWaferMetadata = ExcelData | WaferFileMetadata;
 export type RawWaferMetadataCollection = RawWaferMetadata[];
 
 export interface WaferMetadataState {
-    data: {
-        [K in DataSourceType]: RawWaferMetadata[];
-    };
+    // data: {
+    //     [K in DataSourceType]: RawWaferMetadata[];
+    // };
+    data: RawWaferMetadataCollection;
     lastSaved: string;
 }

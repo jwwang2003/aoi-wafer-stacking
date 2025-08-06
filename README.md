@@ -57,6 +57,14 @@ yarn tauri build --bundles dmg
 | CP 2     | `(?<=[/\\])CP\s*2(?=[/\\])`     |
 | AOI      | `(?<=[/\\])AOI(?=[/\\])`        |
 
+## Database \(数据库\)
+
+The database file is located in the `%APPDATA` folder, named `data.db`.
+
+![](./assets/images/appdata_ss.png)
+
+
+
 ## References (libraries, dependencies, papers, etc.)
 
 - https://www.sichainsemi.com/

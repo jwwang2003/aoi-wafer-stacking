@@ -1,6 +1,6 @@
 mod tests;
 
-use super::file_handler::read_txt;
+use super::file::read_txt;
 use super::wafer::ds::{DefectRecord, Wafer, WaferMap, WaferMapEx};
 use calamine::{open_workbook_auto, RangeDeserializerBuilder, Reader};
 use std::collections::HashSet;

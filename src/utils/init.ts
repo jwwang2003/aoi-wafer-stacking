@@ -1,9 +1,12 @@
 import {
+    baseDir,
     PREFERENCES_FILENAME,
-    DATA_SOURCES_CONFIG_FILENAME
+    DATA_SOURCES_CONFIG_FILENAME,
+    DB_FILENAME
 } from '@/constants';
 import { exists, ExistsOptions, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, localDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
+import Database from '@tauri-apps/plugin-sql';
 
 /**
  * Developer notes:
@@ -28,6 +31,7 @@ export async function initialize() {
         console.debug('LocalData directory initialized at:', await localDataDir());
         await init_pref();
         await init_data_source();
+        await init_db();
     } catch (e) {
         console.error('Initialization error:', e);
         return false;
@@ -108,11 +112,41 @@ export async function init_data_source(): Promise<boolean> {
     }
 }
 
-// Checks & loads the .db file for persisting previous data
-// SQLite database
-export async function init_db() {
-    // Unimplemented for now
-    // TODO:
+
+/**
+ * Initializes the SQLite database inside the AppData folder.
+ */
+export async function init_db(): Promise<void> {
+    try {
+        const dir = await appDataDir();
+        const dbPath = await resolve(dir, DB_FILENAME);
+
+        // const dbExists = await exists(DB_FILENAME, { baseDir });
+
+        // Load the SQLite database from appDataDir
+        const db = await Database.load(`sqlite:${dbPath}`);
+        // await db.close();
+
+        console.info('Creating new SQLite database at:', dbPath);
+        // const test = await db.execute(`
+        //     INSERT INTO users (name, email)
+        //     VALUES ('Alice Zhang', 'alice@example.com');
+        // `);
+        // console.log(test);
+        // await db.execute(`
+        //     CREATE TABLE IF NOT EXISTS overlay_info (
+        //         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        //         wafer_id TEXT,
+        //         chip_id TEXT,
+        //         process_stage TEXT,
+        //         file_path TEXT,
+        //         last_modified TEXT
+        //     );
+        // `);
+    } catch (err) {
+        console.error('Database initialization failed:', err);
+        throw err;
+    }
 }
 
 export async function get_folder(

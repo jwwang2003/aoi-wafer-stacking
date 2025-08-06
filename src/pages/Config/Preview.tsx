@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
     Table, TextInput, Title, ScrollArea,
-    Stack, Button, Group, Tooltip, NumberInput, Select,
-    Divider
+    Stack, Button, Group, Tooltip, NumberInput,
+    Select, Divider, Text, Code
 } from '@mantine/core';
 import { IconLoader } from '@tabler/icons-react';
 import { useDispatch } from 'react-redux';
 import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
 import { AppDispatch } from '@/store';
+import { useAppSelector } from '@/hooks';
 
 interface OverlayRecord {
     id: number;
@@ -20,6 +21,8 @@ interface OverlayRecord {
 
 export default function Preview() {
     const dispatch = useDispatch<AppDispatch>();
+
+    const rawWaferMetadata = useAppSelector((state) => state.waferMetadata.data);
 
     const [data, setData] = useState<OverlayRecord[]>([]);
     const [waferId, setWaferId] = useState('');
@@ -74,6 +77,17 @@ export default function Preview() {
             <Title order={2}>叠图信息</Title>
 
             <Title order={3}>统计</Title>
+
+            <Title order={3}>未处理信息</Title>
+            {rawWaferMetadata ?
+                <ScrollArea>
+                    <Code block fz="xs" style={{ whiteSpace: 'pre-wrap' }}>
+                        {JSON.stringify(rawWaferMetadata, null, 2)}
+                    </Code>
+                </ScrollArea>
+                :
+                <Text>无信息</Text>
+            }
 
             <Divider />
 
