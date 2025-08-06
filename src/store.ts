@@ -4,6 +4,7 @@ import preferencesReducer from './slices/preferencesSlice';
 import dataSourcePathsConfigReducer from './slices/dataSourcePathsConfigSlice';
 import dataSourceStateReducer from './slices/dataSourceStateSlice';
 import waferMetadataReducer from './slices/waferMetadataSlice';
+import loggingReducer from './slices/logSlice';
 import { validationPersistenceMiddleware } from './slices/middleware';
 
 const store = configureStore({
@@ -12,6 +13,7 @@ const store = configureStore({
     dataSourcePathsConfig: dataSourcePathsConfigReducer,
     dataSourceState: dataSourceStateReducer,
     waferMetadata: waferMetadataReducer,
+    log: loggingReducer,
   },
   middleware: (gDM) => gDM({ serializableCheck: false }).concat(validationPersistenceMiddleware)
   // redux-thunk is included by default, so our async initConfigFilePath thunk will work out of the box

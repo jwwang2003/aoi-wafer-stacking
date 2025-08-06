@@ -13,7 +13,7 @@ import {
     Welcome as WelcomePage,
     Config as ConfigPage,
     WaferStacking as WaferStackingPage,
-    Logging as LoggingPage,
+    Log as LogPage,
     About as AboutPage,
     ComingSoon,
 } from '@/pages';
@@ -70,7 +70,7 @@ export const menuItems: MenuItem[] = [
         label: '日志',
         value: 'log',
         path: '/log',
-        component: LoggingPage,
+        component: LogPage,
     },
     {
         icon: IconHelpCircle,

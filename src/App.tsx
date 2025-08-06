@@ -22,6 +22,7 @@ import { initPreferences } from './slices/preferencesSlice';
 import { DataSourceConfigState, FolderGroups } from './types/DataSource';
 import { initDataSourceConfig } from './slices/dataSourcePathsConfigSlice';
 import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
+import { initConsoleInterceptor } from './utils/log';
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -75,6 +76,8 @@ export default function App() {
     useEffect(() => {
         const runInit = async () => {
             try {
+                await initConsoleInterceptor();
+
                 console.debug('Initializing...');
                 await initialize();
                 console.debug('Initialized!');
@@ -100,12 +103,13 @@ export default function App() {
             }
         };
         runInit();
-        // if (import.meta.hot) {
-        //     import.meta.hot.accept(async () => {
-        //         console.debug('[HMR] Re-running init...');
-        //         runInit();
-        //     });
-        // }
+
+        if (import.meta.hot) {
+            import.meta.hot.accept(async () => {
+                console.debug('[HMR] Re-running init...');
+                runInit();
+            });
+        }
     }, []);
 
     return (
