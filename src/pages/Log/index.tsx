@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import {
     Box,
@@ -38,7 +38,18 @@ const METHOD_OPTIONS: Methods[] = [
 export default function LoggingPage() {
     const logs = useSelector((state: RootState) => state.log.logs);
     const [currentPage, setCurrentPage] = useState(1);
-    const [selectedMethods, setSelectedMethods] = useState<Methods[]>([]); // empty = all
+    const [selectedMethods, setSelectedMethods] = useState<Methods[]>(() => {
+        try {
+            const raw = localStorage.getItem('logging-selectedMethods');
+            return raw ? (JSON.parse(raw) as Methods[]) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    useEffect(() => {
+        localStorage.setItem('logging-selectedMethods', JSON.stringify(selectedMethods));
+    }, [selectedMethods]);
 
     const reversedLogs = useMemo(() => [...logs].reverse(), [logs]);
 
@@ -48,7 +59,6 @@ export default function LoggingPage() {
         const start = (currentPage - 1) * LOGS_PER_PAGE;
         return reversedLogs.slice(start, start + LOGS_PER_PAGE);
     }, [reversedLogs, currentPage]);
-
 
     async function downloadLogFile(reversedLogs: Log[]) {
         try {
@@ -67,9 +77,9 @@ export default function LoggingPage() {
 
             if (destPath) {
                 await writeTextFile(destPath, content);
-                console.log('Log file saved to:', destPath);
+                console.info('Log file saved to:', destPath);
             } else {
-                console.log('Save cancelled by user');
+                console.info('Save cancelled by user');
             }
         } catch (err) {
             console.error('Error saving log file:', err);
@@ -77,7 +87,7 @@ export default function LoggingPage() {
     }
 
     return (
-        <Box p="md" style={{ height: '100%' }}>
+        <Box p="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Title order={3}>日志消息</Title>
             <Divider my="sm" />
 
@@ -118,7 +128,7 @@ export default function LoggingPage() {
                 </Text>
             </Group>
 
-            <Box style={{ height: '75%', overflow: 'auto' }}>
+            <Box style={{ flex: 1, overflow: 'auto' }}>
                 <Console
                     logs={pagedLogs as Message[]}
                     filter={selectedMethods.length > 0 ? selectedMethods : undefined}
@@ -126,7 +136,7 @@ export default function LoggingPage() {
                 />
             </Box>
 
-            <Group mb="xs" justify="space-between" wrap="nowrap">
+            <Group justify="space-between" wrap="nowrap">
                 <Text mt="xs" size="xs" c="dimmed">
                     共 {reversedLogs.length} 条日志，当前第 {currentPage} 页 / 共 {totalPages} 页
                 </Text>

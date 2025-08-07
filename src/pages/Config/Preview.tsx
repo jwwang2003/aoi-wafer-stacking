@@ -2,14 +2,21 @@ import { useEffect, useState } from 'react';
 import {
     Table, TextInput, Title, ScrollArea,
     Stack, Button, Group, Tooltip, NumberInput,
-    Select, Divider
+    Select, Divider,
+    Indicator
 } from '@mantine/core';
-import { IconLoader } from '@tabler/icons-react';
+import { IconDownload, IconLoader } from '@tabler/icons-react';
+
 // import { open } from '@tauri-apps/plugin-dialog';
 import Database from '@tauri-apps/plugin-sql';
 import { useDispatch } from 'react-redux';
+
 import { AppDispatch } from '@/store';
 import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
+import RawWaferSummary from '@/components/RawWaferSummary';
+import { useAppSelector } from '@/hooks';
+import { ConfigStepperState } from '@/types/Stepper';
+import { setStepper } from '@/slices/preferencesSlice';
 
 interface OverlayRecord {
     product_id: string;
@@ -24,6 +31,9 @@ interface OverlayRecord {
 
 export default function Preview() {
     const dispatch = useDispatch<AppDispatch>();
+    const [mounted, setMounted] = useState<boolean>(false);
+
+    const stepper = useAppSelector((state) => state.preferences.stepper);
 
     const [db, setDb] = useState<Database | null>(null);
     const [data, setData] = useState<OverlayRecord[]>([]);
@@ -34,14 +44,32 @@ export default function Preview() {
     const [retryMax, setRetryMax] = useState<number | ''>('');
     const [loading, setLoading] = useState(false);
 
-    // Init DB connection on first load
+    // =========================================================================
+    // NOTE: INIT
+    // =========================================================================
     useEffect(() => {
+        if (!mounted) {
+            setMounted(true);
+        }
+
+        // Init DB connection on first load
         const connectDB = async () => {
             const db = await Database.load('sqlite:data.db');
             setDb(db);
         };
         connectDB();
     }, []);
+
+    // =========================================================================
+    // NOTE: METHODS
+    // =========================================================================
+    const load = async () => {
+        const data = await dispatch(fetchWaferMetadata());
+        if (!data) {
+            return;
+        }
+        await dispatch(setStepper(ConfigStepperState.Metadata + 1));
+    }
 
     const fetchData = async () => {
         if (!db) return;
@@ -71,7 +99,7 @@ export default function Preview() {
                 params.push(retryMax);
             }
 
-            sql += ' ORDER BY last_mtime DESC LIMIT 100';
+            sql += ' ORDER BY time DESC LIMIT 100';
 
             const results = await db.select<OverlayRecord[]>(sql, params);
             setData(results);
@@ -82,35 +110,69 @@ export default function Preview() {
         }
     };
 
+    // =========================================================================
+    // NOTE: REACT
+    // =========================================================================
+    useEffect(() => {
+        if (mounted && stepper >= ConfigStepperState.Metadata)
+            load();
+    }, [mounted]);
+
     useEffect(() => {
         if (db) fetchData();
     }, [db, waferId, stage, retryMin, retryMax]);
 
-    const load = () => {
-        dispatch(fetchWaferMetadata())
-            .then((result) => {
-                console.log(result);
-            })
-            .catch((error) => {
-                console.error(error);
-            })
-    }
-
     return (
         <Stack>
-            <Tooltip label="加载/刷新" withArrow>
-                <Button
-                    variant="light"
-                    color="blue"
-                    leftSection={<IconLoader size={16} />}
-                    loading={loading}
-                    onClick={load}
-                >
-                    加载/刷新
-                </Button>
-            </Tooltip>
+            <Title order={2}>文件数据信息</Title>
 
-            <Title order={2}>叠图信息</Title>
+            <Tooltip label="从字文件夹查找有效数据源（自动）" withArrow>
+                <Indicator
+                    disabled={!(stepper <= ConfigStepperState.Metadata)}
+                    processing
+                    color="red"
+                    offset={2}
+                    position="top-end"
+                    w="100%"
+                    size={8}
+                >
+                    <Button
+                        disabled={stepper < ConfigStepperState.Metadata}
+                        fullWidth
+                        variant="light"
+                        color="blue"
+                        leftSection={<IconLoader size={16} />}
+                        loading={loading}
+                        onClick={load}
+                    >
+                        加载/刷新
+                    </Button>
+                </Indicator>
+            </Tooltip>
+            <RawWaferSummary />
+            <Tooltip label="将未知数据添加进数据库（手动）" withArrow>
+                <Indicator
+                    disabled={!(stepper <= ConfigStepperState.Database)}
+                    processing
+                    color="red"
+                    offset={2}
+                    position="top-end"
+                    w="100%"
+                    size={8}
+                >
+                    <Button
+                        disabled={stepper < ConfigStepperState.Database}
+                        fullWidth
+                        variant="light"
+                        color="blue"
+                        leftSection={<IconDownload size={16} />}
+                        loading={loading}
+                        onClick={load}
+                    >
+                        同步数据库
+                    </Button>
+                </Indicator>
+            </Tooltip>
 
             <Divider />
 

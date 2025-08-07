@@ -32,7 +32,7 @@ export const initPreferences = createAsyncThunk<
     void,
     { rejectValue: string }
 >(
-    'preferences/initPreferences',
+    'preferences/init',
     async (_, thunkAPI) => {
         let preferences: PreferencesState = { ...initialState };
         try {
@@ -61,9 +61,13 @@ export const initPreferences = createAsyncThunk<
             // Check if data source config file exists
             try {
                 await readTextFile(preferences.dataSourceConfigPath, { baseDir });
+                // Ensures that the current dataSourceConfigPath exists!
+                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
             } catch (err: unknown) {
                 console.debug('[DataSourcePaths file check] assuming file DNE', err);
             }
+
+            await thunkAPI.dispatch(setStepper(ConfigStepperState.ConfigInfo)); // NOT valid yet...
 
             return preferences;
         } catch (err: unknown) {
@@ -105,13 +109,10 @@ export const revalidatePreferencesFile = createAsyncThunk<
             };
         }
 
-        const old = merged.stepper;
-        const prefCopy = { ...preferences };
+        const { stepper: _1, ...pref } = { ...merged }; // eslint-disable-line @typescript-eslint/no-unused-vars
+        const { stepper: _2, ...prefCopy} = { ...preferences }; // eslint-disable-line @typescript-eslint/no-unused-vars
 
-        merged.stepper = ConfigStepperState.Initial;
-        prefCopy.stepper = ConfigStepperState.Initial;
-
-        if (JSON.stringify(merged) !== JSON.stringify(prefCopy)) {
+        if (JSON.stringify(pref) !== JSON.stringify(prefCopy)) {
             console.error('Preferences misalignment between current state & file');
             console.error({
                 merged, preferences
@@ -119,7 +120,17 @@ export const revalidatePreferencesFile = createAsyncThunk<
             return thunkAPI.rejectWithValue('Preferences misalignment between current state & file');
         }
 
-        merged.stepper = old;
+        // Check if data source config file exists
+        try {
+            await readTextFile(preferences.dataSourceConfigPath, { baseDir });
+            // Ensures that the current dataSourceConfigPath exists!
+            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
+        } catch (err: unknown) {
+            console.debug('[DataSourcePaths file check] assuming file DNE', err);
+        }
+
+        await thunkAPI.dispatch(advanceStepper(ConfigStepperState.ConfigInfo)); // NOT valid yet...
+
         return {
             valid: true,
             preferences: merged,
@@ -171,23 +182,22 @@ const preferencesSlice = createSlice({
                 ...action.payload,
             };
         },
+        advanceStepper(state, action: PayloadAction<ConfigStepperState>) {
+            const current = state.stepper;
+            const target = action.payload;
+            if (current < target) {
+                state.stepper = target;
+                // } else if ((target - current) > 1) {
+                //     console.error('Config advance stepper gap is larger than 1!');
+            } else if (target == current) {
+                // console.warn('Config stepper unchanged', state.stepper);
+            } else {
+                // Do nothing...
+                // console.warn('Config stepper: something went wrong...');
+            }
+        },
         setStepper(state, action: PayloadAction<ConfigStepperState>) {
             state.stepper = action.payload;
-            switch (state.stepper) {
-                case ConfigStepperState.Initial:
-                    break;
-                case ConfigStepperState.ConfigInfo:
-                    break;
-                case ConfigStepperState.RootDirectory:
-                    break;
-                case ConfigStepperState.Subdirectories:
-                    break;
-                case ConfigStepperState.DeviceData:
-                    break;
-                default:
-                    break;
-            }
-            return state;
         }
     },
     extraReducers: (builder) => {
@@ -200,12 +210,11 @@ const preferencesSlice = createSlice({
             .addCase(initPreferences.fulfilled, (state, action) => {
                 state.status = 'idle';
                 state.error = null;
-                if (action.payload.stepper <= ConfigStepperState.ConfigInfo) {
-                    state.stepper = ConfigStepperState.ConfigInfo + 1;     // move to next state
-                }
-                const { preferenceFilePath, dataSourceConfigPath } = action.payload;
+
+                const { preferenceFilePath, dataSourceConfigPath, offsets } = action.payload;
                 state.preferenceFilePath = preferenceFilePath;
                 state.dataSourceConfigPath = dataSourceConfigPath;
+                state.offsets = offsets;
             })
             .addCase(initPreferences.rejected, (state, action) => {
                 state.stepper = ConfigStepperState.ConfigInfo;      // rollback
@@ -234,12 +243,12 @@ const preferencesSlice = createSlice({
                 }
             })
             .addCase(revalidatePreferencesFile.rejected, (state, action) => {
-                state.stepper = ConfigStepperState.ConfigInfo;      // rollback
+                state.stepper = ConfigStepperState.Initial;      // rollback
                 state.status = 'failed';
                 state.error = action.payload ?? 'Unknown error';
             })
     },
 });
 
-export const { setDataSourceConfigPath, setOffsets, setStepper } = preferencesSlice.actions;
+export const { setDataSourceConfigPath, setOffsets, setStepper, advanceStepper } = preferencesSlice.actions;
 export default preferencesSlice.reducer;

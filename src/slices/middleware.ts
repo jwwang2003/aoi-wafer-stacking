@@ -7,7 +7,7 @@ import {
     setRegexPattern,
     saveConfig,
 } from '@/slices/dataSourceConfigSlice';
-import { resetPreferencesToDefault, setDataSourceConfigPath, setOffsets, setStepper } from './preferencesSlice';
+import { advanceStepper, resetPreferencesToDefault, setDataSourceConfigPath, setOffsets, setStepper } from './preferencesSlice';
 import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, resolve } from '@tauri-apps/api/path';
 import { isDataSourceFoldersValid, isDataSourceRootValid } from '@/utils/validators';
@@ -56,7 +56,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
             // checks that all folders are valid (non-error) and that there is at least one folder
             const result = isDataSourceFoldersValid(dataSourceState);
             if (result) {
-                storeApi.dispatch(setStepper(ConfigStepperState.Subdirectories + 1));
+                storeApi.dispatch(advanceStepper(ConfigStepperState.Metadata));
             } else {
                 storeApi.dispatch(setStepper(ConfigStepperState.Subdirectories));
             }
@@ -66,7 +66,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
             isDataSourceRootValid(dataSourceConfig)
                 .then((result) => {
                     if (result) {
-                        storeApi.dispatch(setStepper(ConfigStepperState.RootDirectory + 1));
+                        storeApi.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
                     } else {
                         storeApi.dispatch(setStepper(ConfigStepperState.RootDirectory));
                     }
@@ -77,7 +77,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
             exists(preferences.dataSourceConfigPath)
                 .then((result) => {
                     if (result) {
-                        storeApi.dispatch(setStepper(ConfigStepperState.ConfigInfo + 1));
+                        storeApi.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
                     } else {
                         storeApi.dispatch(setStepper(ConfigStepperState.ConfigInfo));
                     }

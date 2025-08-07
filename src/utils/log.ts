@@ -1,7 +1,8 @@
 // src/services/consoleInterceptor.ts
 import { Hook } from 'console-feed';
 import store from '@/store';
-import { addLog, Log } from '@/slices/logSlice';
+import { addLog } from '@/slices/logSlice';
+import { Log } from '@/types/Log';
 
 let alreadyHooked = false;
 

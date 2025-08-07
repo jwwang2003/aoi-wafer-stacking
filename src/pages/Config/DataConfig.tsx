@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Group, Stack, Chip, Button, Title, Divider, Tooltip } from '@mantine/core';
 import { IconRefresh, IconScanEye } from '@tabler/icons-react';
-import { toast } from 'react-toastify';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import {
     setRegexPattern,
-    addDataSourcePath,
     setRootPath,
-    revalidateDataSource
+    revalidateDataSource,
+    scanDataSourceFolders,
+    removeAllDataSourcePaths
 } from '@/slices/dataSourceConfigSlice';
 
 import {
@@ -24,11 +24,7 @@ import {
 } from '@/components';
 
 import { DataSourceRegex, DataSourceType } from '@/types/DataSource';
-import { autoRecognizeFoldersByType } from '@/utils/dataSource';
-import { addFolder } from '@/slices/dataSourceStateSlice';
-
-// ALGOs
-// import { autoRecognizeFoldersByType } from '@/utils/dataSource';
+import { resetFolders } from '@/slices/dataSourceStateSlice';
 
 export function SubfolderSelectorSection({ title, type }: { title: string, type: DataSourceType }) {
     return (
@@ -41,9 +37,11 @@ export function SubfolderSelectorSection({ title, type }: { title: string, type:
 
 export default function DataConfigSubpage() {
     // React-Redux stuff
+    const [mounted, setMounted] = useState<boolean>(false);
     const dispatch = useAppDispatch();
 
     const { rootPath, rootLastModified } = useAppSelector((state) => state.dataSourceConfig);
+    const { paths } = useAppSelector((state) => state.dataSourceConfig);
     const regexLastModified = useAppSelector((state) => state.dataSourceConfig.regex.lastModified);
     const pathsLastModified = useAppSelector((state) => state.dataSourceConfig.paths.lastModified);
     const lastSaved = useAppSelector((state) => state.dataSourceConfig.lastSaved);
@@ -68,73 +66,52 @@ export default function DataConfigSubpage() {
 
     // Flows
     const regexConfig = RegexConfigs;   // Regex flows
-    const dataSourceFlow = DataSources();   // Path flows
+    const dataSourceFlow = DataSources;   // Path flows
 
-    const dataSourcePaths = useAppSelector((state) => state.dataSourceConfig.paths);
-    const dataSourceState = useAppSelector((state) => state.dataSourceState);
-
-    const handleAutoFolderRecognition = async () => {
-        try {
-            const folders = await autoRecognizeFoldersByType(rootPath, regexPatterns);
-
-            let totalDetected = 0;
-            let totalAdded = 0;
-
-            for (const [type, paths] of Object.entries(folders)) {
-                const typed = type as DataSourceType;
-                const existingPaths = new Set(dataSourcePaths[typed]);
-                const existingStatePaths = new Set(dataSourceState[typed].map(f => f.path));
-
-                for (const path of paths) {
-                    totalDetected += 1;
-
-                    const alreadyExistsInConfig = existingPaths.has(path);
-                    const alreadyExistsInState = existingStatePaths.has(path);
-
-                    if (!alreadyExistsInConfig) {
-                        dispatch(addDataSourcePath({ type: typed, path }));
-                    }
-
-                    if (!alreadyExistsInState) {
-                        dispatch(addFolder({ type: typed, path }));
-                    }
-
-                    if (!alreadyExistsInConfig && !alreadyExistsInState) {
-                        totalAdded += 1;
-                    }
-                }
-            }
-
-            toast.success(
-                `自动识别完成：共识别到 ${totalDetected} 个文件夹，其中新增 ${totalAdded} 个。`,
-                {
-                    closeOnClick: true,
-                    pauseOnHover: false,
-                    draggable: false,
-                }
-            );
-        } catch (err: unknown) {
-            const message =
-                err instanceof Error
-                    ? err.message
-                    : typeof err === 'string'
-                        ? err
-                        : '自动识别过程中发生未知错误。';
-
-            toast.error(`自动识别失败：${message}`, {
-                closeOnClick: true,
-                pauseOnHover: false,
-                draggable: false,
-            });
+    // =========================================================================
+    // NOTE: INIT
+    // =========================================================================
+    useEffect(() => {
+        if (!mounted) {
+            setMounted(true);
         }
+    }, []);
+
+    // =========================================================================
+    // NOTE: METHODS
+    // =========================================================================
+    const handleAutoFolderRecognition = async () => {
+        await dispatch(scanDataSourceFolders());
     };
 
+    const handleRootFolderChange = async (u: string) => {
+        await dispatch(removeAllDataSourcePaths());
+        await dispatch(resetFolders());
+        await dispatch(setRootPath(u));
+    }
+
+    // =========================================================================
+    // NOTE: REACT
+    // =========================================================================
     useEffect(() => {
-        dispatch(revalidateDataSource())
-            .then((result) => {
-                console.log(result);
-            })
-    }, []);
+        const init = async () => {
+            await dispatch(scanDataSourceFolders());
+            await dispatch(revalidateDataSource());
+        }
+        if (mounted) {
+            init();
+        }
+    }, [mounted]);
+
+    useEffect(() => {
+        const init = async () => {
+            // await dispatch(scanDataSourceFolders());
+            await dispatch(revalidateDataSource());
+        }
+        if (mounted) {
+            init();
+        }
+    }, [mounted, paths]);
 
     return (
         <>
@@ -144,7 +121,7 @@ export default function DataConfigSubpage() {
                 <PathPicker
                     label='根目录'
                     value={rootPath}
-                    onChange={(u) => dispatch(setRootPath(u))}
+                    onChange={handleRootFolderChange}
                 />
                 <LastSaved
                     dirty={rootDirty}

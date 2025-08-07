@@ -1,4 +1,3 @@
-import { FileInfo } from '@tauri-apps/plugin-fs';
 import { DataSourceType, FolderResult } from './DataSource';
 
 export const enum Direction {
@@ -35,11 +34,11 @@ export interface ExcelData {
     /** Optional extracted timestamp from filename or context (e.g., "20250709_120302") */
     id?: string;
     oem?: string;
-    time?: string;
+    time?: string;      // timestamp from the filename
 
     /** Detailed file info from the filesystem */
     filePath: string;
-    info: FileInfo;
+    lastModified: number;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,11 +62,9 @@ export interface WaferFileMetadata {
     /** Optional extracted timestamp from file/folder name */
     time?: string;
 
-    /** File information */
-    info: FileInfo;
-
     /** Full file path */
     filePath: string;
+    lastModified: number;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

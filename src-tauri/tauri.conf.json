@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "wafer-overlay",
+  "productName": "aoi-wafer-stacking",
   "version": "1.0.0",
-  "identifier": "com.wafer-overlay",
+  "identifier": "com.aoi-wafer-stacking",
 
   "plugins": {
     "sql": {
@@ -26,7 +26,7 @@
   "app": {
     "windows": [
       {
-        "title": "AOI Wafer Overlay (智能叠图)",
+        "title": "清纯AOI优化与叠图",
         "width": 1200,
         "height": 700
       }

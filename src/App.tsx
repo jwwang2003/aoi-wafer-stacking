@@ -91,14 +91,12 @@ export default function App() {
                 const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
                 console.info('%cInitialized dataSourceState!', 'color: orange', dataSourceState);
 
-                // if (import.meta.env.DEV) {
-                //     console.debug('[INIT]', dataSourceConfig);
-                //     console.debug('[INIT]', dataSourceState);
-                // }
+                console.debug('%cLoaded preferences:', 'color: lime; background: black', JSON.stringify(preferences, null, 2));
+                console.debug('%cLoaded dataSourceConfig:', 'color: lime; background: black', JSON.stringify(dataSourceConfig, null, 2));
 
                 console.info('%cInitialization complete!', 'color: blue');
                 console.timeEnd('initialize');
-                
+
                 // Constantly check for a change in the folder status of the root folder
                 // TODO: Change this pooling method into a event based method!
                 setInterval(() => {
@@ -116,7 +114,7 @@ export default function App() {
 
         if (import.meta.hot) {
             import.meta.hot.accept(async () => {
-                console.debug('[HMR] Re-running init...');
+                console.debug('%c[HMR] Re-running init...', 'color: red');
                 runInit();
             });
         }

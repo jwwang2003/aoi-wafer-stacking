@@ -1,2 +1,2 @@
-export * from './DataSourcePaths';
+export * from './DataSource';
 export * from './RegexPathPatterns';

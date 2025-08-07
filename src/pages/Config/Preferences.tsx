@@ -24,20 +24,25 @@ import { prepPreferenceWriteOut } from '@/utils/helper';
 
 export default function PreferencesSubpage() {
     const dispatch = useAppDispatch();
+    const preferences = useAppSelector((s) => s.preferences);
+    const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
+    const { preferenceFilePath, dataSourceConfigPath, stepper, status, error } = preferences;
 
-    const preferences = useAppSelector((state) => state.preferences);
-    const { preferenceFilePath, dataSourceConfigPath, status, error } = preferences;
-
-    const dataSourceConfig = useAppSelector((state) => state.dataSourceConfig);
-
+    // for the dataSourceConfig (json) file
     const [fileExists, setFileExists] = useState<boolean>(false);
     const [modifiedTime, setModifiedTime] = useState<string | null>(null);
 
-    // Initialize preferences on mount
+    // =========================================================================
+    // NOTE: INIT
+    // =========================================================================
     useEffect(() => {
-        dispatch(revalidatePreferencesFile());
+        // revalidate preferences on mount
+        // dispatch(revalidatePreferencesFile());
     }, []);
 
+    // =========================================================================
+    // NOTE: METHODS
+    // =========================================================================
     const handlePrefReset = async () => {
         await dispatch(resetPreferencesToDefault());
         await dispatch(initPreferences());
@@ -49,8 +54,14 @@ export default function PreferencesSubpage() {
         await dispatch(setDataSourceConfigPath(defaultPath));
     };
 
+    // =========================================================================
+    // NOTE: REACT
+    // =========================================================================
     useEffect(() => {
         let mounted = true;
+        // Check the data source config path every time its value changes
+        // NOTE: Updates stepper state
+        // NOTE: Optimization available to PREVENT reading the stat of data source config file twice
         async function check() {
             if (!dataSourceConfigPath) {
                 setFileExists(false);
@@ -72,14 +83,18 @@ export default function PreferencesSubpage() {
                 if (mounted) {
                     setFileExists(false);
                     setModifiedTime(null);
+                    return;
                 }
             }
+            await dispatch(revalidatePreferencesFile());
         }
+
         check();
+
         return () => {
             mounted = false;
         };
-    }, [dataSourceConfigPath, dispatch]);
+    }, [dataSourceConfigPath, stepper]);
 
     return (
         <Stack gap="lg">

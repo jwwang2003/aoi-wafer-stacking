@@ -17,8 +17,11 @@ import { arraysAreEqual, getRelativePath, sortBySubfolderName } from '@/utils/fs
 import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
 import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper';
 import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
-import { setStepper } from './preferencesSlice';
+import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/Stepper';
+import { addFolder } from './dataSourceStateSlice';
+import { autoRecognizeFoldersByType } from '@/utils/dataSource';
+import { toast } from 'react-toastify';
 
 export const initDataSourceConfig = createAsyncThunk<
     DataSourceConfigState,
@@ -31,12 +34,15 @@ export const initDataSourceConfig = createAsyncThunk<
         try {
             const { preferences } = thunkAPI.getState();
             const { dataSourceConfigPath } = preferences;
+
             config = await createDefaultDataSourceConfig();
+
+            const path = dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME;  // with fallback
 
             let parsed: unknown = null;
             try {
                 const raw = await readTextFile(
-                    dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME, { baseDir }
+                    path, { baseDir }
                 );
                 parsed = JSON.parse(raw);
             } catch (err: unknown) {
@@ -44,10 +50,10 @@ export const initDataSourceConfig = createAsyncThunk<
                 console.debug('Creating data source config file...');
                 const data = JSON.stringify(config);
                 await writeTextFile(
-                    dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME, data, { baseDir }
+                    path, data, { baseDir }
                 );
                 const result = await readTextFile(
-                    dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME, { baseDir }
+                    path, { baseDir }
                 );
                 parsed = JSON.parse(result);
             }
@@ -58,31 +64,30 @@ export const initDataSourceConfig = createAsyncThunk<
                 console.warn('[DATA SOURCE CONF. validation] invalid config structure, using defaults');
             }
 
-            await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
+            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
 
-            // check if the root path is defined and valid
             if (config.rootPath && await isDataSourceRootValid(config)) {
-                const { preferences } = thunkAPI.getState();
-                const { stepper } = preferences;
-                // advance stepper
-                if (stepper <= ConfigStepperState.RootDirectory) {
-                    await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory + 1));
-                }
+                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
+                await thunkAPI.dispatch(scanDataSourceFolders());
+            } else {
+                await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
+                return config;
             }
 
             if (config.paths && isDataSourcePathsValid(config.paths)) {
-                const { preferences } = thunkAPI.getState();
-                const { stepper } = preferences;
-                // advance stepper
-                if (stepper <= ConfigStepperState.Subdirectories) {
-                    await thunkAPI.dispatch(setStepper(ConfigStepperState.Subdirectories + 1));
-                }
+                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Metadata));
+            } else {
+                await thunkAPI.dispatch(setStepper(ConfigStepperState.Subdirectories));
             }
 
             return config;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            return thunkAPI.rejectWithValue(err.message);
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                return thunkAPI.rejectWithValue(err.message);
+            } else if (typeof err === 'string') {
+                return thunkAPI.rejectWithValue(err);
+            }
+            return thunkAPI.rejectWithValue('Unknown error');
         }
     }
 );
@@ -98,11 +103,18 @@ export const revalidateDataSource = createAsyncThunk<
         const defaultConfig = { ...initialDataSourceConfigState };
 
         let raw = null;
-        if (dataSourceConfigPath) {
-            raw = await readTextFile(dataSourceConfigPath);
-        } else {
-            raw = await readTextFile(DATA_SOURCES_CONFIG_FILENAME, { baseDir });
+        try {
+            if (dataSourceConfigPath) {
+                raw = await readTextFile(dataSourceConfigPath);
+            } else {
+                raw = await readTextFile(DATA_SOURCES_CONFIG_FILENAME, { baseDir });
+            }
+        } catch (err: unknown) {
+            const error = 'Failed to read data source config file: ' + (err as string);
+            thunkAPI.dispatch(setStepper(ConfigStepperState.ConfigInfo));
+            throw Error(error);
         }
+
         const parsed = JSON.parse(raw);
 
         if (!isValidDataSourceConfig(parsed)) {
@@ -126,9 +138,26 @@ export const revalidateDataSource = createAsyncThunk<
         // Compare timestamps and decide which config to use
         const useLocal = localLastSaved > parsedLastSaved;
 
+        const config = useLocal ? dataSourceConfig : merged;
+
+        await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
+
+        if (config.rootPath && await isDataSourceRootValid(config)) {
+            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
+        } else {
+            await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
+            return { valid: true, dataSourceConfig: config };
+        }
+
+        if (config.paths && isDataSourcePathsValid(config.paths)) {
+            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Metadata));
+        } else {
+            await thunkAPI.dispatch(setStepper(ConfigStepperState.Subdirectories));
+        }
+
         return {
             valid: true,
-            dataSourceConfig: useLocal ? dataSourceConfig : merged,
+            dataSourceConfig: config,
         };
     } catch (err: unknown) {
         // const fallback = await createDefaultPreferences();
@@ -136,9 +165,82 @@ export const revalidateDataSource = createAsyncThunk<
             return thunkAPI.rejectWithValue(err.message);
         else if (typeof err === 'string')
             return thunkAPI.rejectWithValue(err);
-        return thunkAPI.rejectWithValue('');
+        return thunkAPI.rejectWithValue('Unknown error');
     }
 });
+
+export const scanDataSourceFolders = createAsyncThunk<
+    { totalDetected: number; totalAdded: number },
+    void,
+    {
+        state: RootState;
+        rejectValue: string;
+    }
+>(
+    'dataSource/scanDataSourceFolders',
+    async (_, { dispatch, getState, rejectWithValue }) => {
+        const {
+            dataSourceConfig: { rootPath, regex, paths: configPaths },
+            dataSourceState,
+        } = getState();
+        if (!rootPath) return { totalDetected: 0, totalAdded: 0 };
+
+        try {
+            const start = performance.now();
+            const folders = await autoRecognizeFoldersByType(rootPath, regex);
+
+            let totalDetected = 0;
+            let totalAdded = 0;
+
+            for (const [typeKey, paths] of Object.entries(folders)) {
+                const type = typeKey as DataSourceType;
+                const existingInConfig = new Set(configPaths[type]);
+                const existingInState = new Set(
+                    dataSourceState[type].map((f) => f.path)
+                );
+
+                for (const path of paths) {
+                    totalDetected++;
+                    const inConfig = existingInConfig.has(path);
+                    const inState = existingInState.has(path);
+
+                    if (!inConfig) dispatch(addDataSourcePath({ type, path }));
+                    if (!inState) dispatch(addFolder({ type, path }));
+
+                    if (!inConfig && !inState) totalAdded++;
+                }
+            }
+
+            const duration = performance.now() - start;
+
+            await dispatch(revalidateDataSource());
+
+            // show success toast here
+            toast.dark(
+                `自动识别完成：共识别到 ${totalDetected} 个文件夹，其中新增 ${totalAdded} 个 (耗时 ${duration.toFixed(0)} ms)。`,
+                { closeOnClick: true, pauseOnHover: false, draggable: false }
+            );
+
+            return { totalDetected, totalAdded };
+        } catch (err: unknown) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : typeof err === 'string'
+                        ? err
+                        : '自动识别过程中发生未知错误。';
+
+            // show error toast here
+            toast.error(`自动识别失败：${message}`, {
+                closeOnClick: true,
+                pauseOnHover: false,
+                draggable: false,
+            });
+
+            return rejectWithValue(message);
+        }
+    }
+);
 
 const dataSourceSlice = createSlice({
     name: 'dataSourceConfig',
@@ -174,6 +276,12 @@ const dataSourceSlice = createSlice({
             const { type, path } = action.payload;
             const relativePath = getRelativePath(state.rootPath, path);
             state.paths[type] = state.paths[type].filter(p => p != relativePath);
+            state.paths.lastModified = now();
+        },
+        removeAllDataSourcePaths(state) {
+            for (const type of Object.values(['substrate', 'fabCp', 'cpProber', 'wlbi', 'aoi'] as DataSourceType[])) {
+                state.paths[type] = [];
+            }
             state.paths.lastModified = now();
         },
 
@@ -217,6 +325,7 @@ export const {
     setDataSourcePaths,
     addDataSourcePath,
     removeDataSourcePath,
+    removeAllDataSourcePaths,
     setRegexPattern,
     saveConfig,
 } = dataSourceSlice.actions;

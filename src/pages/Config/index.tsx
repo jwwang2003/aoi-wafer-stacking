@@ -6,16 +6,31 @@ import {
     Title,
     Button,
 } from '@mantine/core';
-import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import {
+    Routes,
+    Route,
+    useNavigate,
+    useLocation,
+    Navigate,
+} from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '@/store';
+import { useAppSelector } from '@/hooks';
 
-// Sub-pages
 import Preferences from './Preferences';
 import DataConfig from './DataConfig';
 import SubstrateConfig from './SubstrateConfig';
-import { FlowStepper } from '@/components';
-import { useAppSelector } from '@/hooks';
-import { DataSourceFlowSteps } from '@/flows';
 import Preview from './Preview';
+
+import { FlowStepper } from '@/components';
+import { DataSourceFlowSteps } from '@/flows';
+import { ConfigStepperState } from '@/types/Stepper';
+
+import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
+import { initDataSourceConfig } from '@/slices/dataSourceConfigSlice';
+import { initPreferences } from '@/slices/preferencesSlice';
+import { initDataSourceState } from '@/slices/dataSourceStateSlice';
 
 const subpageOptions = [
     { label: '通用', value: 'preferences' },
@@ -27,37 +42,73 @@ const subpageOptions = [
 export default function ConfigPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const dispatch = useDispatch<AppDispatch>();
+    const [mounted, setMounted] = useState<boolean>(false);
 
-    // Determine current segment based on pathname
+    const { rootPath } = useAppSelector((s) => s.dataSourceConfig);
+    const flowStep = useAppSelector((s) => s.preferences.stepper);
+
+    // figure out which segment is active
     const currentValue =
-        subpageOptions.find((opt) =>
-            location.pathname.endsWith(opt.value)
-        )?.value ?? 'data';
+        subpageOptions.find((opt) => location.pathname.endsWith(opt.value))
+            ?.value ?? 'data';
 
-    // Handle segmented control change
     const handleChange = (value: string) => {
         navigate(`/config/${value}`);
     };
 
-    // Stepper
-    const flowStep = useAppSelector((state) => state.preferences.stepper);
+    useEffect(() => {
+        if (!mounted) setMounted(true);
+    }, []);
+
+    // This runs automatically when flowStep or rootPath changes
+    useEffect(() => {
+        const doAction = async () => {
+            switch (flowStep) {
+                case ConfigStepperState.Metadata:
+                    await dispatch(fetchWaferMetadata());
+                    break;
+            }
+        };
+        if (mounted && rootPath) {
+            doAction();
+        }
+    }, [mounted, flowStep, rootPath]);
+
+    // “运行全部” handler: run both thunks, then bump the refreshKey
+    const handleRunAll = async () => {
+        await dispatch(initPreferences());
+        await dispatch(initDataSourceConfig());
+        await dispatch(initDataSourceState());
+        // await dispatch(fetchWaferMetadata());
+        // force remount of every subpage component
+        // setRefreshKey((k) => k + 1);
+    };
 
     return (
         <Group grow>
             <Container fluid p="md">
                 <Stack gap="md">
                     <Title order={1}>设置</Title>
-                    <FlowStepper active={flowStep} onStepClick={() => { }} steps={DataSourceFlowSteps}>
+
+                    <FlowStepper
+                        active={flowStep}
+                        onStepClick={() => { }}
+                        steps={DataSourceFlowSteps}
+                    >
                         <></>
                     </FlowStepper>
-                    <Button variant="outline" onClick={() => { }}>
-                        验证
+
+                    <Button variant="outline" onClick={handleRunAll}>
+                        运行全部
                     </Button>
+
                     <SegmentedControl
                         data={subpageOptions}
                         value={currentValue}
                         onChange={handleChange}
                     />
+
                     <Routes>
                         <Route path="/" element={<Navigate to="preferences" replace />} />
                         <Route path="preferences" element={<Preferences />} />

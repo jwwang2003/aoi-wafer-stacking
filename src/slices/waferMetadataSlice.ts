@@ -7,6 +7,9 @@ import { DataSourceConfigState, DataSourceType, FolderResult } from '@/types/Dat
 import { ExcelData, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
 import { initialWaferMetadataState as initialState, now } from '@/constants/default';
 import { RootState } from '@/store';
+import { advanceStepper, setStepper } from './preferencesSlice';
+import { ConfigStepperState } from '@/types/Stepper';
+import { toast } from 'react-toastify';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
@@ -18,27 +21,49 @@ import { RootState } from '@/store';
 export const fetchWaferMetadata = createAsyncThunk<
     WaferMetadataState['data'],
     void,
-    { state: RootState, rejectValue: string }
->('waferMetadata/fetch', async (_, thunkAPI) => {
-    try {
-        const state = thunkAPI.getState();
-        const { dataSourceConfig } = state;
+    { state: RootState; rejectValue: string }
+>(
+    'waferMetadata/fetch',
+    async (_, thunkAPI) => {
+        try {
+            const { dataSourceConfig } = thunkAPI.getState();
 
-        console.time('Read&ParseWaferMetadata');
-        const dataSourcePaths = await getDataSourcePathsFolders(dataSourceConfig);
-        const parsed: RawWaferMetadataCollection = await readFolderData(dataSourcePaths);
-        console.timeEnd('Read&ParseWaferMetadata');
+            // start timer
+            const start = performance.now();
 
-        const result = parsed;
+            const dataSourcePaths = await getDataSourcePathsFolders(dataSourceConfig);
+            const parsed: RawWaferMetadataCollection = await readFolderData(dataSourcePaths);
 
-        return result;
-    } catch (err: unknown) {
-        if (err instanceof Object) {
-            return thunkAPI.rejectWithValue((err as Error).message || 'Failed to fetch wafer metadata');
+            // end timer & compute duration
+            const duration = performance.now() - start;
+            console.debug(`%cRead & parse wafer metadata (${duration.toFixed(0)}ms)`, 'color: orange;')
+
+            // show toast with elapsed time
+            toast.dark(
+                `读取并解析元数据 (耗时 ${duration.toFixed(0)} ms)。`,
+                { closeOnClick: true, pauseOnHover: false, draggable: false }
+            );
+
+            // advance stepper based on result
+            if (parsed.length > 0) {
+                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Database));
+            } else {
+                await thunkAPI.dispatch(setStepper(ConfigStepperState.Metadata));
+            }
+
+            return parsed;
+        } catch (err: unknown) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : typeof err === 'string'
+                        ? err
+                        : 'Failed to fetch wafer metadata';
+
+            return thunkAPI.rejectWithValue(message);
         }
-        return thunkAPI.rejectWithValue(err as string || 'Failed to fetch wafer metadata');
     }
-});
+);
 
 const waferMetadataSlice = createSlice({
     name: 'waferMetadata',
@@ -183,12 +208,13 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
                     const [, id] = productListMatch;
                     const filePath = await resolve(substratePath, defect.name);
                     const info = await stat(filePath);
+                    const lastModified = info.mtime?.getTime() ?? -1;
                     result.push({
                         type: ExcelType.DefectList,
                         stage: 'substrate',
                         id,
                         filePath,
-                        info
+                        lastModified
                     })
                 }
             } else {
@@ -199,11 +225,12 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
                 // 产品型号与产品型号对应关系 (批次号是唯一的)
                 if (productListFileRegex.test(name)) {
                     const info = await stat(substratePath);
+                    const lastModified = info.mtime?.getTime() ?? -1;
                     result.push({
                         type: ExcelType.Mapping,
                         stage: 'substrate',
                         filePath: substratePath,
-                        info
+                        lastModified
                     });
                 } else if (productMapFileRegex.test(name)) {
                     const productListMatch = productMapFileRegex.exec(name);
@@ -211,13 +238,14 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
                     const [, oem, date, time] = productListMatch;
                     // oem -> 代工广场产品号
                     const info = await stat(substratePath);
+                    const lastModified = info.mtime?.getTime() ?? -1;
                     result.push({
                         type: ExcelType.Product,
                         stage: 'substrate',
                         oem,
                         time: parseWaferMapTimestamp(date, time).toISOString(),
                         filePath: substratePath,
-                        info
+                        lastModified
                     });
                 }
             }
@@ -313,6 +341,7 @@ export async function readCpProberMetadata(folders: FolderResult[]): Promise<Waf
 
                     const filePath = await resolve(waferFolderPath, file.name);
                     const info = await stat(filePath);
+                    const lastModified = info?.mtime?.getTime() ?? -1;
                     result.push({
                         stage: 'cpProber',
                         productModel: productModel3,
@@ -321,7 +350,7 @@ export async function readCpProberMetadata(folders: FolderResult[]): Promise<Waf
                         waferId: waferId3,
                         retestCount: Number(retestCount),
                         filePath,
-                        info
+                        lastModified
                     });
                 }
             }
@@ -396,6 +425,7 @@ export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFi
 
                     const filePath = await resolve(wlbiFolderPath, file.name);
                     const info = await stat(filePath);
+                    const lastModified = info.mtime?.getTime() ?? -1;
                     result.push({
                         stage: 'wlbi',
                         productModel: productModel1,
@@ -405,7 +435,7 @@ export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFi
                         retestCount: Number(retestCount),
                         time: parseWaferMapTimestamp(date, time).toISOString(),
                         filePath,
-                        info,
+                        lastModified
                     });
                 }
             }
@@ -477,6 +507,7 @@ export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFil
                 }
 
                 const info = await stat(filePath);
+                const lastModified = info.mtime?.getTime() ?? -1;
                 result.push({
                     stage: 'aoi',
                     productModel: productModel1,
@@ -486,7 +517,7 @@ export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFil
                     // retestCount: Number(retestCount),            // AOI does not have retestCount attribute
                     time: parseWaferMapTimestamp(date, time).toISOString(),
                     filePath,
-                    info,
+                    lastModified
                 });
             }
         }
