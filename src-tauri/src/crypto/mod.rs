@@ -1,5 +1,5 @@
 use sha1::{Sha1, Digest as Sha1Digest};
-use sha2::{Sha256, Digest as Sha2Digest};
+use sha2::{Sha256};
 use hex;
 use tauri::command;
 

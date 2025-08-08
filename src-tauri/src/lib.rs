@@ -1,8 +1,8 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod crypto;
 mod file;
 mod parser;
 mod wafer;
-mod crypto;
 
 mod commands;
 
@@ -35,11 +35,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            // file_lock::lock_file,
-            // file_lock::unlock_file,
+            // File IO related
+            file_lock::lock_file,
+            file_lock::unlock_file,
             commands::get_file_batch_stat,
+            // Cryptography
             commands::rust_sha1,
             commands::rust_sha256,
+            // Excel file parsing methods
+            commands::rust_parse_product_mapping_xls,
+            commands::rust_parse_product_xls,
+            commands::rust_parse_substrate_defect_xls
         ])
         .build(tauri::generate_context!())
         .expect("error while running Tauri application");

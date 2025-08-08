@@ -88,19 +88,43 @@ export interface WaferMetadataState {
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Data read from the substrate .xls file
+ * Data read from the OEM product to in-house product ID mapping
+ */
+export interface ProductMappingRecord {
+    oemId: string,          // FAB Product ID
+    productId: string       // FAB Product ID
+}
+
+/**
+ * Data read from the product .xls file
+ */
+export interface ProductRecord {
+    productId: string;      // Product ID
+    batchId: string;        // Lot ID
+    waferId: string;        // Wafer ID
+
+    subId: string;          // Sub ID
+}
+
+/**
+ * Data read from the substrate defect .xls file
  */
 export interface SubstrateDefectRecord {
-    'No.': number;
-    'X(mm)': number;
-    'Y(mm)': number;
-    'W(um)': number;
-    'H(um)': number;
-    'Area(um2)': number;
-    Class: string;
-    Contrast: number;
-    Channel: string;
+    no: number;             // No.
+    x: number;              // X(mm)
+    y: number;              // Y(mm)
+    w: number;              // W(um)
+    h: number;              // H(um)
+    area: number;           // Area (um2)
+    class: string;          // Class
+    contrast: number;       // Contrast
+    channel: string;        // Channel
 }
+
+// ---- Return shapes of the data source EXCEL commands ----
+export type ProductMappingXlsResult = Record<string, ProductMappingRecord[]>;
+export type ProductXlsResult = Record<string, ProductRecord[]>;
+export type SubstrateDefectXlsResult = Record<string, SubstrateDefectRecord[]>;
 
 /**
  * For storing FAB CP, CP-prober, and AOI

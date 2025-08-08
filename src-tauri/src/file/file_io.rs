@@ -1,18 +1,7 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fs::{self, Metadata};
-use std::io::Result;
-use std::path::Path;
+use std::fs::{Metadata};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-/// Try to check if a folder exists with detailed error support
-pub fn try_folder_exists<P: AsRef<Path>>(path: P) -> Result<bool> {
-    match fs::metadata(path) {
-        Ok(metadata) => Ok(metadata.is_dir()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(e),
-    }
-}
 
 #[derive(Debug, Deserialize)]
 pub struct FolderRequest {
@@ -30,13 +19,11 @@ pub struct FolderResult {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileInfo {
-    #[allow(non_snake_case)]
-    pub isFile: bool,
-    #[allow(non_snake_case)]
-    pub isDirectory: bool,
-    #[allow(non_snake_case)]
-    pub isSymlink: bool,
+    pub is_file: bool,
+    pub is_directory: bool,
+    pub is_symlink: bool,
 
     pub size: u64,
     pub mtime: Option<String>,
@@ -44,8 +31,7 @@ pub struct FileInfo {
     pub birthtime: Option<String>,
 
     pub readonly: bool,
-    #[allow(non_snake_case)]
-    pub fileAttributes: Option<u32>, // Windows only, will be None
+    pub file_attributes: Option<u32>, // Windows only, will be None
 
     pub dev: Option<u64>,
     pub ino: Option<u64>,
@@ -73,9 +59,9 @@ pub fn get_iso_time(time: std::io::Result<SystemTime>) -> Option<String> {
 
 pub fn build_file_info(meta: &Metadata, _path: &str) -> FileInfo {
     FileInfo {
-        isFile: meta.is_file(),
-        isDirectory: meta.is_dir(),
-        isSymlink: meta.file_type().is_symlink(),
+        is_file: meta.is_file(),
+        is_directory: meta.is_dir(),
+        is_symlink: meta.file_type().is_symlink(),
 
         size: meta.len(),
         mtime: get_iso_time(meta.modified()),
@@ -83,7 +69,7 @@ pub fn build_file_info(meta: &Metadata, _path: &str) -> FileInfo {
         birthtime: get_iso_time(meta.created()),
 
         readonly: meta.permissions().readonly(),
-        fileAttributes: None, // Not available on Unix, fallback to null on all platforms
+        file_attributes: None, // Not available on Unix, fallback to null on all platforms
 
         #[cfg(unix)]
         dev: Some(meta.dev()),

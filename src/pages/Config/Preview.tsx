@@ -16,7 +16,9 @@ import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
 import RawWaferSummary from '@/components/RawWaferSummary';
 import { useAppSelector } from '@/hooks';
 import { ConfigStepperState } from '@/types/Stepper';
-import { setStepper } from '@/slices/preferencesSlice';
+import { advanceStepper, setStepper } from '@/slices/preferencesSlice';
+import { WaferFileMetadata } from '@/types/Wafer';
+import { syncWaferMapsBatch } from '@/sqlDB';
 
 interface OverlayRecord {
     product_id: string;
@@ -34,6 +36,7 @@ export default function Preview() {
     const [mounted, setMounted] = useState<boolean>(false);
 
     const stepper = useAppSelector((state) => state.preferences.stepper);
+    const rawWaferMetadata = useAppSelector((state) => state.waferMetadata.data);
 
     const [db, setDb] = useState<Database | null>(null);
     const [data, setData] = useState<OverlayRecord[]>([]);
@@ -110,6 +113,27 @@ export default function Preview() {
         }
     };
 
+    const handleSync = async () => {
+        if (!db) return
+        setLoading(true)
+        try {
+            // 1) filter only wafer‐file records
+            const waferRecords = rawWaferMetadata.filter(
+                (r): r is WaferFileMetadata => 'waferId' in r
+            )
+
+            // 2) batch‐upsert in one transaction
+            await syncWaferMapsBatch(db, waferRecords)
+
+            // 3) advance to next step
+            await dispatch(advanceStepper(ConfigStepperState.Database + 1))
+        } catch (err) {
+            console.error('Sync failed:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
     // =========================================================================
     // NOTE: REACT
     // =========================================================================
@@ -167,7 +191,7 @@ export default function Preview() {
                         color="blue"
                         leftSection={<IconDownload size={16} />}
                         loading={loading}
-                        onClick={load}
+                        onClick={handleSync}
                     >
                         同步数据库
                     </Button>

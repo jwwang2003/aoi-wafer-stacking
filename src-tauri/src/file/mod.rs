@@ -18,18 +18,6 @@ use std::io::{self, BufRead, BufReader, Error, ErrorKind, Write};
 ///
 /// - Returns an `io::ErrorKind::NotFound` if the file does not exist or cannot be opened.
 /// - Returns other I/O errors if reading fails at any point.
-///
-/// # Examples
-///
-/// ```no_run
-/// # use std::io;
-/// # fn main() -> io::Result<()> {
-/// let lines = your_crate::read_txt("data/config.txt")?;
-/// for (i, line) in lines.iter().enumerate() {
-///     println!("{}: {}", i + 1, line);
-/// }
-/// # Ok(()) }
-/// ```
 pub fn read_txt(path: &str) -> io::Result<Vec<String>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -83,19 +71,6 @@ pub fn write_to_file<T: std::fmt::Display>(
 ///
 /// - Returns `io::ErrorKind::NotFound` if the file does not exist.
 /// - Returns `io::ErrorKind::InvalidData` if `calamine` fails to parse the file as a valid `.xls`.
-///
-/// # Examples
-///
-/// ```no_run
-/// # use std::io;
-/// # fn main() -> io::Result<()> {
-/// let mut workbook = your_crate::read_xls("1-86107919CNF1.xls")?;
-/// let range = workbook
-///     .worksheet_range("Surface defect list")?
-///     .expect("Worksheet not found");
-/// // … deserialize or iterate over `range` …
-/// # Ok(()) }
-/// ```
 pub fn read_xls(path: &str) -> io::Result<Xls<BufReader<File>>> {
     // Ensure the file exists before handing off to calamine
     if metadata(path).is_err() {

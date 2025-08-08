@@ -1,14 +1,8 @@
-use std::io::ErrorKind;
-use std::path::PathBuf;
-use std::{env, fs};
-
-use calamine::Reader;
-
-// Replace `your_crate` with your actual crate name
-use super::{read_txt, read_xls};
-
 #[test]
 fn read_txt_unix_newlines() {
+    use super::read_txt;
+    use std::path::PathBuf;
+    use std::{env, fs};
     let mut path = PathBuf::from(env::temp_dir());
     path.push("read_txt_unix.txt");
     fs::write(&path, "line1\nline2\n").expect("failed to write temp file");
@@ -18,6 +12,9 @@ fn read_txt_unix_newlines() {
 
 #[test]
 fn read_txt_windows_newlines() {
+    use super::read_txt;
+    use std::path::PathBuf;
+    use std::{env, fs};
     let mut path = PathBuf::from(env::temp_dir());
     path.push("read_txt_win.txt");
     fs::write(&path, "line1\r\nline2\r\n").expect("failed to write temp file");
@@ -27,6 +24,8 @@ fn read_txt_windows_newlines() {
 
 #[test]
 fn read_txt_not_found() {
+    use super::read_txt;
+    use std::io::ErrorKind;
     let result = read_txt("nonexistent_file.txt");
     assert!(result.is_err());
     let err = result.err().unwrap();
@@ -35,6 +34,8 @@ fn read_txt_not_found() {
 
 #[test]
 fn read_xls_not_found() {
+    use super::read_xls;
+    use std::io::ErrorKind;
     let result = read_xls("nonexistent.xls");
     assert!(result.is_err());
     let err = result.err().unwrap();
@@ -43,6 +44,10 @@ fn read_xls_not_found() {
 
 #[test]
 fn read_xls_invalid_format() {
+    use super::read_xls;
+    use std::io::ErrorKind;
+    use std::path::PathBuf;
+    use std::{env, fs};
     let mut path = PathBuf::from(env::temp_dir());
     path.push("read_xls_invalid.xls");
     fs::write(&path, "not a valid xls content").expect("failed to write invalid xls");
@@ -57,6 +62,7 @@ fn read_xls_invalid_format() {
 
 #[test]
 fn read_txt_valid_file() {
+    use super::read_txt;
     // Assuming that the CWD is src-tauri
     let path: &str = "static/S1M032120B_B003332_01_mapEx.txt";
     let result = read_txt(path);
@@ -69,8 +75,10 @@ fn read_txt_valid_file() {
 
 #[test]
 fn read_xls_valid_defect_list() {
+    use super::read_xls;
+    use calamine::Reader;
     // Assuming that the CWD is src-tauri
-    let path: &str = "static/1-86107919CNF1.xls";
+    let path: &str = "static/86107919CNF1.xls";
     let result = read_xls(path);
     // Check if the .xls file was read successfully
     assert!(result.is_ok());

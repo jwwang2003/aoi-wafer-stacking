@@ -28,9 +28,56 @@ fn parse_kv<'a>(it: &mut impl Iterator<Item = &'a String>, key: &str) -> Result<
     Ok(val)
 }
 
-/// .xls Wafer defect list data structures
+// =============================================================================
+
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DefectRecord {
+pub struct ProductMappingRecord {
+    #[serde(rename = "oemId")]
+    pub oem_id: String,
+    #[serde(rename = "productId")]
+    pub product_id: String,
+}
+
+// =============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct ProductRecordExcel {
+    #[serde(rename = "Product ID")]
+    pub product_id: String,
+    #[serde(rename = "Lot ID")]
+    pub batch_id: String,
+    #[serde(rename = "Wafer ID")]
+    pub wafer_id: String,
+    #[serde(rename = "Sub ID")]
+    pub sub_id: String,
+}
+
+/// Output for Tauri
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductRecord {
+    pub product_id: String,
+    pub batch_id: String,
+    pub wafer_id: String,
+    pub sub_id: String,
+}
+
+impl From<ProductRecordExcel> for ProductRecord {
+    fn from(src: ProductRecordExcel) -> Self {
+        Self {
+            product_id: src.product_id,
+            batch_id: src.batch_id,
+            wafer_id: src.wafer_id,
+            sub_id: src.sub_id,
+        }
+    }
+}
+
+// =============================================================================
+
+/// .xls Wafer defect list data structures
+#[derive(Debug, Deserialize)]
+pub struct DefectRecordExcel {
     #[serde(rename = "No.")]
     pub no: u32,
     #[serde(rename = "X(mm)")]
@@ -49,6 +96,54 @@ pub struct DefectRecord {
     pub contrast: u32,
     #[serde(rename = "Channel")]
     pub channel: String,
+}
+
+/// Output for Tauri
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefectRecord {
+    pub no: u32,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub area: f64,
+    pub class: String,
+    pub contrast: u32,
+    pub channel: String,
+}
+
+impl From<DefectRecordExcel> for DefectRecord {
+    fn from(r: DefectRecordExcel) -> Self {
+        Self {
+            no: r.no,
+            x: r.x,
+            y: r.y,
+            w: r.w,
+            h: r.h,
+            area: r.area,
+            class: r.class,
+            contrast: r.contrast,
+            channel: r.channel,
+        }
+    }
+}
+
+// =============================================================================
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Die {
+    pub x: i32,
+    pub y: i32,
+    pub bin: i32,
+    pub reserved: i32,
+}
+
+impl From<[i32; 4]> for Die {
+    fn from(q: [i32; 4]) -> Self {
+        Self { x: q[0], y: q[1], bin: q[2], reserved: q[3] }
+    }
 }
 
 /// Wafer defect list data structure
