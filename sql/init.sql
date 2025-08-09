@@ -65,6 +65,10 @@ CREATE TABLE folder_index (
 -- Indexes for Faster Lookup
 -- =======================================
 
+-- Find record based on the file_name
+CREATE INDEX IF NOT EXISTS idx_product_defect_map_file_path
+ON product_defect_map (file_path);
+
 -- Find SubID by product, lot, wafer
 CREATE INDEX IF NOT EXISTS idx_product_defect_map_product_lot_wafer
 ON product_defect_map (product_id, lot_id, wafer_id);
@@ -80,7 +84,6 @@ ON wafer_maps (file_path);
 -- Optional: search wafer maps by stage
 CREATE INDEX IF NOT EXISTS idx_wafer_stage
 ON wafer_maps (stage);
-
 
 
 CREATE INDEX IF NOT EXISTS idx_file_index_path
