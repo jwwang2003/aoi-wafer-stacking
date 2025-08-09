@@ -308,11 +308,11 @@ const dataSourceSlice = createSlice({
                 return;
             })
 
-            .addCase(revalidateDataSource.fulfilled, (state, action) => {
+            .addCase(revalidateDataSource.fulfilled, (_, action) => {
                 if (!action.payload.valid) {
                     console.error('Something went really wrong... dataSourceConfig was not valid!');
                 }
-                state = action.payload.dataSourceConfig;
+                return action.payload.dataSourceConfig;
             })
             .addCase(revalidateDataSource.rejected, (_, action) => {
                 console.error(action.payload ?? 'Unknown error');

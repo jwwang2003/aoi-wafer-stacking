@@ -14,14 +14,14 @@ import {
 
 // Stubbed ThreeJS Canvas
 function SubstrateThreeView({
-    xOffset,
-    yOffset,
-    leftOffset,
-    rightOffset,
-    topOffset,
-    bottomOffset,
-    scale,
-    warp,
+    // xOffset,
+    // yOffset,
+    // leftOffset,
+    // rightOffset,
+    // topOffset,
+    // bottomOffset,
+    // scale,
+    // warp,
 }: OffsetConfig) {
     return (
         <Box
