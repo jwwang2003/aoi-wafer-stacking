@@ -45,7 +45,11 @@ pub fn run() {
             // Excel file parsing methods
             commands::rust_parse_product_mapping_xls,
             commands::rust_parse_product_xls,
-            commands::rust_parse_substrate_defect_xls
+            commands::rust_parse_substrate_defect_xls,
+            // Wafer parsing methods
+            commands::rust_parse_wafer,
+            commands::rust_parse_wafer_bin,
+            commands::rust_parse_wafer_map_data
         ])
         .build(tauri::generate_context!())
         .expect("error while running Tauri application");

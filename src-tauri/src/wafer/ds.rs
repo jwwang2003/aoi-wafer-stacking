@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -131,23 +131,86 @@ impl From<DefectRecordExcel> for DefectRecord {
 
 // =============================================================================
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BinValue {
+    Number(i32),
+    Special(char), // e.g. 'S', '*', 'A', 'B'
+}
+
+#[derive(Debug, Serialize)]
+pub struct BinCountEntry {
+    pub bin: u32,
+    pub count: u32,
+}
+
+// Two types of die structures are defined here,
+// the default is AsciiDie, WaferMap uses the Die
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Die {
+/// Used by WaferMap format
+pub struct WaferMapDie {
     pub x: i32,
     pub y: i32,
-    pub bin: i32,
+    pub bin: BinValue,
     pub reserved: i32,
 }
 
-impl From<[i32; 4]> for Die {
+impl From<[i32; 4]> for WaferMapDie {
     fn from(q: [i32; 4]) -> Self {
-        Self { x: q[0], y: q[1], bin: q[2], reserved: q[3] }
+        Self {
+            x: q[0],
+            y: q[1],
+            bin: BinValue::Number(q[2]),
+            reserved: q[3],
+        }
     }
 }
 
+// impl WaferMapDie {
+//     #[inline]
+//     pub fn as_array(&self) -> [i32; 4] {
+//         let bin_num = match self.bin {
+//             BinValue::Number(n) => n,
+//             BinValue::Special(c) => {
+//                 // WaferMap text format is numeric; decide your policy here.
+//                 // Using 0 as a safe fallback:
+//                 debug_assert!(false, "Special bin '{c}' in WaferMapDie; emitting 0");
+//                 0
+//             }
+//         };
+//         [self.x, self.y, bin_num, self.reserved]
+//     }
+// }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// Used by default when reading MAPs
+pub struct AsciiDie {
+    pub x: i32,
+    pub y: i32,
+    pub bin: BinValue,
+}
+
+/// Holds both the raw map text and the parsed dies.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AsciiMap {
+    /// Original lines as read from the file
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub raw: Vec<String>,
+    /// Structured dies parsed from `raw`
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub dies: Vec<AsciiDie>,
+}
+
+// =============================================================================
+
 /// Wafer defect list data structure
-#[derive(Debug, Deserialize, Serialize)]
+/// STAGE: FAB CP
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Wafer {
     pub operator: String,
     pub device: String,
@@ -159,7 +222,7 @@ pub struct Wafer {
     pub fail_die: u32,
     pub total_yield: f64,
     pub notch: String,
-    pub ascii_map: Vec<String>,
+    pub map: AsciiMap,
 }
 
 impl Wafer {
@@ -177,7 +240,9 @@ impl Wafer {
         writeln!(out, "Total Yield: {:.2}%", self.total_yield).unwrap();
         writeln!(out, "notch-{}", self.notch).unwrap();
         writeln!(out).unwrap(); // blank line before ASCII map
-        for line in &self.ascii_map {
+
+        // Print the raw ASCII map as-is
+        for line in &self.map.raw {
             writeln!(out, "{}", line).unwrap();
         }
         out
@@ -203,12 +268,9 @@ impl Wafer {
             .map_err(|e| format!("Invalid Fail Die: {}", e))?;
         let total_yield = {
             let ty = parse_kv(&mut it, "Total Yield")?;
-            // strip trailing `%`
-            let num = ty
-                .trim_end_matches('%')
+            ty.trim_end_matches('%')
                 .parse::<f64>()
-                .map_err(|e| format!("Invalid Total Yield `{}`: {}", ty, e))?;
-            num
+                .map_err(|e| format!("Invalid Total Yield `{}`: {}", ty, e))?
         };
 
         // Next line is the notch orientation (no colon)
@@ -218,8 +280,51 @@ impl Wafer {
             .trim()
             .to_string();
 
-        // The rest is the ASCII map
-        let ascii_map: Vec<String> = it.map(|s| s.clone()).collect();
+        // The rest is the ASCII map (skip any blanks before the first row)
+        let mut raw: Vec<String> = Vec::new();
+        while let Some(l) = it.next() {
+            if l.trim().is_empty() {
+                continue;
+            }
+            raw.push(l.clone());
+            break;
+        }
+        for l in it {
+            if !l.trim().is_empty() {
+                raw.push(l.clone());
+            }
+        }
+        if raw.is_empty() {
+            return Err("No ASCII map after notch line".into());
+        }
+
+        // Parse dies from raw (centered mapping: (0,0)->(-cols/2, -rows/2))
+        let rows = raw.len() as i32;
+        let cols = raw.iter().map(|s| s.len()).max().unwrap_or(0) as i32;
+        let x0 = -(cols / 2);
+        let y0 = -(rows / 2);
+
+        let mut dies: Vec<AsciiDie> = Vec::with_capacity((rows * cols).max(0) as usize);
+        for (row_idx, row) in raw.iter().enumerate() {
+            let row_idx = row_idx as i32;
+            for (col_idx, b) in row.bytes().enumerate() {
+                let x = x0 + col_idx as i32;
+                let y = y0 + row_idx;
+                match b {
+                    b'.' => {}
+                    b'0'..=b'9' => dies.push(AsciiDie {
+                        x,
+                        y,
+                        bin: BinValue::Number((b - b'0') as i32),
+                    }),
+                    other => dies.push(AsciiDie {
+                        x,
+                        y,
+                        bin: BinValue::Special(other as char),
+                    }),
+                }
+            }
+        }
 
         Ok(Wafer {
             operator,
@@ -232,13 +337,208 @@ impl Wafer {
             fail_die,
             total_yield,
             notch,
-            ascii_map,
+            map: AsciiMap { raw, dies },
         })
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct WaferMap {
+// =============================================================================
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// STAGE: CP-prober & AOI
+pub struct MapData {
+    pub device_name: String,
+    pub lot_no: String,
+    pub wafer_id: String,
+    pub wafer_size: String,
+    pub dice_size_x: f64,
+    pub dice_size_y: f64,
+    pub flat_notch: String,
+
+    pub map_columns: u32,
+    pub map_rows: u32,
+
+    pub total_tested: u32,
+    pub total_pass: u32,
+    pub total_fail: u32,
+    pub yield_percent: f64,
+
+    pub map: AsciiMap, // <-- a single struct holding both forms
+}
+
+impl MapData {
+    pub fn to_string(&self) -> String {
+        let mut out = String::new();
+
+        // --- Header ---
+        writeln!(out, "Device Name      : {}", self.device_name).unwrap();
+        writeln!(out, "Lot No.          : {}", self.lot_no).unwrap();
+        writeln!(out, "Wafer ID         : {}", self.wafer_id).unwrap();
+        writeln!(out, "Wafer Size       : {}", self.wafer_size).unwrap();
+        writeln!(out, "Dice SizeX       : {:.3}", self.dice_size_x).unwrap();
+        writeln!(out, "Dice SizeY       : {:.3}", self.dice_size_y).unwrap();
+        writeln!(out, "Flat/Notch       : {}", self.flat_notch).unwrap();
+        writeln!(out, "Map Column       : {}", self.map_columns).unwrap();
+        writeln!(out, "Map Row          : {}", self.map_rows).unwrap();
+        writeln!(out, "Total Tested     : {}", self.total_tested).unwrap();
+        writeln!(out, "Total Pass       : {}", self.total_pass).unwrap();
+        writeln!(out, "Total Fail       : {}", self.total_fail).unwrap();
+        writeln!(out, "Yield            : {:.2}%", self.yield_percent).unwrap();
+
+        // --- Raw ASCII map ---
+        writeln!(out, "\n# Raw ASCII Map #").unwrap();
+        for row in &self.map.raw {
+            writeln!(out, "{}", row).unwrap();
+        }
+
+        // --- Parsed dies ---
+        writeln!(out, "\n# Parsed Dies #").unwrap();
+        for die in &self.map.dies {
+            writeln!(out, "Die (x={}, y={}) -> {:?}", die.x, die.y, die.bin).unwrap();
+        }
+
+        out
+    }
+
+    pub fn from_lines(lines: &[String]) -> Result<Self, String> {
+        let mut it = lines.iter();
+
+        // --- headers ---
+        let device_name = parse_kv(&mut it, pad18!(r"Device Name"))?;
+        let lot_no = parse_kv(&mut it, pad18!(r"Lot No."))?;
+        let wafer_id = parse_kv(&mut it, pad18!(r"Wafer ID"))?;
+        let wafer_size = parse_kv(&mut it, pad18!(r"Wafer Size"))?;
+        let dice_size_x = parse_kv(&mut it, pad18!(r"Dice SizeX"))?
+            .parse::<f64>()
+            .map_err(|e| format!("Invalid Dice SizeX: {e}"))?;
+        let dice_size_y = parse_kv(&mut it, pad18!(r"Dice SizeY"))?
+            .parse::<f64>()
+            .map_err(|e| format!("Invalid Dice SizeY: {e}"))?;
+        let flat_notch = parse_kv(&mut it, pad18!(r"Flat/Notch"))?;
+        let map_columns = parse_kv(&mut it, pad18!(r"Map Column"))?
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid Map Column: {e}"))?;
+        let map_rows = parse_kv(&mut it, pad18!(r"Map Row"))?
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid Map Row: {e}"))?;
+        let total_tested = parse_kv(&mut it, pad18!(r"Total Tested"))?
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid Total Tested: {e}"))?;
+        let total_pass = parse_kv(&mut it, pad18!(r"Total Pass"))?
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid Total Pass: {e}"))?;
+        let total_fail = parse_kv(&mut it, pad18!(r"Total Fail"))?
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid Total Fail: {e}"))?;
+        let yield_percent = {
+            let v = parse_kv(&mut it, pad18!(r"Yield"))?;
+            v.trim_end_matches('%')
+                .parse::<f64>()
+                .map_err(|e| format!("Invalid Yield: {e}"))?
+        };
+
+        // --- read raw map (skip leading blanks once) & parse dies in one pass ---
+        let mut raw: Vec<String> = Vec::with_capacity(map_rows as usize);
+        // upper bound reserve; actual dies ≤ rows*cols
+        let mut dies: Vec<AsciiDie> =
+            Vec::with_capacity((map_rows as usize) * (map_columns as usize));
+
+        // compute centered origins once
+        let cols_i = map_columns as i32;
+        let rows_i = map_rows as i32;
+        let x0 = -(cols_i / 2); // so col 0 -> x0
+        let y0 = -(rows_i / 2); // so row 0 -> y0
+
+        // advance to first non-empty line
+        while let Some(line) = it.next() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            raw.push(line.clone());
+
+            // process the first map row we just pushed
+            let row_idx = (raw.len() - 1) as i32;
+            for (col_idx, b) in line.bytes().enumerate() {
+                match b {
+                    b'.' => {}
+                    b'0'..=b'9' => {
+                        dies.push(AsciiDie {
+                            x: x0 + col_idx as i32,
+                            y: y0 + row_idx,
+                            bin: BinValue::Number((b - b'0') as i32),
+                        });
+                    }
+                    other => {
+                        dies.push(AsciiDie {
+                            x: x0 + col_idx as i32,
+                            y: y0 + row_idx,
+                            bin: BinValue::Special(other as char),
+                        });
+                    }
+                }
+            }
+            break;
+        }
+
+        // rest of the rows
+        for line in it {
+            if line.trim().is_empty() {
+                continue;
+            }
+            raw.push(line.clone());
+            let row_idx = (raw.len() - 1) as i32;
+            for (col_idx, b) in line.bytes().enumerate() {
+                match b {
+                    b'.' => {}
+                    b'0'..=b'9' => {
+                        dies.push(AsciiDie {
+                            x: x0 + col_idx as i32,
+                            y: y0 + row_idx,
+                            bin: BinValue::Number((b - b'0') as i32),
+                        });
+                    }
+                    other => {
+                        dies.push(AsciiDie {
+                            x: x0 + col_idx as i32,
+                            y: y0 + row_idx,
+                            bin: BinValue::Special(other as char),
+                        });
+                    }
+                }
+            }
+        }
+
+        if raw.is_empty() {
+            return Err("No map data found after headers".into());
+        }
+
+        Ok(Self {
+            device_name,
+            lot_no,
+            wafer_id,
+            wafer_size,
+            dice_size_x,
+            dice_size_y,
+            flat_notch,
+            map_columns,
+            map_rows,
+            total_tested,
+            total_pass,
+            total_fail,
+            yield_percent,
+            map: AsciiMap { raw, dies },
+        })
+    }
+}
+
+// =============================================================================
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// A.k.a. with extension .WaferMap
+/// STAGE: WLBI
+pub struct BinMapData {
     pub wafer_type: u32,
     pub dut: u32,
     pub mode: u32,
@@ -246,38 +546,41 @@ pub struct WaferMap {
     pub wafer_lots: String,
     pub wafer_no: String,
     pub wafer_size: f64,
+
     pub index_x: f64,
     pub index_y: f64,
-    pub wafer_map: Vec<[i32; 4]>,
-    pub bins: HashMap<u32, u32>,
+
+    pub map: Vec<WaferMapDie>,
+
+    pub bins: Vec<BinCountEntry>,
 }
 
-impl WaferMap {
+impl BinMapData {
     pub fn to_string(&self) -> String {
         let mut out = String::new();
-        writeln!(out, "WaferType: {}", self.wafer_type).unwrap();
-        writeln!(out, "DUT:{}", self.dut).unwrap();
-        writeln!(out, "Mode:{}", self.mode).unwrap();
-        writeln!(out, "Product:{}", self.product).unwrap();
-        writeln!(out, "Wafer Lots:{}", self.wafer_lots).unwrap();
-        writeln!(out, "Wafer No:{}", self.wafer_no).unwrap();
-        writeln!(out, "Wafer Size:{}", self.wafer_size).unwrap();
-        writeln!(out, "Index X:{}", self.index_x).unwrap();
-        writeln!(out, "Index Y:{}", self.index_y).unwrap();
-        writeln!(out).unwrap(); // blank line before map
 
-        for quad in &self.wafer_map {
-            writeln!(out, "{} {} {} {}", quad[0], quad[1], quad[2], quad[3]).unwrap();
-        }
-        writeln!(out).unwrap();
+        // --- Header ---
+        writeln!(out, "Wafer Type   : {}", self.wafer_type).unwrap();
+        writeln!(out, "DUT          : {}", self.dut).unwrap();
+        writeln!(out, "Mode         : {}", self.mode).unwrap();
+        writeln!(out, "Product      : {}", self.product).unwrap();
+        writeln!(out, "Wafer Lots   : {}", self.wafer_lots).unwrap();
+        writeln!(out, "Wafer No     : {}", self.wafer_no).unwrap();
+        writeln!(out, "Wafer Size   : {:.3}", self.wafer_size).unwrap();
+        writeln!(out, "Index X      : {:.3}", self.index_x).unwrap();
+        writeln!(out, "Index Y      : {:.3}", self.index_y).unwrap();
 
-        // serialize bins in ascending order of bin number
-        let mut keys: Vec<_> = self.bins.keys().cloned().collect();
-        keys.sort_unstable();
-        for bin in keys {
-            writeln!(out, "Bin {:>3} {}", bin, self.bins[&bin]).unwrap();
+        // --- Map ---
+        writeln!(out, "\n# Wafer Map #").unwrap();
+        for die in &self.map {
+            writeln!(out, "Die (x={}, y={}) -> {:?}", die.x, die.y, die.bin).unwrap();
         }
-        writeln!(out, "## END ##").unwrap();
+
+        // --- Bin counts ---
+        writeln!(out, "\n# Bin Counts #").unwrap();
+        for entry in &self.bins {
+            writeln!(out, "Bin {:>3} {}", entry.bin, entry.count).unwrap();
+        }
 
         out
     }
@@ -285,7 +588,6 @@ impl WaferMap {
     pub fn from_lines(lines: &[String]) -> Result<Self, String> {
         let mut it = lines.iter().map(|s| s.trim()).filter(|l| !l.is_empty());
 
-        // helper to parse T: FromStr from a "Key: value" line
         fn parse_kv<'a, T: FromStr>(
             it: &mut impl Iterator<Item = &'a str>,
             key: &str,
@@ -316,19 +618,16 @@ impl WaferMap {
         let index_x = parse_kv(&mut it, "Index X")?;
         let index_y = parse_kv(&mut it, "Index Y")?;
 
-        // Skip until “[MAP]” marker
         while let Some(line) = it.next() {
             if line.contains("[MAP]") {
                 break;
             }
         }
 
-        // Parse the 4-integer map entries
         let mut wafer_map = Vec::new();
         while let Some(l) = it.next() {
             if l.starts_with("Total Prober") || l.starts_with("Bin ") || l.starts_with("## END ##")
             {
-                // once we hit totals or bins or the end marker, break out of map parsing
                 break;
             }
             let nums: Vec<i32> = l
@@ -341,36 +640,60 @@ impl WaferMap {
             if nums.len() != 4 {
                 return Err(format!("Bad map line '{}'; expected 4 ints", l));
             }
-            wafer_map.push([nums[0], nums[1], nums[2], nums[3]]);
+            wafer_map.push(WaferMapDie::from([nums[0], nums[1], nums[2], nums[3]]));
         }
 
-        // Now parse all the “Bin N   M” entries until “## END ##”
-        let mut bins = HashMap::new();
+        let mut bins_acc: BTreeMap<u32, u32> = BTreeMap::new();
+
         for l in it {
             if l.starts_with("## END ##") {
                 break;
             }
-            if l.starts_with("Bin") {
-                // line may contain many comma-separated bins
-                for seg in l.split(',') {
-                    let seg = seg.trim();
-                    if let Some(rest) = seg.strip_prefix("Bin") {
-                        let mut parts = rest.split_whitespace();
-                        if let (Some(id_s), Some(cnt_s)) = (parts.next(), parts.next()) {
-                            let id = id_s
-                                .parse::<u32>()
-                                .map_err(|e| format!("Bin id '{}' parse error: {}", id_s, e))?;
-                            let cnt = cnt_s
-                                .parse::<u32>()
-                                .map_err(|e| format!("Bin count '{}' parse error: {}", cnt_s, e))?;
-                            bins.insert(id, cnt);
-                        }
-                    }
+            if !l.starts_with("Bin") {
+                continue;
+            }
+
+            // Supports: "Bin 3 10", "Bin 3: 10", "Bin 1 5, Bin 2 7"
+            for seg in l.split(',') {
+                let seg = seg.trim();
+                if let Some(rest) = seg.strip_prefix("Bin") {
+                    let mut parts = rest.split_whitespace();
+
+                    // bin id
+                    let id_s = match parts.next() {
+                        Some(s) => s,
+                        None => continue, // skip malformed segment
+                    };
+
+                    // optional ":" token
+                    let next = parts.next();
+                    let cnt_tok = match next {
+                        Some(":") => parts.next(),
+                        Some(token) => Some(token),
+                        None => None,
+                    };
+
+                    let id = id_s
+                        .parse::<u32>()
+                        .map_err(|e| format!("Bin id '{}' parse error: {}", id_s, e))?;
+                    let cnt_s =
+                        cnt_tok.ok_or_else(|| format!("Missing count for bin '{}'", id_s))?;
+                    let cnt = cnt_s
+                        .parse::<u32>()
+                        .map_err(|e| format!("Bin count '{}' parse error: {}", cnt_s, e))?;
+
+                    *bins_acc.entry(id).or_insert(0) += cnt;
                 }
             }
         }
 
-        Ok(WaferMap {
+        // Convert to sorted Vec<BinCountEntry>
+        let bins: Vec<BinCountEntry> = bins_acc
+            .into_iter()
+            .map(|(bin, count)| BinCountEntry { bin, count })
+            .collect();
+
+        Ok(BinMapData {
             wafer_type,
             dut,
             mode,
@@ -378,132 +701,13 @@ impl WaferMap {
             wafer_lots,
             wafer_no,
             wafer_size,
+
             index_x,
             index_y,
-            wafer_map,
+
+            map: wafer_map,
+
             bins,
-        })
-    }
-}
-
-/// Wafer mapEx data structure (ex for extended?)
-#[derive(Debug, Deserialize, Serialize)]
-pub struct WaferMapEx {
-    pub device_name: String,
-    pub lot_no: String,
-    pub wafer_id: String,
-    pub wafer_size: String,
-    pub dice_size_x: f64,
-    pub dice_size_y: f64,
-    pub flat_notch: String,
-    pub map_columns: u32,
-    pub map_rows: u32,
-    pub total_tested: u32,
-    pub total_pass: u32,
-    pub total_fail: u32,
-    pub yield_percent: f64,
-    pub ascii_map: Vec<String>,
-}
-
-impl WaferMapEx {
-    pub fn to_string(&self) -> String {
-        let mut out = String::new();
-        // align keys to 18 chars
-        writeln!(out, "{:18}: {}", "Device Name", self.device_name).unwrap();
-        writeln!(out, "{:18}: {}", "Lot No.", self.lot_no).unwrap();
-        writeln!(out, "{:18}: {}", "Wafer ID", self.wafer_id).unwrap();
-        writeln!(out, "{:18}: {}", "Wafer Size", self.wafer_size).unwrap();
-        writeln!(out, "{:18}: {}", "Dice SizeX", self.dice_size_x).unwrap();
-        writeln!(out, "{:18}: {}", "Dice SizeY", self.dice_size_y).unwrap();
-        writeln!(out, "{:18}: {}", "Flat/Notch", self.flat_notch).unwrap();
-        writeln!(out, "{:18}: {}", "Map Column", self.map_columns).unwrap();
-        writeln!(out, "{:18}: {}", "Map Row", self.map_rows).unwrap();
-        writeln!(out, "{:18}: {}", "Total Tested", self.total_tested).unwrap();
-        writeln!(out, "{:18}: {}", "Total Pass", self.total_pass).unwrap();
-        writeln!(out, "{:18}: {}", "Total Fail", self.total_fail).unwrap();
-        writeln!(out, "{:18}: {:.2}%", "Yield", self.yield_percent).unwrap();
-        writeln!(out).unwrap();
-        writeln!(out, "ASCII Map").unwrap();
-        for line in &self.ascii_map {
-            writeln!(out, "{}", line).unwrap();
-        }
-        out
-    }
-
-    pub fn from_lines(lines: &[String]) -> Result<Self, String> {
-        let mut it = lines.iter();
-
-        // 1. Parse all header fields:
-        let device_name = parse_kv(&mut it, pad18!(r"Device Name"))?;
-        let lot_no = parse_kv(&mut it, pad18!(r"Lot No."))?;
-        let wafer_id = parse_kv(&mut it, pad18!(r"Wafer ID"))?;
-        let wafer_size = parse_kv(&mut it, pad18!(r"Wafer Size"))?; // keep as string, e.g. `6"`
-        let dice_size_x = parse_kv(&mut it, pad18!(r"Dice SizeX"))?
-            .parse::<f64>()
-            .map_err(|e| format!("Invalid Dice SizeX: {}", e))?;
-        let dice_size_y = parse_kv(&mut it, pad18!(r"Dice SizeY"))?
-            .parse::<f64>()
-            .map_err(|e| format!("Invalid Dice SizeY: {}", e))?;
-        let flat_notch = parse_kv(&mut it, pad18!(r"Flat/Notch"))?;
-        let map_columns = parse_kv(&mut it, pad18!(r"Map Column"))?
-            .parse::<u32>()
-            .map_err(|e| format!("Invalid Map Column: {}", e))?;
-        let map_rows = parse_kv(&mut it, pad18!(r"Map Row"))?
-            .parse::<u32>()
-            .map_err(|e| format!("Invalid Map Row: {}", e))?;
-        let total_tested = parse_kv(&mut it, pad18!(r"Total Tested"))?
-            .parse::<u32>()
-            .map_err(|e| format!("Invalid Total Tested: {}", e))?;
-        let total_pass = parse_kv(&mut it, pad18!(r"Total Pass"))?
-            .parse::<u32>()
-            .map_err(|e| format!("Invalid Total Pass: {}", e))?;
-        let total_fail = parse_kv(&mut it, pad18!(r"Total Fail"))?
-            .parse::<u32>()
-            .map_err(|e| format!("Invalid Total Fail: {}", e))?;
-        let yield_percent = {
-            let val = parse_kv(&mut it, pad18!(r"Yield"))?;
-            let num = val
-                .trim_end_matches('%')
-                .parse::<f64>()
-                .map_err(|e| format!("Invalid Yield: {}", e))?;
-            num
-        };
-
-        // 2. The rest is the ASCII map, which may have blank lines:
-        let mut ascii_map = Vec::new();
-        while let Some(line) = it.next() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            ascii_map.push(line.clone());
-            break;
-        }
-
-        // 3. Now iterate the *same* iterator for the rest
-        for line in it {
-            if !line.trim().is_empty() {
-                ascii_map.push(line.clone());
-            }
-        }
-        if ascii_map.is_empty() {
-            return Err("No map data found after headers".into());
-        }
-
-        Ok(WaferMapEx {
-            device_name,
-            lot_no,
-            wafer_id,
-            wafer_size,
-            dice_size_x,
-            dice_size_y,
-            flat_notch,
-            map_columns,
-            map_rows,
-            total_tested,
-            total_pass,
-            total_fail,
-            yield_percent,
-            ascii_map,
         })
     }
 }

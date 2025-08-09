@@ -52,7 +52,7 @@ use crate::parser::{
     parse_substrate_defect_xls as do_parse_substrate_defect_xls,
 };
 
-use crate::wafer::ds::{DefectRecord, ProductMappingRecord, ProductRecord};
+use crate::wafer::ds::{BinMapData, DefectRecord, MapData, ProductMappingRecord, ProductRecord, Wafer};
 
 #[tauri::command]
 /// Object key is the sheet name<br/>
@@ -76,4 +76,36 @@ pub fn rust_parse_substrate_defect_xls(
     path: String,
 ) -> Result<HashMap<String, Vec<DefectRecord>>, String> {
     do_parse_substrate_defect_xls(path)
+}
+
+// =============================================================================
+
+use crate::parser:: {
+    parse_wafer as do_parse_wafer,
+    parse_wafer_bin as do_parse_wafer_bin,
+    parse_wafer_map_data as do_parse_wafer_map_data
+};
+
+#[tauri::command]
+/// Typescript eqv. Record<string, DefectRecord[]>;
+pub fn rust_parse_wafer(
+    path: String,
+) -> Result<Wafer, String> {
+    do_parse_wafer(path)
+}
+
+#[tauri::command]
+/// Typescript eqv. Record<string, DefectRecord[]>;
+pub fn rust_parse_wafer_bin(
+    path: String,
+) -> Result<BinMapData, String> {
+    do_parse_wafer_bin(path)
+}
+
+#[tauri::command]
+/// Typescript eqv. Record<string, DefectRecord[]>;
+pub fn rust_parse_wafer_map_data(
+    path: String,
+) -> Result<MapData, String> {
+    do_parse_wafer_map_data(path)
 }

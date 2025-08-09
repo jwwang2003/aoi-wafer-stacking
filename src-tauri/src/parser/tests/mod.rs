@@ -135,13 +135,13 @@ fn test_parse_substrate_defect_xls() {
 }
 
 #[test]
-fn test_parse_wafer() {
+fn test_parse_wafer_0() {
     use super::parse_wafer;
     let path = "static/P0094B_B003332_01.txt".to_string();
     match parse_wafer(path) {
         Ok(wafer) => {
             println!("Parsed Wafer: {:#?}", wafer);
-            assert!(!wafer.ascii_map.is_empty(), "Wafer map should not be empty");
+            assert!(!wafer.map.raw.is_empty(), "Wafer map should not be empty");
             assert_eq!(
                 wafer.gross_die,
                 wafer.pass_die + wafer.fail_die,
@@ -153,26 +153,26 @@ fn test_parse_wafer() {
 }
 
 #[test]
-fn test_parse_wafer_map() {
-    use super::parse_wafer_map;
+fn test_parse_wafer_bin() {
+    use super::parse_wafer_bin;
     let path = "static/B003332-01_20250325_170454.WaferMap".to_string();
-    match parse_wafer_map(path) {
+    match parse_wafer_bin(path) {
         Ok(wafer) => {
             println!("Parsed WaferMap: {:#?}", wafer);
-            assert!(!wafer.wafer_map.is_empty(), "Wafer map should not be empty");
+            assert!(!wafer.map.is_empty(), "Wafer map should not be empty");
         }
         Err(e) => panic!("Failed to parse wafer: {}", e),
     }
 }
 
 #[test]
-fn test_parse_wafer_map_ex() {
-    use super::parse_wafer_map_ex;
+fn test_parse_wafer_map_data() {
+    use super::parse_wafer_map_data;
     let path = "static/S1M032120B_B003332_01_mapEx.txt".to_string();
-    match parse_wafer_map_ex(path) {
+    match parse_wafer_map_data(path) {
         Ok(wafer) => {
             println!("Parsed Wafer MapEx: {:#?}", wafer);
-            assert!(!wafer.ascii_map.is_empty(), "Wafer map should not be empty");
+            assert!(!wafer.map.raw.is_empty(), "Wafer map should not be empty");
         }
         Err(e) => panic!("Failed to parse wafer: {}", e),
     }

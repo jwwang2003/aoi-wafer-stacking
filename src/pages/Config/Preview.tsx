@@ -17,8 +17,9 @@ import RawWaferSummary from '@/components/RawWaferSummary';
 import { useAppSelector } from '@/hooks';
 import { ConfigStepperState } from '@/types/Stepper';
 import { advanceStepper, setStepper } from '@/slices/preferencesSlice';
-import { WaferFileMetadata } from '@/types/Wafer';
+import { MapData, RawWaferMetadata, WaferFileMetadata } from '@/types/Wafer';
 import { syncWaferMapsBatch } from '@/sqlDB';
+import { invoke } from '@tauri-apps/api/core';
 
 interface OverlayRecord {
     product_id: string;
@@ -71,7 +72,20 @@ export default function Preview() {
         if (!data) {
             return;
         }
+        console.debug(data.payload![3]);
+        console.debug(await loadMapData((data.payload![3] as RawWaferMetadata).filePath));
         await dispatch(setStepper(ConfigStepperState.Metadata + 1));
+    }
+
+    async function loadMapData(path: string): Promise<MapData | null> {
+        try {
+            const data = await invoke<MapData>('rust_parse_wafer_map_data', { path });
+            console.debug('MapData:', data);
+            return data;
+        } catch (err) {
+            console.error('Failed to parse wafer map data:', err);
+            return null;
+        }
     }
 
     const fetchData = async () => {

@@ -121,10 +121,12 @@ export interface SubstrateDefectRecord {
     channel: string;        // Channel
 }
 
-// ---- Return shapes of the data source EXCEL commands ----
+// Return shapes of the data source EXCEL commands
 export type ProductMappingXlsResult = Record<string, ProductMappingRecord[]>;
 export type ProductXlsResult = Record<string, ProductRecord[]>;
 export type SubstrateDefectXlsResult = Record<string, SubstrateDefectRecord[]>;
+
+// =============================================================================
 
 /**
  * For storing FAB CP, CP-prober, and AOI
@@ -134,95 +136,101 @@ export type SubstrateDefectXlsResult = Record<string, SubstrateDefectRecord[]>;
  * - These are the only times a non-numerical number should appear in the data,
  *      the actual bins should all be numbers.
  */
+
+// Primitives / enums
+
+/** Rust: enum BinValue { Number(i32), Special(char) }
+ *  Serde → { "number": 1 } | { "special": "S" }
+ */
+export type BinValue =
+    | { number: number }   // numeric bin
+    | { special: string }; // single-char like "S" or "*"
+
+// ASCII map (shared)
 export interface AsciiDie {
-    x: number; // column index (e.g., 0 to 33 for 34 cols)
-    y: number; // row index (e.g., 0 to 36 for 37 rows)
-    bin: number | 'S' | '*'; // supports 'S' (special marker) or numeric bins
+    x: number;      // i32
+    y: number;      // i32
+    bin: BinValue;  // number OR special marker (S, *)
 }
 
-/**
- * For the generic CP-prober, AOI types
- */
-export interface MapData {
-    deviceName: string;
-    lotNo: string;
-    waferId: string;
-    waferSizeInch: number;
-    dieSizeX: number;
-    dieSizeY: number;
-    flatOrNotch: Direction | DirectionAllCap;
-    mapColumns: number;
-    mapRows: number;
-
-    statistics: {
-        totalTested: number;
-        totalPassed: number;
-        totalFailed: number;
-        yield: number; // percentage, e.g., 95.40
-    };
-
-    // 2D map data extracted from ASCII
-    map: AsciiDie[];
+/** Holds both raw rows and parsed dies (fields may be omitted when empty) */
+export interface AsciiMap {
+    raw?: string[];    // original ASCII lines
+    dies?: AsciiDie[]; // parsed from raw
 }
 
-/**
- * For the FAB CP type (similar to MapData but not really)
- */
-export interface BinMapData {
+// FAB CP wafer (Wafer)
+export interface Wafer {
     operator: string;
     device: string;
     lotId: string;
     waferId: string;
-    measurementTime: string; // ISO format date string
-    notchDirection: Direction | DirectionAllCap;
-
-    statistics: {
-        grossDie: number;
-        passDie: number;
-        failDie: number;
-        yield: number; // e.g., 95.71
-    };
-
-    map: AsciiDie[]; // flat list of dies with position and bin info
+    measTime: string;   // string per Rust
+    grossDie: number;   // u32
+    passDie: number;    // u32
+    failDie: number;    // u32
+    totalYield: number; // f64 (e.g., 94.69)
+    notch: string;      // e.g., "Down"
+    map: AsciiMap;      // raw + dies
 }
 
+// CP-prober / AOI (MapData)
 
-/**
- * For WaferMap, represents a single die on the wafer map
- */
-export interface Die {
-    // Example: -4 -18 257 0
-    x: number;
-    y: number;
-    bin: number;
-    reserved: number; // always 0 in your example
+export interface MapData {
+    deviceName: string;
+    lotNo: string;
+    waferId: string;
+    waferSize: string;   // Rust keeps as string, e.g. `6"`
+    diceSizeX: number;   // f64
+    diceSizeY: number;   // f64
+    flatNotch: string;
+
+    mapColumns: number;  // u32
+    mapRows: number;     // u32
+
+    totalTested: number; // u32
+    totalPass: number;   // u32
+    totalFail: number;   // u32
+    yieldPercent: number;// f64
+
+    map: AsciiMap;       // raw + dies
 }
 
-/**
- * For WaferMap, to collect bin statistics,
- * bin index to count mapping, at the very bottom of the .WaferMap file
- */
-export type BinCounts = { [binNumber: number]: number };
+// WLBI wafer map (BinMapData)
 
-/**
- * Complete WaferMap data
- */
-export interface WaferMapData {
-    waferType: number;
-    dut: number;
-    mode: number;
+/** Rust: WaferMapDie (used in BinMapData.map) */
+export interface WaferMapDie {
+    x: number;         // i32
+    y: number;         // i32
+    bin: BinValue;     // typically { number: n } in this format
+    reserved: number;  // i32
+}
+
+export interface BinCountEntry {
+    bin: number;   // u32
+    count: number; // u32
+}
+
+export interface BinMapData {
+    waferType: number;  // u32
+    dut: number;        // u32
+    mode: number;       // u32
     product: string;
     waferLots: string;
-    waferNo: number;
-    waferSize: number;
-    indexX: number;
-    indexY: number;
+    waferNo: string;    // Rust is String (not number)
+    waferSize: number;  // f64
 
-    map: Die[];
+    indexX: number;     // f64
+    indexY: number;     // f64
 
-    statistics: {
-        totalDiesTested: number;
-        totalDiesPassed: number;
-        binCounts: BinCounts;
-    };
+    map: WaferMapDie[];     // numeric die list
+    bins: BinCountEntry[];  // sorted vector (not a map)
 }
+
+// Type guards (handy)
+
+export const isNumberBin = (b: BinValue): b is { number: number } =>
+    (b as any).number !== undefined;
+
+export const isSpecialBin = (b: BinValue): b is { special: string } =>
+    (b as any).special !== undefined;
