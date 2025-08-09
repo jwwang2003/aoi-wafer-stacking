@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 macro_rules! pad18 {
@@ -131,14 +131,14 @@ impl From<DefectRecordExcel> for DefectRecord {
 
 // =============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BinValue {
     Number(i32),
     Special(char), // e.g. 'S', '*', 'A', 'B'
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BinCountEntry {
     pub bin: u32,
     pub count: u32,
@@ -147,7 +147,7 @@ pub struct BinCountEntry {
 // Two types of die structures are defined here,
 // the default is AsciiDie, WaferMap uses the Die
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Used by WaferMap format
 pub struct WaferMapDie {
@@ -184,7 +184,7 @@ impl From<[i32; 4]> for WaferMapDie {
 //     }
 // }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Used by default when reading MAPs
 pub struct AsciiDie {
@@ -194,7 +194,7 @@ pub struct AsciiDie {
 }
 
 /// Holds both the raw map text and the parsed dies.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AsciiMap {
     /// Original lines as read from the file
@@ -209,7 +209,7 @@ pub struct AsciiMap {
 
 /// Wafer defect list data structure
 /// STAGE: FAB CP
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Wafer {
     pub operator: String,
@@ -344,7 +344,7 @@ impl Wafer {
 
 // =============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// STAGE: CP-prober & AOI
 pub struct MapData {
@@ -534,7 +534,7 @@ impl MapData {
 
 // =============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// A.k.a. with extension .WaferMap
 /// STAGE: WLBI
@@ -708,6 +708,247 @@ impl BinMapData {
             map: wafer_map,
 
             bins,
+        })
+    }
+}
+
+// =============================================================================
+
+// NOTE: HEX/.sinf
+
+/// One hex cell in a RowData line:
+/// - `Some(u8)` = a bin code (e.g., 0x03, 0x01)
+/// - `None`     = no die / masked-out position (rendered as `--`)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexCell(pub Option<u8>);
+
+/// Carries the raw text rows and the parsed numeric grid, plus
+/// the flattened dies (centered coordinates, numeric bins only).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexMap {
+    /// Original `RowData:` lines (exact text after the colon)
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub raw: Vec<String>,
+
+    /// Parsed cells per row (length = row_ct; each inner vec length = col_ct)
+    pub grid: Vec<Vec<HexCell>>,
+
+    /// Flattened (x,y,bin) dies centered like your ASCII parser:
+    /// (0,0 in file) → ( -col_ct/2, -row_ct/2 )
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub dies: Vec<AsciiDie>,
+}
+
+/// Header block for the HEX/SINF file
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexHeader {
+    pub device: String, // DEVICE
+    pub lot: String,    // LOT
+    pub wafer: String,  // WAFER
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fnloc: Option<u32>, // FNLOC (optional)
+    pub row_ct: u32,    // ROWCT
+    pub col_ct: u32,    // COLCT
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bcequ: Option<u32>, // BCEQU (optional)
+    pub refpx: u32,     // REFPX
+    pub refpy: u32,     // REFPY
+    pub dut_ms: String, // DUTMS (e.g., "MM")
+    pub x_dies: f64,    // XDIES
+    pub y_dies: f64,    // YDIES
+}
+
+/// Top-level structure for the HEX/SINF format
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexMapData {
+    pub header: HexHeader,
+    pub map: HexMap,
+}
+
+fn parse_hex_cell(tok: &str) -> Result<HexCell, String> {
+    if tok == "--" {
+        return Ok(HexCell(None));
+    }
+    if tok.len() != 2 {
+        return Err(format!("Bad hex token '{}'", tok));
+    }
+    u8::from_str_radix(tok, 16)
+        .map(|v| HexCell(Some(v)))
+        .map_err(|e| format!("Hex parse '{}': {}", tok, e))
+}
+
+fn center_xy(col_ct: i32, row_ct: i32, col_idx: i32, row_idx: i32) -> (i32, i32) {
+    let x = col_idx - (col_ct / 2);
+    let y = row_idx - (row_ct / 2);
+    (x, y)
+}
+
+impl HexMapData {
+    /// Re-serialize to the original style (two-digit hex, `--` for gaps)
+    pub fn to_string(&self) -> String {
+        let mut out = String::new();
+        let h = &self.header;
+        writeln!(out, "DEVICE: {}", h.device).unwrap();
+        writeln!(out, "LOT: {}", h.lot).unwrap();
+        writeln!(out, "WAFER: {}", h.wafer).unwrap();
+        if let Some(v) = h.fnloc {
+            writeln!(out, "FNLOC: {}", v).unwrap();
+        }
+        writeln!(out, "ROWCT: {}", h.row_ct).unwrap();
+        writeln!(out, "COLCT: {}", h.col_ct).unwrap();
+        if let Some(v) = h.bcequ {
+            writeln!(out, "BCEQU: {:02}", v).unwrap();
+        }
+        writeln!(out, "REFPX: {}", h.refpx).unwrap();
+        writeln!(out, "REFPY: {}", h.refpy).unwrap();
+        writeln!(out, "DUTMS: {}", h.dut_ms).unwrap();
+        writeln!(out, "XDIES: {:.5}", h.x_dies).unwrap();
+        writeln!(out, "YDIES: {:.5}", h.y_dies).unwrap();
+
+        for row in &self.map.grid {
+            write!(out, "RowData: ").unwrap();
+            for (i, cell) in row.iter().enumerate() {
+                if i > 0 {
+                    write!(out, " ").unwrap();
+                }
+                match cell.0 {
+                    Some(v) => write!(out, "{:02X}", v).unwrap(), // two-digit uppercase hex
+                    None => write!(out, "--").unwrap(),
+                }
+            }
+            writeln!(out).unwrap();
+        }
+        out
+    }
+
+    pub fn from_lines(lines: &[String]) -> Result<Self, String> {
+        // Trim empty lines once
+        let mut it = lines.iter().map(|s| s.trim()).filter(|s| !s.is_empty());
+
+        // Generic helper with an explicit lifetime on the &str item.
+        fn kv<'a, I, T>(it: &mut I, key: &str) -> Result<T, String>
+        where
+            I: Iterator<Item = &'a str>,
+            T: FromStr,
+            T::Err: Display,
+        {
+            let line = it
+                .next()
+                .ok_or_else(|| format!("Missing '{}:' line", key))?;
+            let parts: Vec<_> = line.splitn(2, ':').collect();
+            if parts.len() != 2 || !parts[0].eq_ignore_ascii_case(key) {
+                return Err(format!("Expected '{}: …', found '{}'", key, line));
+            }
+            parts[1]
+                .trim()
+                .parse()
+                .map_err(|e| format!("{} parse error: {}", key, e))
+        }
+
+        let device: String = kv(&mut it, "DEVICE")?;
+        let lot: String = kv(&mut it, "LOT")?;
+        let wafer: String = kv(&mut it, "WAFER")?;
+        // Optional fields:
+        let fnloc = it
+            .clone()
+            .next()
+            .filter(|l| l.starts_with("FNLOC"))
+            .map(|_| kv(&mut it, "FNLOC"))
+            .transpose()?;
+        let row_ct = kv(&mut it, "ROWCT")?;
+        let col_ct = kv(&mut it, "COLCT")?;
+        let bcequ = it
+            .clone()
+            .next()
+            .filter(|l| l.starts_with("BCEQU"))
+            .map(|_| kv(&mut it, "BCEQU"))
+            .transpose()?;
+        let refpx = kv(&mut it, "REFPX")?;
+        let refpy = kv(&mut it, "REFPY")?;
+        let dut_ms: String = kv(&mut it, "DUTMS")?;
+        let x_dies = kv(&mut it, "XDIES")?;
+        let y_dies = kv(&mut it, "YDIES")?;
+
+        // Collect RowData lines: either "RowData:" alone then tokens next line,
+        // or "RowData: <tokens...>" on the same line (handle both)
+        let mut raw: Vec<String> = Vec::with_capacity(row_ct as usize);
+        let mut grid: Vec<Vec<HexCell>> = Vec::with_capacity(row_ct as usize);
+
+        while let Some(line) = it.next() {
+            if !line.starts_with("RowData") {
+                continue;
+            }
+            // grab text after "RowData:"
+            let after = line.splitn(2, ':').nth(1).unwrap_or("").trim();
+            let row_text = if after.is_empty() {
+                // RowData: on its own line → next non-empty line has tokens
+                match it.next() {
+                    Some(next) => next.trim(),
+                    None => return Err("RowData without content".into()),
+                }
+            } else {
+                after
+            }
+            .to_string();
+
+            // Parse tokens
+            let tokens = row_text.split_whitespace().collect::<Vec<_>>();
+            let mut row_cells = Vec::with_capacity(col_ct as usize);
+            for tok in tokens {
+                row_cells.push(parse_hex_cell(tok)?);
+            }
+            // Some files pad or truncate; normalize to col_ct
+            row_cells.resize_with(col_ct as usize, || HexCell(None));
+
+            raw.push(row_text);
+            grid.push(row_cells);
+        }
+
+        if grid.len() as u32 != row_ct {
+            // allow files that omit leading/trailing empty rows; optionally relax
+            // here we just pad to expected row count
+            while grid.len() < row_ct as usize {
+                raw.push(String::new());
+                grid.push(vec![HexCell(None); col_ct as usize]);
+            }
+        }
+
+        // Build flattened dies with centered coordinates (skip None / `--`)
+        let mut dies: Vec<AsciiDie> = Vec::new();
+        let (col_ct_i, row_ct_i) = (col_ct as i32, row_ct as i32);
+        for (r, row) in grid.iter().enumerate() {
+            for (c, cell) in row.iter().enumerate() {
+                if let Some(v) = cell.0 {
+                    let (x, y) = center_xy(col_ct_i, row_ct_i, c as i32, r as i32);
+                    dies.push(AsciiDie {
+                        x,
+                        y,
+                        bin: BinValue::Number(v as i32),
+                    });
+                }
+            }
+        }
+
+        Ok(HexMapData {
+            header: HexHeader {
+                device,
+                lot,
+                wafer,
+                fnloc,
+                row_ct,
+                col_ct,
+                bcequ,
+                refpx,
+                refpy,
+                dut_ms,
+                x_dies,
+                y_dies,
+            },
+            map: HexMap { raw, grid, dies },
         })
     }
 }

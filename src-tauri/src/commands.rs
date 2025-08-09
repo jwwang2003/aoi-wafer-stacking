@@ -52,7 +52,7 @@ use crate::parser::{
     parse_substrate_defect_xls as do_parse_substrate_defect_xls,
 };
 
-use crate::wafer::ds::{BinMapData, DefectRecord, MapData, ProductMappingRecord, ProductRecord, Wafer};
+use crate::wafer::ds::{BinMapData, DefectRecord, HexMapData, MapData, ProductMappingRecord, ProductRecord, Wafer};
 
 #[tauri::command]
 /// Object key is the sheet name<br/>
@@ -83,7 +83,7 @@ pub fn rust_parse_substrate_defect_xls(
 use crate::parser:: {
     parse_wafer as do_parse_wafer,
     parse_wafer_bin as do_parse_wafer_bin,
-    parse_wafer_map_data as do_parse_wafer_map_data
+    parse_wafer_map_data as do_parse_wafer_map_data,
 };
 
 #[tauri::command]
@@ -108,4 +108,56 @@ pub fn rust_parse_wafer_map_data(
     path: String,
 ) -> Result<MapData, String> {
     do_parse_wafer_map_data(path)
+}
+
+//
+
+#[tauri::command]
+pub fn rust_export_wafer(wafer: Wafer, output_path: String) -> Result<(), String> {
+    fs::write(&output_path, wafer.to_string())
+        .map_err(|e| format!("Failed to write wafer to file: {}", e))
+}
+
+#[tauri::command]
+pub fn rust_print_wafer(wafer: Wafer) -> Result<(), String> {
+    println!("{}", wafer.to_string());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rust_export_wafer_bin(wafer_bin: BinMapData, output_path: String) -> Result<(), String> {
+    fs::write(&output_path, wafer_bin.to_string())
+        .map_err(|e| format!("Failed to write bin map to file: {}", e))
+}
+
+#[tauri::command]
+pub fn rust_print_wafer_bin(wafer_bin: BinMapData) -> Result<(), String> {
+    println!("{}", wafer_bin.to_string());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rust_export_wafer_map_data(data: MapData, output_path: String) -> Result<(), String> {
+    fs::write(&output_path, data.to_string())
+        .map_err(|e| format!("Failed to write map data to file: {}", e))
+}
+
+#[tauri::command]
+pub fn rust_print_wafer_map_data(data: MapData) -> Result<(), String> {
+    println!("{}", data.to_string());
+    Ok(())
+}
+
+// HEX/.sinf
+
+#[tauri::command]
+pub fn rust_export_wafer_hex(wafer_hex: HexMapData, output_path: String) -> Result<(), String> {
+    fs::write(&output_path, wafer_hex.to_string())
+        .map_err(|e| format!("Failed to write map data to file: {}", e))
+}
+
+#[tauri::command]
+pub fn rust_print_wafer_hex(wafer_hex: HexMapData) -> Result<(), String> {
+    println!("{}", wafer_hex.to_string());
+    Ok(())
 }

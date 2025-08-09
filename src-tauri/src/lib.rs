@@ -49,7 +49,15 @@ pub fn run() {
             // Wafer parsing methods
             commands::rust_parse_wafer,
             commands::rust_parse_wafer_bin,
-            commands::rust_parse_wafer_map_data
+            commands::rust_parse_wafer_map_data,
+            commands::rust_export_wafer,
+            commands::rust_print_wafer,
+            commands::rust_export_wafer_bin,
+            commands::rust_print_wafer_bin,
+            commands::rust_export_wafer_map_data,
+            commands::rust_print_wafer_map_data,
+            commands::rust_export_wafer_hex,
+            commands::rust_print_wafer_hex
         ])
         .build(tauri::generate_context!())
         .expect("error while running Tauri application");
