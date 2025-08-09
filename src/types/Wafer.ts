@@ -234,3 +234,45 @@ export const isNumberBin = (b: BinValue): b is { number: number } =>
 
 export const isSpecialBin = (b: BinValue): b is { special: string } =>
     (b as any).special !== undefined;
+
+// NOTE: HEX/.sinf
+
+/**
+ * Rust: `pub struct HexCell(pub Option<u8>);`
+ * Serde newtype → JSON is just the inner value:
+ *   Some(0x03) → 3
+ *   None       → null   (represents `--`)
+ */
+export type HexCell = number | null;
+
+/**
+ * Carries the raw RowData lines, parsed grid, and flattened dies.
+ * `raw` / `dies` are optional because Rust uses `skip_serializing_if = "Vec::is_empty"`.
+ */
+export interface HexMap {
+    raw?: string[];           // exact text after "RowData:" (one per row)
+    grid: HexCell[][];        // [row][col] numbers or nulls (for `--`)
+    dies?: AsciiDie[];        // centered (x,y) with numeric bins
+}
+
+/** Header block (all camelCase to match Serde rename_all) */
+export interface HexHeader {
+    device: string;           // DEVICE
+    lot: string;              // LOT
+    wafer: string;            // WAFER
+    fnloc?: number;           // FNLOC (optional)
+    rowCt: number;            // ROWCT
+    colCt: number;            // COLCT
+    bcequ?: number;           // BCEQU (optional)
+    refpx: number;            // REFPX
+    refpy: number;            // REFPY
+    dutMs: string;            // DUTMS (e.g., "MM")
+    xDies: number;            // XDIES
+    yDies: number;            // YDIES
+}
+
+/** Top-level container returned by the Tauri command */
+export interface HexMapData {
+    header: HexHeader;
+    map: HexMap;
+}
