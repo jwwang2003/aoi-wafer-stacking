@@ -9,7 +9,7 @@ import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/Stepper';
 import { toast } from 'react-toastify';
-import { invokeSafe } from '@/api/tauri';
+import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
@@ -96,13 +96,10 @@ export async function getDataSourcePathsFolders(state: DataSourceConfigState): P
     const results = await Promise.all(
         entries.map(async ([key, folderList]) => {
             const resolvedFolders = await Promise.all(
-                folderList.map(async (f) => ({ path: await resolve(rootPath, f) }))
+                folderList.map(async (f) => ( await resolve(rootPath, f) ))
             );
 
-            const responses: FolderResult[] = await invokeSafe(
-                'rust_read_file_stat_batch',
-                { folders: resolvedFolders }
-            );
+            const responses: FolderResult[] = await invokeReadFileStatBatch(resolvedFolders);
 
             return [key, responses] as const;
         })

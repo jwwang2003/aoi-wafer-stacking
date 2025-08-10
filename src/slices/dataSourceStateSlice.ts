@@ -6,7 +6,7 @@ import type { DataSourceType, Folder, FolderGroupsState, FolderResult } from '@/
 import { initialDataSourceState as initialState } from '@/constants/default';
 import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
-import { invokeSafe } from '@/api/tauri';
+import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 
 // DEVELOPER NOTES:
 // April 10, 2025
@@ -72,9 +72,7 @@ export const refreshFolderStatuses = createAsyncThunk(
                 const typed = type as DataSourceType;
 
                 const folders: Folder[] = value;
-                const responses: FolderResult[] = await invokeSafe(
-                    'rust_read_file_stat_batch', { folders: folders.map(f => ({ path: f.path })) }
-                );
+                const responses: FolderResult[] = await invokeReadFileStatBatch(folders.map((f) => f.path));
 
                 const pathToResult = new Map(responses.map(r => [r.path, r]));
 
