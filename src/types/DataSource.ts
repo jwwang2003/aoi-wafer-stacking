@@ -60,8 +60,30 @@ export interface Folder {
     error: boolean;
 }
 
-// TAURI INTERFACES
+// =============================================================================
+// NOTE: TAURI INTERFACES
+// =============================================================================
 
+/**
+ * Result of querying a filesystem entry (folder or file).
+ *
+ * - `path` is the absolute filesystem path that was checked.
+ * - `exists` indicates whether the entry existed at the time of the stat.
+ * - `info` is present only when the entry exists and metadata could be read (FileInfo).
+ * 
+ * For FileInfo:
+ *
+ * ⚠️ Time fields:
+ * - `mtime` and `atime` are **Numbers (epoch milliseconds)**, compatible with
+ *   JavaScript’s `Date#getTime()`. They are **not** `Date` objects.
+ *   Convert with `new Date(info.mtime)` if you need a `Date`.
+ * - `birthtime` (if present) is an ISO 8601 string.
+ *
+ * Notes:
+ * - `isFile` / `isDirectory` / `isSymlink` are mutually exclusive flags from the stat result.
+ * - Some low-level fields are platform-dependent and may be `null`.
+ * - On Windows, `fileAttributes` may be set; it’s `null` on other platforms.
+ */
 export interface FolderResult {
     path: string;
     exists: boolean;
@@ -77,8 +99,8 @@ export interface FolderResult {
 //     pub isSymlink: bool,
 
 //     pub size: u64,
-//     pub mtime: Option<String>,
-//     pub atime: Option<String>,
+//     pub mtime: Option<f64>,
+//     pub atime: Option<f64>,
 //     pub birthtime: Option<String>,
 
 //     pub readonly: bool,

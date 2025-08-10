@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 use crate::file::file_io::{build_file_info, FolderRequest, FolderResult};
 
@@ -30,6 +31,61 @@ pub fn get_file_batch_stat(folders: Vec<FolderRequest>) -> Vec<FolderResult> {
         .collect()
 }
 
+/// Get metadata for all **direct subfolders** under the given folder.
+#[tauri::command]
+pub fn read_dir(dir: String) -> Vec<FolderResult> {
+    let mut out = Vec::new();
+    let root = Path::new(&dir);
+
+    // If root itself doesn't exist, return a single "not exists" record for clarity
+    if !root.exists() {
+        out.push(FolderResult {
+            path: dir,
+            exists: false,
+            info: None,
+        });
+        return out;
+    }
+
+    // Read direct children and keep only directories
+    match fs::read_dir(root) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                // Only directories
+                match entry.file_type() {
+                    Ok(ft) if ft.is_dir() => {
+                        let p = entry.path();
+                        let path_str = p.to_string_lossy().to_string();
+                        match fs::metadata(&p) {
+                            Ok(meta) => out.push(FolderResult {
+                                path: path_str,
+                                exists: true,
+                                info: Some(build_file_info(&meta, &p.to_string_lossy())),
+                            }),
+                            Err(_) => out.push(FolderResult {
+                                path: path_str,
+                                exists: false,
+                                info: None,
+                            }),
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Err(_) => {
+            // Could not read the directory; return the root as not accessible
+            out.push(FolderResult {
+                path: dir,
+                exists: false,
+                info: None,
+            });
+        }
+    }
+
+    out
+}
+
 // =============================================================================
 
 use crate::crypto;
@@ -52,7 +108,9 @@ use crate::parser::{
     parse_substrate_defect_xls as do_parse_substrate_defect_xls,
 };
 
-use crate::wafer::ds::{BinMapData, DefectRecord, HexMapData, MapData, ProductMappingRecord, ProductRecord, Wafer};
+use crate::wafer::ds::{
+    BinMapData, DefectRecord, HexMapData, MapData, ProductMappingRecord, ProductRecord, Wafer,
+};
 
 #[tauri::command]
 /// Object key is the sheet name<br/>
@@ -80,33 +138,26 @@ pub fn rust_parse_substrate_defect_xls(
 
 // =============================================================================
 
-use crate::parser:: {
-    parse_wafer as do_parse_wafer,
-    parse_wafer_bin as do_parse_wafer_bin,
+use crate::parser::{
+    parse_wafer as do_parse_wafer, parse_wafer_bin as do_parse_wafer_bin,
     parse_wafer_map_data as do_parse_wafer_map_data,
 };
 
 #[tauri::command]
 /// Typescript eqv. Record<string, DefectRecord[]>;
-pub fn rust_parse_wafer(
-    path: String,
-) -> Result<Wafer, String> {
+pub fn rust_parse_wafer(path: String) -> Result<Wafer, String> {
     do_parse_wafer(path)
 }
 
 #[tauri::command]
 /// Typescript eqv. Record<string, DefectRecord[]>;
-pub fn rust_parse_wafer_bin(
-    path: String,
-) -> Result<BinMapData, String> {
+pub fn rust_parse_wafer_bin(path: String) -> Result<BinMapData, String> {
     do_parse_wafer_bin(path)
 }
 
 #[tauri::command]
 /// Typescript eqv. Record<string, DefectRecord[]>;
-pub fn rust_parse_wafer_map_data(
-    path: String,
-) -> Result<MapData, String> {
+pub fn rust_parse_wafer_map_data(path: String) -> Result<MapData, String> {
     do_parse_wafer_map_data(path)
 }
 

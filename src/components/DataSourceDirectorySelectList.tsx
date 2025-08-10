@@ -15,6 +15,8 @@ import { DataSourceType, FolderResult } from '@/types/DataSource';
 import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
 import { invoke } from '@tauri-apps/api/core';
 import { getRelativePath } from '@/utils/fs';
+import { deleteFolderIndexByPath } from '@/db/folderIndex';
+import { basename } from '@tauri-apps/api/path';
 
 interface DirectorySelectListProps {
     type: DataSourceType;
@@ -24,7 +26,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
     const dispatch = useAppDispatch();
     const rootPath = useAppSelector((state) => state.dataSourceConfig.rootPath);
     const folders = useAppSelector((state) => state.dataSourceState[type]);             // internal (system abs path)
-    const paths = useAppSelector((state) => state.dataSourceConfig.paths[type]);   // config file (relative path)
+    const paths = useAppSelector((state) => state.dataSourceConfig.paths[type]);        // config file (relative path)
     const [selected, setSelected] = useState<string[]>([]);
 
     const handleAdd = async () => {
@@ -56,10 +58,17 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
         }
     };
 
-    const handleRemoveSelected = () => {
+    const deleteAction = async (path: string) => {
+        // path is abs. path
+        const name = await basename(path);
+        await dispatch(removeDataSourcePath({ type, path }));
+        await dispatch(removeFolder({ type, path }));
+        await deleteFolderIndexByPath(name);
+    }
+
+    const handleRemoveSelected = async () => {
         for (const path of selected) {
-            dispatch(removeDataSourcePath({ type, path }));
-            dispatch(removeFolder({ type, path }));
+            await deleteAction(path);
         }
         setSelected([]);
     };
@@ -139,10 +148,9 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                                         size="xs"
                                         variant="light"
                                         color="red"
-                                        onClick={() => {
-                                            dispatch(removeDataSourcePath({ type, path }));
-                                            dispatch(removeFolder({ type, path }));
-                                            setSelected((s) => s.filter((x) => x !== path));
+                                        onClick={async () => {
+                                            await deleteAction(path);   // passed in abs. path
+                                            await setSelected((s) => s.filter((x) => x !== path));
                                         }}
                                     >
                                         <IconTrash size={14} />

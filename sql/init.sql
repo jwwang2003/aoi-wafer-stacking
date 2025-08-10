@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS product_defect_map (
 
     PRIMARY KEY (product_id, lot_id, wafer_id),
     FOREIGN KEY (product_id) REFERENCES oem_product_map(product_id),
-    FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id)
+    FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id),
+    
+    FOREIGN KEY (file_path) REFERENCES file_index(file_path)
 );
 
 -- Enforce that each sub_id is unique to one wafer
@@ -48,15 +50,17 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
     PRIMARY KEY (product_id, batch_id, wafer_id),
     FOREIGN KEY (product_id, batch_id, wafer_id)
         REFERENCES product_defect_map(product_id, lot_id, wafer_id)
+    
+    FOREIGN KEY (file_path) REFERENCES file_index(file_path)
 );
 
 CREATE TABLE IF NOT EXISTS file_index (
-    file_path TEXT PRIMARY KEY,       -- Absolute or relative file path
+    file_path TEXT PRIMARY KEY,       -- Should be relative file path (relative to the root folder)
     last_mtime INTEGER NOT NULL,      -- From `metadata(filePath).modified`
     file_hash TEXT                    -- Optional: SHA-1, SHA-256, etc.
 );
 
-CREATE TABLE folder_index (
+CREATE TABLE IF NOT EXISTS folder_index (
     folder_path TEXT PRIMARY KEY,
     last_mtime INTEGER
 );

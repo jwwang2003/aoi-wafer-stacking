@@ -9,19 +9,27 @@ import { createAsyncThunk } from '@reduxjs/toolkit';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
-import { baseDir, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
-import { RootState } from '@/store';
-import { DataSourceConfigState, DataSourceType } from '@/types/DataSource';
-import { arraysAreEqual, getRelativePath, sortBySubfolderName } from '@/utils/fs';
-
-import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
-import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper';
-import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
-import { advanceStepper, setStepper } from './preferencesSlice';
-import { ConfigStepperState } from '@/types/Stepper';
-import { addFolder } from './dataSourceStateSlice';
-import { autoRecognizeFoldersByType } from '@/utils/dataSource';
+// UI
 import { toast } from 'react-toastify';
+
+// TYPES
+import { DataSourceConfigState, DataSourceType } from '@/types/DataSource';
+import { ConfigStepperState } from '@/types/Stepper';
+
+// STATE
+import { RootState } from '@/store';
+import { advanceStepper, setStepper } from './preferencesSlice';
+import { addFolder } from './dataSourceStateSlice';
+
+// UTILS
+import { arraysAreEqual, getRelativePath, getSubfolders, sortBySubfolderName } from '@/utils/fs';
+import { autoRecognizeFoldersByType } from '@/utils/dataSource';
+import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
+import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper';
+
+import { baseDir, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
+import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
+
 
 export const initDataSourceConfig = createAsyncThunk<
     DataSourceConfigState,
@@ -136,7 +144,7 @@ export const revalidateDataSource = createAsyncThunk<
         const localLastSaved = dataSourceConfig.lastSaved ?? 0;
 
         // Compare timestamps and decide which config to use
-        const useLocal = localLastSaved > parsedLastSaved;
+        const useLocal = localLastSaved >= parsedLastSaved;
 
         const config = useLocal ? dataSourceConfig : merged;
 
@@ -187,7 +195,10 @@ export const scanDataSourceFolders = createAsyncThunk<
 
         try {
             const start = performance.now();
-            const folders = await autoRecognizeFoldersByType(rootPath, regex);
+
+            if (!rootPath || rootPath === '') throw Error('请先设置根目录！');
+            const subfolders = await getSubfolders(rootPath);
+            const folders = await autoRecognizeFoldersByType(subfolders, regex);
 
             let totalDetected = 0;
             let totalAdded = 0;

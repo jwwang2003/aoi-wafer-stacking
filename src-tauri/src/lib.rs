@@ -39,6 +39,7 @@ pub fn run() {
             file_lock::lock_file,
             file_lock::unlock_file,
             commands::get_file_batch_stat,
+            commands::read_dir,
             // Cryptography
             commands::rust_sha1,
             commands::rust_sha256,

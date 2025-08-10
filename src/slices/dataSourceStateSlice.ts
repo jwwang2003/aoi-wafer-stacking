@@ -8,6 +8,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
 
+// DEVELOPER NOTES:
+// April 10, 2025
+// - assuming that there won't be over 1-10K number of sub folders within the root
+//      data folder, using Tauri's built-in resolve SHOULD not pose any significant
+//      performance bottlenecks
+
 // Specifically for the folder type
 function sortFoldersByName(folders: Folder[]): Folder[] {
     return folders.slice().sort((a, b) => {
@@ -47,16 +53,6 @@ export const initDataSourceState = createAsyncThunk<
 
         result[typed] = sortFoldersByName(resolved);
     }
-
-    // let flag = false;
-    for (const value of Object.values(result)) {
-        if (value.length > 0) {
-            // flag = true;
-            break;
-        }
-    }
-    // if (flag) thunkAPI.dispatch(setStepperStep(3));
-
     return result;
 });
 

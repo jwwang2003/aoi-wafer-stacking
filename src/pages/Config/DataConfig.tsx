@@ -103,15 +103,14 @@ export default function DataConfigSubpage() {
         }
     }, [mounted]);
 
-    useEffect(() => {
-        const init = async () => {
-            // await dispatch(scanDataSourceFolders());
-            await dispatch(revalidateDataSource());
-        }
-        if (mounted) {
-            init();
-        }
-    }, [mounted, paths]);
+    // useEffect(() => {
+    //     const init = async () => {
+    //         await dispatch(scanDataSourceFolders());
+    //     }
+    //     if (mounted) {
+    //         init();
+    //     }
+    // }, [paths]);
 
     return (
         <>

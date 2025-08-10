@@ -4,7 +4,7 @@ import { basename, resolve } from '@tauri-apps/api/path';
 import { readDir, stat } from '@tauri-apps/plugin-fs';
 
 import { DataSourceConfigState, DataSourceType, FolderResult } from '@/types/DataSource';
-import { ExcelData, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
+import { ExcelMetadata, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
 import { initialWaferMetadataState as initialState, now } from '@/constants/default';
 import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
@@ -179,8 +179,8 @@ export async function readFolderData(folders: FolderCollection): Promise<RawWafe
  * @param folders 
  * @returns 
  */
-export async function readSubstrateMetadata(folders: FolderResult[]): Promise<ExcelData[]> {
-    const result: ExcelData[] = [];
+export async function readSubstrateMetadata(folders: FolderResult[]): Promise<ExcelMetadata[]> {
+    const result: ExcelMetadata[] = [];
 
     const defectListFolderRegex = /^Defect list$/;
     const substrateDefectListFileRegex = /^([A-Za-z0-9]+)\.xls$/;

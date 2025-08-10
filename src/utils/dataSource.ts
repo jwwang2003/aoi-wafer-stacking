@@ -14,14 +14,9 @@ import { DataSourceRegexState, DataSourceType } from '@/types/DataSource';
  *   }
  */
 export async function autoRecognizeFoldersByType(
-    rootPath: string | undefined,
+    subfolders: string[],
     regexMap: DataSourceRegexState
 ): Promise<Record<DataSourceType, string[]>> {
-    if (!rootPath) {
-        throw new Error('请先设置根目录！');
-    }
-
-    const subfolders = await getSubfolders(rootPath);
     const folderMatches: Record<DataSourceType, string[]> = {
         substrate: [],
         fabCp: [],

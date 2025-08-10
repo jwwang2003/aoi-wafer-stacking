@@ -26,8 +26,8 @@ pub struct FileInfo {
     pub is_symlink: bool,
 
     pub size: u64,
-    pub mtime: Option<String>,
-    pub atime: Option<String>,
+    pub mtime: Option<f64>,
+    pub atime: Option<f64>,
     pub birthtime: Option<String>,
 
     pub readonly: bool,
@@ -57,6 +57,25 @@ pub fn get_iso_time(time: std::io::Result<SystemTime>) -> Option<String> {
         })
 }
 
+/// Same as above but accepts a plain `SystemTime` and supports pre-epoch (negative) values.
+pub fn js_time_ms_from_system_time(t: SystemTime) -> f64 {
+    match t.duration_since(UNIX_EPOCH) {
+        Ok(dur) => (dur.as_secs() as f64) * 1000.0 + (dur.subsec_millis() as f64),
+        Err(e) => {
+            // Pre-epoch times → negative milliseconds
+            let dur = e.duration();
+            -((dur.as_secs() as f64) * 1000.0 + (dur.subsec_millis() as f64))
+        }
+    }
+}
+
+/// JS-compatible time value (like `Date#getTime()`).
+/// - Returns `Some(f64)` with integer milliseconds as a JS Number would hold.
+/// - Returns `None` if the input Result is Err.
+pub fn get_js_time_ms(time: std::io::Result<SystemTime>) -> Option<f64> {
+    time.ok().map(js_time_ms_from_system_time)
+}
+
 pub fn build_file_info(meta: &Metadata, _path: &str) -> FileInfo {
     FileInfo {
         is_file: meta.is_file(),
@@ -64,8 +83,8 @@ pub fn build_file_info(meta: &Metadata, _path: &str) -> FileInfo {
         is_symlink: meta.file_type().is_symlink(),
 
         size: meta.len(),
-        mtime: get_iso_time(meta.modified()),
-        atime: get_iso_time(meta.accessed()),
+        mtime: get_js_time_ms(meta.modified()),
+        atime: get_js_time_ms(meta.accessed()),
         birthtime: get_iso_time(meta.created()),
 
         readonly: meta.permissions().readonly(),

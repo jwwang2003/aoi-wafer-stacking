@@ -27,7 +27,7 @@ export enum ExcelType {
 /**
  * Metadata and context for an Excel file.
  */
-export interface ExcelData {
+export interface ExcelMetadata {
     stage: DataSourceType;
     type: ExcelType;
 
@@ -72,8 +72,27 @@ export interface WaferFileMetadata {
 ////////////////////////////////////////////////////////////////////////////////
 
 export type FolderCollection = { [K in DataSourceType]: FolderResult[] };
-export type RawWaferMetadata = ExcelData | WaferFileMetadata;
+export type RawWaferMetadata = ExcelMetadata | WaferFileMetadata;
 export type RawWaferMetadataCollection = RawWaferMetadata[];
+
+// Type guards for RawWaferMetadata
+
+// Check if object is ExcelData
+export function isExcelMetadata(item: RawWaferMetadata): item is ExcelMetadata {
+    return (
+        (item as ExcelMetadata).type !== undefined &&
+        typeof (item as ExcelMetadata).type === "string" // assuming ExcelType is string enum
+    );
+}
+
+// Check if object is WaferFileMetadata
+export function isWaferFileMetadata(item: RawWaferMetadata): item is WaferFileMetadata {
+    return (
+        typeof (item as WaferFileMetadata).productModel === "string" &&
+        typeof (item as WaferFileMetadata).batch === "string" &&
+        typeof (item as WaferFileMetadata).waferId === "string"
+    );
+}
 
 export interface WaferMetadataState {
     // data: {
