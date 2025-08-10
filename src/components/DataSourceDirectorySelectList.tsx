@@ -13,10 +13,10 @@ import { useAppDispatch, useAppSelector } from '@/hooks';
 import { addFolder, removeFolder } from '@/slices/dataSourceStateSlice';
 import { DataSourceType, FolderResult } from '@/types/DataSource';
 import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
-import { invoke } from '@tauri-apps/api/core';
 import { getRelativePath } from '@/utils/fs';
 import { deleteFolderIndexByPath } from '@/db/folderIndex';
 import { basename } from '@tauri-apps/api/path';
+import { invokeSafe } from '@/api/tauri';
 
 interface DirectorySelectListProps {
     type: DataSourceType;
@@ -39,9 +39,9 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             if (!result) return;
 
             const picked = Array.isArray(result) ? result : [result];
-            const responses: FolderResult[] = await invoke('get_file_batch_stat', {
-                folders: picked.map(f => ({ path: f })),
-            });
+            const responses: FolderResult[] = await invokeSafe(
+                'rust_read_file_stat_batch', { folders: picked.map(f => ({ path: f })) }
+            );
 
             for (const folder of responses) {
                 if (folder.exists) {

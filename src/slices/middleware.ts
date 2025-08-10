@@ -5,7 +5,8 @@ import {
     removeDataSourcePath,
     setRootPath,
     setRegexPattern,
-    saveConfig,
+    triggerSave,
+    updateSavedTime,
 } from '@/slices/dataSourceConfigSlice';
 import { advanceStepper, resetPreferencesToDefault, setDataSourceConfigPath, setOffsets, setStepper } from './preferencesSlice';
 import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
@@ -42,6 +43,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
         setDataSourcePaths.type,
         addDataSourcePath.type,
         removeDataSourcePath.type,
+        triggerSave.type
     ];
     // const dataSourceStateTypes: string[] = [
     //     addFolder.type,
@@ -97,12 +99,13 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     else if (dataSourceTypes.includes(acc.type)) {
         data = JSON.stringify(dataSourceConfig, null, 2);
         path = preferences.dataSourceConfigPath;
-        storeApi.dispatch(saveConfig());
+        storeApi.dispatch(updateSavedTime());
     } else {
         return result;
     }
 
-    persistHelper(data!, path!)
+    if (!data || !path) return result;
+    persistHelper(data, path)
         .then(() => {
             // TODO:
         })

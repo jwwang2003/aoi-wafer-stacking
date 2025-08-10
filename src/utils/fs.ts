@@ -1,10 +1,10 @@
-import { basename, join } from '@tauri-apps/api/path';
+import { basename } from '@tauri-apps/api/path';
 
 import { FolderIndexRow } from '@/db/types';
 import { getManyFolderIndexesByPaths, upsertOneFolderIndex } from '@/db/folderIndex';
 
 import { FolderResult } from '@/types/DataSource';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeSafe } from '@/api/tauri';
 
 /**
  * Scan a directory and return the **subfolders that need processing**.
@@ -37,8 +37,9 @@ import { invoke } from '@tauri-apps/api/core';
  *  - If `index_cache = true`: full paths of **new or modified** subfolders.
  *  - If `index_cache = false`: full paths of **all** direct subfolders.
  */
-export async function getSubfolders(rootPath: string, index_cache: boolean = true): Promise<string[]> {
-    const entries: FolderResult[] = await invoke('read_dir', { dir: rootPath });
+export async function getSubfolders(rootPath: string, index_cache: boolean = true):
+    Promise<{ folders: string[], totFolders: number, numRead: number, numCached: number }> {
+    const entries: FolderResult[] = await invokeSafe('rust_read_dir', { dir: rootPath });
 
     // const folderNames = entries.flatMap((value) => await basename(value.path));
     const folderNames = await Promise.all(
@@ -47,6 +48,8 @@ export async function getSubfolders(rootPath: string, index_cache: boolean = tru
     const folderIndexes = index_cache ? await getManyFolderIndexesByPaths(folderNames) : new Map<string, FolderIndexRow>();
 
     const folders: string[] = [];
+    let numRead: number = 0;
+    let numCached: number = 0;
 
     // Loop through both arrays together
     for (let i = 0; i < entries.length; i++) {
@@ -56,12 +59,12 @@ export async function getSubfolders(rootPath: string, index_cache: boolean = tru
         if (entry !== undefined) {
             if (index_cache && folderIndexes.has(folderName)) {
                 const rec = folderIndexes.get(folderName);
-                console.debug(rec!.last_mtime, Number(entry.info?.mtime));
                 if (
                     rec && entry.info && entry.info.mtime &&
                     rec.last_mtime >= Number(entry.info.mtime)  // checks that the mtime inside of the DB is up-to-date
                 ) {
                     // Folder cache is still valid -> skip
+                    numCached += 1;
                     continue;
                 }
             }
@@ -72,11 +75,17 @@ export async function getSubfolders(rootPath: string, index_cache: boolean = tru
                     last_mtime: Number(entry.info?.mtime) ?? 0
                 });
             }
+            numRead += 1;
             folders.push(entry.path);
         }
     }
 
-    return folders;
+    return {
+        folders,
+        totFolders: entries.length,
+        numRead,
+        numCached
+    };
 }
 
 /**

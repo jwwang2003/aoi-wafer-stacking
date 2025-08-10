@@ -36,10 +36,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             // File IO related
-            file_lock::lock_file,
-            file_lock::unlock_file,
-            commands::get_file_batch_stat,
-            commands::read_dir,
+            // file_lock::lock_file,
+            // file_lock::unlock_file,
+
+            // Commands
+            commands::rust_read_file_stat_batch,
+            commands::rust_read_dir,
             // Cryptography
             commands::rust_sha1,
             commands::rust_sha256,

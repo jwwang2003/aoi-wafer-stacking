@@ -4,9 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 import type { DataSourceType, Folder, FolderGroupsState, FolderResult } from '@/types/DataSource';
 
 import { initialDataSourceState as initialState } from '@/constants/default';
-import { invoke } from '@tauri-apps/api/core';
 import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
+import { invokeSafe } from '@/api/tauri';
 
 // DEVELOPER NOTES:
 // April 10, 2025
@@ -72,9 +72,9 @@ export const refreshFolderStatuses = createAsyncThunk(
                 const typed = type as DataSourceType;
 
                 const folders: Folder[] = value;
-                const responses: FolderResult[] = await invoke('get_file_batch_stat', {
-                    folders: folders.map(f => ({ path: f.path })),
-                });
+                const responses: FolderResult[] = await invokeSafe(
+                    'rust_read_file_stat_batch', { folders: folders.map(f => ({ path: f.path })) }
+                );
 
                 const pathToResult = new Map(responses.map(r => [r.path, r]));
 

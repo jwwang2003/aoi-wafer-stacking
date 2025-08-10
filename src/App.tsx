@@ -12,7 +12,7 @@ import {
     Tooltip
 } from '@mantine/core';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ToastContainer, toast } from 'react-toastify';
+import { ToastContainer } from 'react-toastify';
 
 import { menuItems } from '@/constants/MenuItems';
 import { useDispatch } from 'react-redux';
@@ -24,6 +24,7 @@ import { initDataSourceConfig } from './slices/dataSourceConfigSlice';
 import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
 import { initConsoleInterceptor } from './utils/log';
 import { PreferencesState } from './types/Preferences';
+import { infoToast } from '@/components/Toaster';
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -64,14 +65,9 @@ export default function App() {
 
     // A welcome message whenever the UI is loaded!
     useEffect(() => {
-        toast.info('欢迎使用！', {
-            position: 'top-right',
-            autoClose: 7500,            // wait for 7.5 seconds
-            hideProgressBar: true,
-            closeOnClick: true,
-            pauseOnHover: false,
-            draggable: false,
-        });
+        infoToast(
+            { title: '欢迎使用' }
+        );
         console.log('Hello, world!');
     }, []);
 

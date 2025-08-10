@@ -10,7 +10,7 @@ use crate::file::file_io::{build_file_info, FolderRequest, FolderResult};
 // }
 
 #[tauri::command]
-pub fn get_file_batch_stat(folders: Vec<FolderRequest>) -> Vec<FolderResult> {
+pub fn rust_read_file_stat_batch(folders: Vec<FolderRequest>) -> Vec<FolderResult> {
     folders
         .into_iter()
         .map(|folder| {
@@ -33,7 +33,7 @@ pub fn get_file_batch_stat(folders: Vec<FolderRequest>) -> Vec<FolderResult> {
 
 /// Get metadata for all **direct subfolders** under the given folder.
 #[tauri::command]
-pub fn read_dir(dir: String) -> Vec<FolderResult> {
+pub fn rust_read_dir(dir: String) -> Vec<FolderResult> {
     let mut out = Vec::new();
     let root = Path::new(&dir);
 

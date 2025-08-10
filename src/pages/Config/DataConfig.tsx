@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Group, Stack, Chip, Button, Title, Divider, Tooltip } from '@mantine/core';
-import { IconRefresh, IconScanEye } from '@tabler/icons-react';
+import { Group, Stack, Chip, Button, Title, Divider } from '@mantine/core';
+import { IconScanEye } from '@tabler/icons-react';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import {
@@ -8,7 +8,8 @@ import {
     setRootPath,
     revalidateDataSource,
     scanDataSourceFolders,
-    removeAllDataSourcePaths
+    removeAllDataSourcePaths,
+    triggerSave as dataSourceTriggerSave
 } from '@/slices/dataSourceConfigSlice';
 
 import {
@@ -40,18 +41,17 @@ export default function DataConfigSubpage() {
     const [mounted, setMounted] = useState<boolean>(false);
     const dispatch = useAppDispatch();
 
-    const { rootPath, rootLastModified } = useAppSelector((state) => state.dataSourceConfig);
-    const { paths } = useAppSelector((state) => state.dataSourceConfig);
-    const regexLastModified = useAppSelector((state) => state.dataSourceConfig.regex.lastModified);
-    const pathsLastModified = useAppSelector((state) => state.dataSourceConfig.paths.lastModified);
-    const lastSaved = useAppSelector((state) => state.dataSourceConfig.lastSaved);
+    const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
+    const { rootPath, rootLastModified, paths, regex, lastSaved } = dataSourceConfig;
+    const { lastModified: pathsLastModified } = paths;
+    const { lastModified: regexLastModified } = regex;
 
     // Dirty flags
     // Prompt the user to save the sections that are dirty before allowing them
     // to proceed to the next stage or step.
-    const rootDirty = rootLastModified > lastSaved;
-    const regexDirty = regexLastModified > lastSaved;
-    const pathsDirty = pathsLastModified > lastSaved;
+    const rootDirty = rootLastModified >= lastSaved;
+    const regexDirty = regexLastModified >= lastSaved;
+    const pathsDirty = pathsLastModified >= lastSaved;
 
     // Regex patterns from Redux
     const regexPatterns = useAppSelector((state) => state.dataSourceConfig.regex);
@@ -72,17 +72,17 @@ export default function DataConfigSubpage() {
     // NOTE: INIT
     // =========================================================================
     useEffect(() => {
-        if (!mounted) {
+        if (!mounted && dataSourceConfig) {
             setMounted(true);
+            // If anything is dirty, on first load, trigger a save
+            if (rootDirty || regexDirty || pathsDirty) dispatch(dataSourceTriggerSave());
         }
-    }, []);
+    }, [rootDirty, regexDirty, pathsDirty,]);
 
     // =========================================================================
     // NOTE: METHODS
     // =========================================================================
-    const handleAutoFolderRecognition = async () => {
-        await dispatch(scanDataSourceFolders());
-    };
+    const handleAutoFolderRecognition = async () => await dispatch(scanDataSourceFolders());
 
     const handleRootFolderChange = async (u: string) => {
         await dispatch(removeAllDataSourcePaths());
@@ -98,36 +98,16 @@ export default function DataConfigSubpage() {
             await dispatch(scanDataSourceFolders());
             await dispatch(revalidateDataSource());
         }
-        if (mounted) {
-            init();
-        }
+        if (mounted) init();
     }, [mounted]);
-
-    // useEffect(() => {
-    //     const init = async () => {
-    //         await dispatch(scanDataSourceFolders());
-    //     }
-    //     if (mounted) {
-    //         init();
-    //     }
-    // }, [paths]);
 
     return (
         <>
             {/* Section: Root Directory */}
             <Stack align='stretch' gap='md'>
                 <Title order={2}>根目录选择</Title>
-                <PathPicker
-                    label='根目录'
-                    value={rootPath}
-                    onChange={handleRootFolderChange}
-                />
-                <LastSaved
-                    dirty={rootDirty}
-                    lastModified={rootLastModified}
-                    lastSaved={lastSaved}
-                // onSave={persistDataSourceConfig}
-                />
+                <PathPicker label='根目录' value={rootPath} onChange={handleRootFolderChange} />
+                <LastSaved dirty={rootDirty} lastModified={rootLastModified} lastSaved={lastSaved} />
 
                 <Group justify='flex-start'>
                     <Chip.Group multiple value={rootFolderStageOptions} onChange={setRootFolderStageOptions}>
@@ -138,7 +118,7 @@ export default function DataConfigSubpage() {
                     </Chip.Group>
                     <Divider orientation='vertical' />
                     <Button leftSection={<IconScanEye size={18} />} onClick={handleAutoFolderRecognition}>
-                        触发自动识别
+                        触发子目录识别
                     </Button>
                 </Group>
             </Stack>
@@ -148,21 +128,16 @@ export default function DataConfigSubpage() {
                 <Stack align='stretch' gap='md'>
                     <Title order={3}>子目录自动识别配置</Title>
                     <Stack align='stretch' gap='md'>
-                        {regexConfig.map(({ label, key }) => (
+                        {regexConfig.map(({ label, key }) =>
                             <RegexInput
                                 key={key}
                                 label={label}
                                 defaultRegex={regexPatterns[key]}
                                 onValidChange={(r) => handleRegexChange(r, key)}
                             />
-                        ))}
+                        )}
                     </Stack>
-                    <LastSaved
-                        dirty={regexDirty}
-                        lastModified={regexLastModified}
-                        lastSaved={lastSaved}
-                    // onSave={persistDataSourceConfig}
-                    />
+                    <LastSaved dirty={regexDirty} lastModified={regexLastModified} lastSaved={lastSaved} />
                 </Stack>
             )}
 
@@ -171,34 +146,11 @@ export default function DataConfigSubpage() {
             {/* Section: Data source subdirectories */}
             <Stack align='stretch' gap='md'>
                 <Title order={2}>子目录选择</Title>
-
-                <Tooltip label='刷新' withArrow>
-                    <Button
-                        variant='light'
-                        color='blue'
-                        leftSection={<IconRefresh size={16} />}
-                        onClick={() => { }}
-                    >
-                        刷新
-                    </Button>
-                </Tooltip>
-
-                {dataSourceFlow.map(({ type, name }) => {
-                    return (
-                        <SubfolderSelectorSection
-                            key={type}
-                            type={type}
-                            title={name}
-                        />
-                    );
-                })}
+                {dataSourceFlow.map(({ type, name }) =>
+                    <SubfolderSelectorSection key={type} type={type} title={name} />
+                )}
             </Stack>
-            <LastSaved
-                dirty={pathsDirty}
-                lastModified={pathsLastModified}
-                lastSaved={lastSaved}
-            // onSave={persistDataSourceConfig}
-            />
+            <LastSaved dirty={pathsDirty} lastModified={pathsLastModified} lastSaved={lastSaved} />
 
             {/* Section: Data source stats */}
             {/* NOTE: moved to another page */}

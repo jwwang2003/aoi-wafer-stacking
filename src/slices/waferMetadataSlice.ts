@@ -1,5 +1,4 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { invoke } from '@tauri-apps/api/core';
 import { basename, resolve } from '@tauri-apps/api/path';
 import { readDir, stat } from '@tauri-apps/plugin-fs';
 
@@ -10,6 +9,7 @@ import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/Stepper';
 import { toast } from 'react-toastify';
+import { invokeSafe } from '@/api/tauri';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
@@ -99,9 +99,10 @@ export async function getDataSourcePathsFolders(state: DataSourceConfigState): P
                 folderList.map(async (f) => ({ path: await resolve(rootPath, f) }))
             );
 
-            const responses: FolderResult[] = await invoke('get_file_batch_stat', {
-                folders: resolvedFolders,
-            });
+            const responses: FolderResult[] = await invokeSafe(
+                'rust_read_file_stat_batch',
+                { folders: resolvedFolders }
+            );
 
             return [key, responses] as const;
         })

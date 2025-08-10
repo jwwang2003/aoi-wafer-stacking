@@ -29,6 +29,7 @@ import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper'
 
 import { baseDir, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
 import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
+import { dirScanResultToast } from '@/components/Toaster';
 
 
 export const initDataSourceConfig = createAsyncThunk<
@@ -178,7 +179,7 @@ export const revalidateDataSource = createAsyncThunk<
 });
 
 export const scanDataSourceFolders = createAsyncThunk<
-    { totalDetected: number; totalAdded: number },
+    { totMatch: number; totAdded: number },
     void,
     {
         state: RootState;
@@ -191,17 +192,18 @@ export const scanDataSourceFolders = createAsyncThunk<
             dataSourceConfig: { rootPath, regex, paths: configPaths },
             dataSourceState,
         } = getState();
-        if (!rootPath) return { totalDetected: 0, totalAdded: 0 };
+        if (!rootPath) return { totMatch: 0, totAdded: 0 };
 
         try {
             const start = performance.now();
 
             if (!rootPath || rootPath === '') throw Error('请先设置根目录！');
-            const subfolders = await getSubfolders(rootPath);
+            const { folders: subfolders, totFolders, numRead, numCached } = await getSubfolders(rootPath, true);
+            if (totFolders === 0) throw new Error('未识别到任何符合的子文件夹。请检查正则表达式和文件夹结构。');
             const folders = await autoRecognizeFoldersByType(subfolders, regex);
 
-            let totalDetected = 0;
-            let totalAdded = 0;
+            let totMatch = 0;
+            let totAdded = 0;
 
             for (const [typeKey, paths] of Object.entries(folders)) {
                 const type = typeKey as DataSourceType;
@@ -211,14 +213,14 @@ export const scanDataSourceFolders = createAsyncThunk<
                 );
 
                 for (const path of paths) {
-                    totalDetected++;
+                    totMatch++;
                     const inConfig = existingInConfig.has(path);
                     const inState = existingInState.has(path);
 
                     if (!inConfig) dispatch(addDataSourcePath({ type, path }));
                     if (!inState) dispatch(addFolder({ type, path }));
 
-                    if (!inConfig && !inState) totalAdded++;
+                    if (!inConfig && !inState) totAdded++;
                 }
             }
 
@@ -226,13 +228,13 @@ export const scanDataSourceFolders = createAsyncThunk<
 
             await dispatch(revalidateDataSource());
 
-            // show success toast here
-            toast.dark(
-                `自动识别完成：共识别到 ${totalDetected} 个文件夹，其中新增 ${totalAdded} 个 (耗时 ${duration.toFixed(0)} ms)。`,
-                { closeOnClick: true, pauseOnHover: false, draggable: false }
+            dirScanResultToast(
+                { totDirs: totFolders, numRead, numCached, totMatch, totAdded },
+                duration,
+                "子目录识别"
             );
 
-            return { totalDetected, totalAdded };
+            return { totMatch, totAdded };
         } catch (err: unknown) {
             const message =
                 err instanceof Error
@@ -306,9 +308,10 @@ const dataSourceSlice = createSlice({
         },
 
         // —— Save action ——
-        saveConfig(state) {
+        triggerSave() { },   // do nothing lol
+        updateSavedTime(state) {
             state.lastSaved = now();
-        },
+        }
     },
     extraReducers: (builder) => {
         builder
@@ -338,7 +341,8 @@ export const {
     removeDataSourcePath,
     removeAllDataSourcePaths,
     setRegexPattern,
-    saveConfig,
+    triggerSave,
+    updateSavedTime,
 } = dataSourceSlice.actions;
 
 export default dataSourceSlice.reducer;
