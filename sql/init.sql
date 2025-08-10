@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS product_defect_map (
     FOREIGN KEY (product_id) REFERENCES oem_product_map(product_id),
     FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id),
     
-    FOREIGN KEY (file_path) REFERENCES file_index(file_path)
+    FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 
 -- Enforce that each sub_id is unique to one wafer
@@ -50,8 +50,9 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
     PRIMARY KEY (product_id, batch_id, wafer_id),
     FOREIGN KEY (product_id, batch_id, wafer_id)
         REFERENCES product_defect_map(product_id, lot_id, wafer_id)
+        ON DELETE CASCADE
     
-    FOREIGN KEY (file_path) REFERENCES file_index(file_path)
+    FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS file_index (
