@@ -825,6 +825,8 @@ impl HexMapData {
         out
     }
 
+    // TODO: Remember to use this
+    #[allow(dead_code)]
     pub fn from_lines(lines: &[String]) -> Result<Self, String> {
         // Trim empty lines once
         let mut it = lines.iter().map(|s| s.trim()).filter(|s| !s.is_empty());

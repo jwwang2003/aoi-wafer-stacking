@@ -40,7 +40,10 @@ pub fn read_txt(path: &str) -> io::Result<Vec<String>> {
 ///    If `base_path` already ends with that suffix, it won’t be duplicated.
 ///
 /// # Errors
-/// Returns any I/O error encountered when creating or writing the file.
+/// - Returns any I/O error encountered when creating or writing the file.
+
+// TODO: Fix dead code
+#[allow(dead_code)]
 pub fn write_to_file<T: std::fmt::Display>(
     data: &T,
     base_path: &str,
@@ -71,6 +74,9 @@ pub fn write_to_file<T: std::fmt::Display>(
 ///
 /// - Returns `io::ErrorKind::NotFound` if the file does not exist.
 /// - Returns `io::ErrorKind::InvalidData` if `calamine` fails to parse the file as a valid `.xls`.
+
+// TODO: Fix dead code
+#[allow(dead_code)]
 pub fn read_xls(path: &str) -> io::Result<Xls<BufReader<File>>> {
     // Ensure the file exists before handing off to calamine
     if metadata(path).is_err() {
