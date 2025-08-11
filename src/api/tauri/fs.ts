@@ -28,3 +28,14 @@ export async function invokeReadFileStatBatch(
 
     return await invokeSafe<FolderResult[]>('rust_read_file_stat_batch', { folders });
 }
+
+/**
+ * Invoke Rust to list direct children of a directory.
+ * The Rust side should return children as FolderResult[] with absolute `path`
+ * and `info.is_directory` / `info.is_file` flags.
+ */
+export async function invokeReadDir(rootPath: string): Promise<FolderResult[]> {
+    // exactly as you requested
+    const entries = await invokeSafe<FolderResult[]>('rust_read_dir', { dir: rootPath });
+    return entries;
+}

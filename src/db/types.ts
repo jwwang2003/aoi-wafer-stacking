@@ -12,3 +12,23 @@ export type FolderIndexRow = {
     folder_path: string;   // relative path
     last_mtime: number;    // epoch millis
 };
+
+export type OemMapping = { oem_product_id: string; product_id: string };
+
+export interface OemProductMapRow {
+    oem_product_id: string;
+    product_id: string;
+}
+
+export interface ProductDefectMapRow {
+    product_id: string;
+    lot_id: string;
+    wafer_id: string;
+    sub_id: string;
+    file_path: string;
+}
+
+export interface SubstrateDefectRow {
+    sub_id: string;
+    file_path: string;
+}

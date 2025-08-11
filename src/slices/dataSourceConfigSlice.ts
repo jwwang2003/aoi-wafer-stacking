@@ -198,7 +198,7 @@ export const scanDataSourceFolders = createAsyncThunk<
             const start = performance.now();
 
             if (!rootPath || rootPath === '') throw Error('请先设置根目录！');
-            const { folders: subfolders, totFolders, numRead, numCached } = await getSubfolders(rootPath, true);
+            const { folders: subfolders, totFolders, numRead, numCached } = await getSubfolders(rootPath, false);
             if (totFolders === 0) throw new Error('未识别到任何符合的子文件夹。请检查正则表达式和文件夹结构。');
             const folders = await autoRecognizeFoldersByType(subfolders, regex);
 

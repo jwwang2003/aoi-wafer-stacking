@@ -5,7 +5,7 @@
 -- OEM -> Internal Product Mapping
 CREATE TABLE IF NOT EXISTS oem_product_map (
     oem_product_id TEXT PRIMARY KEY,    -- OEM product id
-    product_id TEXT NOT NULL            -- internal product
+    product_id TEXT NOT NULL UNIQUE            -- internal product
 );
 
 -- Product Lot/Wafer -> SubID Defect Mapping
@@ -31,7 +31,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_subid ON product_defect_map(sub_id)
 -- Substrate Defect Files (referenced by sub_id)
 CREATE TABLE IF NOT EXISTS substrate_defect (
     sub_id TEXT PRIMARY KEY,
-    file_path TEXT NOT NULL -- relative to root folder
+    file_path TEXT NOT NULL, -- relative to root folder
 
     -- substrate defect map (sub_id) will get removed when file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
@@ -53,8 +53,7 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
 
     PRIMARY KEY (product_id, batch_id, wafer_id),
     FOREIGN KEY (product_id, batch_id, wafer_id)
-        REFERENCES product_defect_map(product_id, lot_id, wafer_id)
-        ON DELETE CASCADE
+        REFERENCES product_defect_map(product_id, lot_id, wafer_id) ON DELETE CASCADE,
     
     -- wafer map entry will be removed when the file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE

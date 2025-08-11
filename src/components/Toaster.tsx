@@ -88,7 +88,7 @@ function InfoToastContent({ payload }: { payload: InfoToastPayload }) {
 export function infoToast(payload: InfoToastPayload, options?: ToastOptions) {
     const width =
         payload.width ??
-        (payload.lines && payload.lines.length > 1 ? 240 : 200); // slightly wider for 2-column
+        (payload.lines && payload.lines.length > 1 ? 300 : 'default'); // slightly wider for 2-column
 
     toast(<InfoToastContent payload={payload} />, {
         theme: payload.theme ?? 'light',
@@ -96,7 +96,7 @@ export function infoToast(payload: InfoToastPayload, options?: ToastOptions) {
         style: {
             ...globalStyles,
             width,
-            maxWidth: Math.max(width, 220),
+            // maxWidth: Math.max(width, 220),
             borderRadius: 8,
         },
         ...options,
@@ -170,8 +170,8 @@ export function dirScanResultToast(
         // compact + black border + drop shadow
         style: {
             ...globalStyles,
-            width: 240,
-            maxWidth: 280,
+            width: 280,
+            maxWidth: 300,
         },
         ...options,
     });

@@ -51,7 +51,7 @@ export default function ConfigPage() {
     // figure out which segment is active
     const currentValue =
         subpageOptions.find((opt) => location.pathname.endsWith(opt.value))
-            ?.value ?? 'data';
+            ?.value ?? 'preferences';
 
     const handleChange = (value: string) => {
         navigate(`/config/${value}`);

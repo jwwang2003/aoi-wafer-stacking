@@ -3,6 +3,9 @@ import Database from "@tauri-apps/plugin-sql";
 
 let _db: Database | null = null;
 
+// Chunking limits (SQLite host params)
+export const MAX_PARAMS = 999;
+
 /**
  * The method checks if a database is initialized, if not it will initialize one,
  * and then it returns the database. The database is located in the app data folder.
