@@ -23,7 +23,7 @@ export async function getFileIndexByPath(file_path: string): Promise<FileIndexRo
  * @returns A `Map` keyed by `file_path` containing the matching `FileIndexRow` entries.
  *          If `paths` is empty, an empty map is returned.
  */
-export async function getFileIndexesManyByPaths(paths: string[]): Promise<Map<string, FileIndexRow>> {
+export async function getManyFileIndexesByPaths(paths: string[]): Promise<Map<string, FileIndexRow>> {
     const map = new Map<string, FileIndexRow>();
     if (paths.length === 0) return map;
 

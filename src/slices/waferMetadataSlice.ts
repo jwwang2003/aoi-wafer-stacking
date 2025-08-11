@@ -1,6 +1,5 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { basename, resolve } from '@tauri-apps/api/path';
-import { readDir, stat } from '@tauri-apps/plugin-fs';
 
 import { DataSourceConfigState, DataSourceType, FolderResult } from '@/types/DataSource';
 import { ExcelMetadata, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
@@ -9,7 +8,7 @@ import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/Stepper';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
-import { infoToast } from '@/components/Toaster';
+import { dirScanResultToast, infoToast } from '@/components/Toaster';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
@@ -37,14 +36,6 @@ export const fetchWaferMetadata = createAsyncThunk<
             // end timer & compute duration
             const duration = performance.now() - start;
             console.debug(`%cRead & parse wafer metadata (${duration.toFixed(0)}ms)`, 'color: orange;')
-
-            // show toast with elapsed time
-            infoToast(
-                {
-                    title: '读取并解析元数据',
-                    lines: [{ label: '耗时', value: `${Math.round(duration)} ms` }],
-                }
-            );
 
             // advance stepper based on result
             if (parsed.length > 0) {
@@ -123,51 +114,36 @@ export async function getDataSourcePathsFolders(state: DataSourceConfigState): P
 }
 
 export async function readFolderData(folders: FolderCollection): Promise<RawWaferMetadataCollection> {
-    const stageReaders = await Promise.all([
+    // Execute all at the same time
+    const [substrate, cpProber, wlbi, aoi] = await Promise.all([
         readSubstrateMetadata(folders.substrate),
         readCpProberMetadata(folders.cpProber),
         readWlbiMetadata(folders.wlbi),
         readAoiMetadata(folders.aoi),
     ]);
 
-    const [substrate, cpProber, wlbi, aoi] = stageReaders;
-    return [...substrate, ...cpProber, ...wlbi, ...aoi];
+    // Aggregate metrics
+    const totDir = substrate.totDir + cpProber.totDir + wlbi.totDir + aoi.totDir;
+    const numRead = substrate.numRead + cpProber.numRead + wlbi.numRead + aoi.numRead;
+    const numCached = substrate.numCached + cpProber.numCached + wlbi.numCached + aoi.numCached;
+    const totMatch = substrate.totMatch + cpProber.totMatch + wlbi.totMatch + aoi.totMatch;
+    const totAdded = substrate.totAdded + cpProber.totAdded + wlbi.totAdded + aoi.totAdded;
+    const elapsed = (substrate as any).elapsed + (cpProber as any).elapsed + (wlbi as any).elapsed + (aoi as any).elapsed;
 
-    // Old method (slow)
-    // console.time('readFolderData');
-    // let result: RawWaferMetadataCollection = [];
-    // for (const [key, value] of Object.entries(folders)) {
-    //     switch (key as DataSourceType) {
-    //         case 'substrate': {
-    //             result = result.concat(await readSubstrateMetadata(value));
-    //             break;
-    //         }
-    //         case 'fabCp': {
-    //             // Handle fabCp metadata here
-    //             break;
-    //         }
-    //         case 'cpProber': {
-    //             result = result.concat(await readCpProberMetadata(value));
-    //             break;
-    //         }
-    //         case 'wlbi': {
-    //             result = result.concat(await readWlbiMetadata(value));
-    //             break;
-    //         }
-    //         case 'aoi': {
-    //             result = result.concat(await readAoiMetadata(value));
-    //             break;
-    //         }
-    //         default: {
-    //             console.error('Unknown key!', key);
-    //             break;
-    //         }
-    //     }
-    // }
+    // One toast, summed across all stages
+    dirScanResultToast(
+        { totDirs: totDir, numRead, numCached, totMatch, totAdded },
+        elapsed,
+        '读取元数据'
+    );
 
-    // console.log(result);
-    // console.timeEnd('readFolderData'); // Will print duration in ms
-    // return result;
+    // Flatten data
+    return [
+        ...substrate.data,
+        ...cpProber.data,
+        ...wlbi.data,
+        ...aoi.data,
+    ];
 }
 
 /**
@@ -179,83 +155,13 @@ export async function readFolderData(folders: FolderCollection): Promise<RawWafe
  * @param folders 
  * @returns 
  */
-// export async function readSubstrateMetadata(folders: FolderResult[]): Promise<ExcelMetadata[]> {
-//     const result: ExcelMetadata[] = [];
-
-//     const defectListFolderRegex = /^Defect list$/;
-//     const substrateDefectListFileRegex = /^([A-Za-z0-9]+)\.xls$/;
-//     const productMapFileRegex = /^([A-Za-z0-9]+)_([0-9]{8})([0-9]{6})\.xlsx$/;
-//     const productListFileRegex = /^Product list\.xlsx$/;
-
-//     for (const folder of folders) {
-//         if (!folder.exists || !folder.info?.isDirectory) continue;
-
-//         // Currently on the first level, looking for process folders
-//         const substrateDir = await readDir(folder.path);    // non-recursive by nature
-
-//         for (const substrateFile of substrateDir) {
-//             const substratePath = await resolve(folder.path, substrateFile.name);
-//             if (substrateFile.isDirectory) {
-//                 if (!defectListFolderRegex.test(substrateFile.name)) continue;
-
-//                 const defectDir = (await readDir(substratePath)).filter(
-//                     (file) => file.isFile && substrateDefectListFileRegex.test(file.name)
-//                 );
-
-//                 for (const defect of defectDir) {
-//                     const productListMatch = substrateDefectListFileRegex.exec(defect.name);
-//                     if (!productListMatch) continue;
-//                     const [, id] = productListMatch;
-//                     const filePath = await resolve(substratePath, defect.name);
-//                     const info = await stat(filePath);
-//                     const lastModified = info.mtime?.getTime() ?? -1;
-//                     result.push({
-//                         type: ExcelType.DefectList,
-//                         stage: 'substrate',
-//                         id,
-//                         filePath,
-//                         lastModified
-//                     })
-//                 }
-//             } else {
-//                 // Read files
-//                 const name = await basename(substratePath);
-
-//                 // Product list (FAB Product ID <=> FAB Product ID, mapping)
-//                 // 产品型号与产品型号对应关系 (批次号是唯一的)
-//                 if (productListFileRegex.test(name)) {
-//                     const info = await stat(substratePath);
-//                     const lastModified = info.mtime?.getTime() ?? -1;
-//                     result.push({
-//                         type: ExcelType.Mapping,
-//                         stage: 'substrate',
-//                         filePath: substratePath,
-//                         lastModified
-//                     });
-//                 } else if (productMapFileRegex.test(name)) {
-//                     const productListMatch = productMapFileRegex.exec(name);
-//                     if (!productListMatch) continue;
-//                     const [, oem, date, time] = productListMatch;
-//                     // oem -> 代工广场产品号
-//                     const info = await stat(substratePath);
-//                     const lastModified = info.mtime?.getTime() ?? -1;
-//                     result.push({
-//                         type: ExcelType.Product,
-//                         stage: 'substrate',
-//                         oem,
-//                         time: parseWaferMapTimestamp(date, time).toISOString(),
-//                         filePath: substratePath,
-//                         lastModified
-//                     });
-//                 }
-//             }
-//         }
-//     }
-//     return result;
-// }
 import { listDirs, listFiles, join, mtimeMs, match } from '@/utils/fs';
 import { scanPattern } from '@/utils/waferData';
-export async function readSubstrateMetadata(folders: FolderResult[]): Promise<ExcelMetadata[]> {
+import { logCacheReport } from '@/utils/console';
+export async function readSubstrateMetadata(
+    folders: FolderResult[]
+): Promise<{ data: ExcelMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
+    const t0 = performance.now();
     const result: ExcelMetadata[] = [];
 
     const defectListFolder = /^Defect list$/;
@@ -263,16 +169,55 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
     const productMap = /^([A-Za-z0-9]+)_([0-9]{8})([0-9]{6})\.xlsx$/;
     const productList = /^Product list\.xlsx$/;
 
+    let totDir = 0, numRead = 0, numCached = 0, totMatch = 0, totAdded = 0;
+
+    // for log: everything we considered (folders + files; read + cached)
+    const considered: string[] = [];
+
     for (const folder of folders) {
         if (!folder.exists || !folder.info?.isDirectory) continue;
 
         // 1) Defect list folder
-        for (const dl of await listDirs(folder.path, defectListFolder)) {
-            const dlPath = await join(folder.path, dl.name);
-            for (const f of await listFiles(dlPath, defectXls)) {
-                const m = match(defectXls, f.name); if (!m) continue;
+        const {
+            folders: dlFolders,
+            cached: dlFoldersCached,
+            totDir: totDirFolder,
+            numRead: numReadFolders,
+            numCached: numCachedFolders,
+        } = await listDirs({ root: folder.path, name: defectListFolder });
+
+        totDir += totDirFolder;
+        numRead += numReadFolders;
+        numCached += numCachedFolders;
+
+        // record considered folders (absolute paths)
+        for (const d of dlFolders) considered.push(await join(folder.path, d));
+        for (const c of dlFoldersCached) considered.push(c.folder_path);
+
+        for (const dl of dlFolders.concat(dlFoldersCached.map((f) => f.folder_path))) {
+            const dlName = await basename(dl);
+            const dlPath = await join(folder.path, dlName);
+
+            const {
+                files,
+                cached,
+                totDir: totDirFilesInDl,
+                numRead: numReadFilesInDl,
+                numCached: numCachedFilesInDl,
+            } = await listFiles({ root: dlPath, name: defectXls });
+
+            totDir += totDirFilesInDl;
+            numRead += numReadFilesInDl;
+            numCached += numCachedFilesInDl;
+
+            // record considered files
+            for (const f of files) considered.push(await join(dlPath, f));
+            for (const c of cached) considered.push(c.file_path);
+
+            for (const f of files) {
+                const m = match(defectXls, f); if (!m) continue;
                 const [, id] = m;
-                const filePath = await join(dlPath, f.name);
+                const filePath = await join(dlPath, f);
                 result.push({
                     type: ExcelType.DefectList,
                     stage: 'substrate',
@@ -280,15 +225,45 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
                     filePath,
                     lastModified: await mtimeMs(filePath),
                 });
+                totMatch++; totAdded++;
+            }
+
+            for (const file of cached) {
+                const f = await basename(file.file_path);
+                const m = match(defectXls, f); if (!m) continue;
+                const [, id] = m;
+                result.push({
+                    type: ExcelType.DefectList,
+                    stage: 'substrate',
+                    id,
+                    filePath: file.file_path,
+                    lastModified: file.last_mtime,
+                });
+                // no numCached++ here; we already added numCachedFilesInDl
             }
         }
 
         // 2) Root-level Excel files
-        const rootFiles = await listFiles(folder.path, /.+/);
+        const {
+            files: rootFiles,
+            cached: rootCached,
+            totDir: totDirRootFiles,
+            numRead: numReadRootFiles,
+            numCached: numCachedRootFiles,
+        } = await listFiles({ root: folder.path, name: /.+/ });
+
+        totDir += totDirRootFiles;
+        numRead += numReadRootFiles;
+        numCached += numCachedRootFiles;
+
+        // record considered files
+        for (const f of rootFiles) considered.push(await join(folder.path, f));
+        for (const c of rootCached) considered.push(c.file_path);
+
         for (const f of rootFiles) {
-            const m1 = match(productList, f.name);
-            const m2 = match(productMap, f.name);
-            const filePath = await join(folder.path, f.name);
+            const m1 = match(productList, f);
+            const m2 = match(productMap, f);
+            const filePath = await join(folder.path, f);
 
             if (m1) {
                 result.push({
@@ -297,6 +272,7 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
                     filePath,
                     lastModified: await mtimeMs(filePath),
                 });
+                totMatch++; totAdded++;
             } else if (m2) {
                 const [, oem, date, time] = m2;
                 result.push({
@@ -307,10 +283,49 @@ export async function readSubstrateMetadata(folders: FolderResult[]): Promise<Ex
                     filePath,
                     lastModified: await mtimeMs(filePath),
                 });
+                totMatch++; totAdded++;
             }
         }
+
+        for (const file of rootCached) {
+            const f = await basename(file.file_path);
+            const m1 = match(productList, f);
+            const m2 = match(productMap, f);
+
+            if (m1) {
+                result.push({
+                    type: ExcelType.Mapping,
+                    stage: 'substrate',
+                    filePath: file.file_path,
+                    lastModified: file.last_mtime,
+                });
+            } else if (m2) {
+                const [, oem, date, time] = m2;
+                result.push({
+                    type: ExcelType.Product,
+                    stage: 'substrate',
+                    oem,
+                    time: parseWaferMapTimestamp(date, time).toISOString(),
+                    filePath: file.file_path,
+                    lastModified: file.last_mtime,
+                });
+            }
+            // no numCached++ here; we already added numCachedRootFiles
+        }
     }
-    return result;
+
+    const elapsed = performance.now() - t0;
+
+    logCacheReport({
+        dirs: considered.length ? considered : 0,
+        totDir,
+        numCached,
+        numRead,
+        label: 'substrate',
+        durationMs: Math.round(elapsed),
+    });
+
+    return { data: result, totDir, numRead, numCached, totMatch, totAdded, elapsed };
 }
 
 
@@ -333,91 +348,9 @@ export async function readFabCpMetadata(folders: FolderResult[]): Promise<WaferF
  *              产品型号_批次号_片号_mapExt.txt
  * @param folders 
  */
-// export async function readCpProberMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
-//     const result: WaferFileMetadata[] = [];
-
-//     // Folder: 产品型号_批次号_工序_复测次数
-//     const processFolderRegex = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/;
-//     //                            productModel   batch         processSubStage  retestCount
-//     // Folder: 产品型号_批次号_片号
-//     const waferFolderRegex = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)$/;
-//     //                          productModel   batch         waferId
-//     // File: 产品型号_批次号_片号_mapExt.txt
-//     const fileRegex = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_mapEx\.txt$/;
-//     //                   productModel   batch         waferId
-
-//     for (const folder of folders) {
-//         if (!folder.exists || !folder.info?.isDirectory) continue;
-
-//         // Currently on the first level, looking for process folders
-//         const processFolders = (await readDir(folder.path)).filter(
-//             (folder) => folder.isDirectory && processFolderRegex.test(folder.name)
-//         );    // non-recursive by nature
-
-//         for (const processFolder of processFolders) {
-//             const processFolderMatch = processFolderRegex.exec(processFolder.name);
-//             if (!processFolderMatch) continue;
-
-//             // NOTE: processSubStage determines CP2 or CP3, etc.
-//             const [, productModel1, batch1, processSubStage, retestCount] = processFolderMatch;
-
-//             // Now on the second level, looking for wafer folders
-//             const processFolderPath = await resolve(folder.path, processFolder.name);
-//             const waferFolders = (await readDir(processFolderPath)).filter(
-//                 (folder) => folder.isDirectory && waferFolderRegex.test(folder.name)
-//             );
-
-//             for (const wafer of waferFolders) {
-//                 const waferFolderMatch = waferFolderRegex.exec(wafer.name);
-//                 if (!waferFolderMatch) continue;
-
-//                 const [, productModel2, batch2, waferId2] = waferFolderMatch;
-
-//                 if (productModel1 !== productModel2 || batch1 !== batch2) {
-//                     console.error('Data misalignment in CP-prober!');
-//                     console.error(`${productModel2}, ${batch2}, ${waferId2} != ${productModel1}, ${batch1}, ${waferId2}`)
-//                     continue;
-//                 }
-
-//                 const waferFolderPath = await resolve(processFolderPath, wafer.name);
-//                 const files = (await readDir(waferFolderPath)).filter(
-//                     (file) => file.isFile && fileRegex.test(file.name)
-//                 );
-
-//                 for (const file of files) {
-//                     if (!file.isFile) continue;
-
-//                     const fileMatch = fileRegex.exec(file.name);
-//                     if (!fileMatch) continue;
-
-//                     const [, productModel3, batch3, waferId3] = fileMatch;
-
-//                     if (productModel3 !== productModel2 || batch3 !== batch2 || waferId3 !== waferId2) {
-//                         console.error('Data misalignment in CP-prober!');
-//                         console.error(`${productModel3}, ${batch3}, ${waferId3} != ${productModel2}, ${batch2}, ${waferId2}`)
-//                         continue;
-//                     }
-
-//                     const filePath = await resolve(waferFolderPath, file.name);
-//                     const info = await stat(filePath);
-//                     const lastModified = info?.mtime?.getTime() ?? -1;
-//                     result.push({
-//                         stage: 'cpProber',
-//                         productModel: productModel3,
-//                         processSubStage: Number(processSubStage),
-//                         batch: batch3,
-//                         waferId: waferId3,
-//                         retestCount: Number(retestCount),
-//                         filePath,
-//                         lastModified
-//                     });
-//                 }
-//             }
-//         }
-//     }
-//     return result;
-// }
-export async function readCpProberMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
+export async function readCpProberMetadata(
+    folders: FolderResult[]
+): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
     // Folder: 产品型号_批次号_工序_复测次数
@@ -434,7 +367,7 @@ export async function readCpProberMetadata(folders: FolderResult[]): Promise<Waf
         productModel: string; batch: string; processSubStage: string; retestCount: string; waferId?: string;
     };
 
-    const items = await scanPattern<Ctx>(
+    const scanResult = await scanPattern<Ctx>(
         roots,
         {
             steps: [
@@ -466,6 +399,10 @@ export async function readCpProberMetadata(folders: FolderResult[]): Promise<Waf
         }
     );
 
+    const {
+        data: items
+    } = scanResult;
+
     // validate and map to your output type
     const result: WaferFileMetadata[] = [];
     for (const { ctx, filePath, lastModified } of items) {
@@ -491,7 +428,10 @@ export async function readCpProberMetadata(folders: FolderResult[]): Promise<Waf
         });
     }
 
-    return result;
+    return {
+        ...scanResult,
+        data: result,
+    };
 }
 
 /**
@@ -502,83 +442,9 @@ export async function readCpProberMetadata(folders: FolderResult[]): Promise<Waf
  * @param folders 
  * @returns 
  */
-// export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
-//     const result: WaferFileMetadata[] = [];
-
-//     // Folder: 产品型号_批次号_工序_复测次数
-//     const processFolderRegex = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/;
-//     //                            productModel   batch         processSubStage  retestCount
-//     // Folder: 产品型号_批次号_片号
-//     const wlbiFolderRegex = /^WaferMap$/;
-//     // File: 产品型号_批次号_片号_mapExt.txt
-//     const fileRegex = /^([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})_([0-9]{6})\.WaferMap$/
-//     //                   waferID      batch      date       time
-
-//     for (const folder of folders) {
-//         if (!folder.exists || !folder.info?.isDirectory) continue;
-
-//         // Currently on the first level, looking for process folders
-//         const processFolders = (await readDir(folder.path)).filter(
-//             (folder) => folder.isDirectory && processFolderRegex.test(folder.name)
-//         );
-
-//         for (const processFolder of processFolders) {
-//             const processFolderMatch = processFolderRegex.exec(processFolder.name);
-//             if (!processFolderMatch) continue;
-
-//             // NOTE: processSubStage determines CP2 or CP3, etc.
-//             const [, productModel1, batch1, processSubStage, retestCount] = processFolderMatch;
-
-//             // Now on the second level, looking for wafer folders
-//             const processFolderPath = await resolve(folder.path, processFolder.name);
-//             const wlbiFolders = (await readDir(processFolderPath)).filter(
-//                 (folder) => folder.isDirectory && wlbiFolderRegex.test(folder.name)
-//             );
-
-//             for (const wlbi of wlbiFolders) {
-//                 const waferFolderMatch = wlbiFolderRegex.exec(wlbi.name);
-//                 if (!waferFolderMatch) continue;
-
-//                 const [,] = waferFolderMatch;
-
-//                 const wlbiFolderPath = await resolve(processFolderPath, wlbi.name);
-//                 const files = (await readDir(wlbiFolderPath)).filter(
-//                     (file) => file.isFile && fileRegex.test(file.name)
-//                 );
-
-//                 for (const file of files) {
-//                     const fileMatch = fileRegex.exec(file.name);
-//                     if (!fileMatch) continue;
-
-//                     const [, batch3, waferId3, date, time] = fileMatch;
-
-//                     if (batch3 !== batch1) {
-//                         console.error('Data misalignment in WLBI!');
-//                         console.error(`batch: ${batch3} != ${batch1}`)
-//                         continue;
-//                     }
-
-//                     const filePath = await resolve(wlbiFolderPath, file.name);
-//                     const info = await stat(filePath);
-//                     const lastModified = info.mtime?.getTime() ?? -1;
-//                     result.push({
-//                         stage: 'wlbi',
-//                         productModel: productModel1,
-//                         processSubStage: Number(processSubStage),
-//                         batch: batch3,
-//                         waferId: waferId3,
-//                         retestCount: Number(retestCount),
-//                         time: parseWaferMapTimestamp(date, time).toISOString(),
-//                         filePath,
-//                         lastModified
-//                     });
-//                 }
-//             }
-//         }
-//     }
-//     return result;
-// }
-export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
+export async function readWlbiMetadata(
+    folders: FolderResult[]
+): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
     const processFolder = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/; // model,batch,subStage,retest
@@ -587,7 +453,7 @@ export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFi
 
     type Ctx = { productModel: string; batch: string; processSubStage: string; retestCount: string };
 
-    const items = await scanPattern<Ctx>(
+    const scanResult = await scanPattern<Ctx>(
         roots,
         {
             steps: [{ name: processFolder }, { name: wlbiFolder }],
@@ -601,6 +467,10 @@ export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFi
             return {};
         }
     );
+
+    const {
+        data: items
+    } = scanResult;
 
     const result: WaferFileMetadata[] = [];
     for (const { ctx, filePath, lastModified } of items) {
@@ -625,7 +495,10 @@ export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFi
             lastModified,
         });
     }
-    return result;
+    return {
+        ...scanResult,
+        data: result
+    };
 }
 
 /**
@@ -636,80 +509,9 @@ export async function readWlbiMetadata(folders: FolderResult[]): Promise<WaferFi
  * @param folders 
  * @returns 
  */
-// export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
-//     const result: WaferFileMetadata[] = [];
-
-//     // Folder: 产品型号_批次号
-//     const processFolderRegex = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)$/;
-//     //                            productModel   batch
-//     // Folder: 片号片号
-//     // const waferFolderRegex = /^WaferMap$/;           // Wafer folder so far has no use case
-//     // File: 产品型号_批次号_片号_年月日时分秒.txt
-//     const mapFile = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})([0-9]{6})\.txt$/
-//     //                  productModel   batch        waferId    date & time
-
-//     for (const folder of folders) {
-//         if (!folder.exists || !folder.info?.isDirectory) continue;
-
-//         // Currently on the first level, looking for process folders
-//         const processFolders = (await readDir(folder.path)).filter(
-//             (folder) => folder.isDirectory && processFolderRegex.test(folder.name)
-//         );
-
-//         for (const processFolder of processFolders) {
-//             const processFolderMatch = processFolderRegex.exec(processFolder.name);
-//             if (!processFolderMatch) continue;
-
-//             // NOTE: processSubStage determines CP2 or CP3, etc.
-//             const [, productModel1, batch1] = processFolderMatch;
-
-//             // Now on the second level, looking for wafer folders
-//             const processFolderPath = await resolve(folder.path, processFolder.name);
-//             // DC for now
-//             // const waferFolders = (await readDir(processFolderPath)).filter(
-//             //     (folder) => folder.isDirectory && waferFolders.test(folder.name)
-//             // );
-//             const mapFiles = (await readDir(processFolderPath)).filter(
-//                 (file) => file.isFile && mapFile.test(file.name)
-//             );
-
-//             for (const file of mapFiles) {
-//                 const mapFileMatch = mapFile.exec(file.name);
-//                 if (!mapFileMatch) continue;
-
-//                 const [, productModel3, batch3, waferId3, date, time] = mapFileMatch;
-//                 const filePath = await resolve(processFolderPath, file.name);
-
-//                 // sanity check...
-//                 if (productModel3 !== productModel1 || batch3 !== batch1) {
-//                     console.error('Folder data structure misalignment in AOI!');
-//                     console.error({
-//                         msg: `${productModel3}, ${batch3} != ${productModel1}, ${batch1}`,
-//                         path: filePath
-//                     });
-//                     continue;
-//                 }
-
-//                 const info = await stat(filePath);
-//                 const lastModified = info.mtime?.getTime() ?? -1;
-//                 result.push({
-//                     stage: 'aoi',
-//                     productModel: productModel1,
-//                     // processSubStage: Number(processSubStage),    // AOI does not have a substage
-//                     batch: batch3,
-//                     waferId: waferId3,
-//                     // retestCount: Number(retestCount),            // AOI does not have retestCount attribute
-//                     time: parseWaferMapTimestamp(date, time).toISOString(),
-//                     filePath,
-//                     lastModified
-//                 });
-//             }
-//         }
-//     }
-
-//     return result;
-// }
-export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
+export async function readAoiMetadata(
+    folders: FolderResult[]
+): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
     // Folder: 产品型号_批次号
@@ -723,7 +525,7 @@ export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFil
 
     type Ctx = { productModel: string; batch: string };
 
-    const items = await scanPattern<Ctx>(
+    const scanResult = await scanPattern<Ctx>(
         roots,
         {
             steps: [{ name: processFolder }],
@@ -731,6 +533,10 @@ export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFil
         },
         (level, _name, g) => (level === 0 ? { productModel: g[0], batch: g[1] } : {})
     );
+
+    const {
+        data: items
+    } = scanResult;
 
     const result: WaferFileMetadata[] = [];
     for (const { ctx, filePath, lastModified } of items) {
@@ -753,7 +559,10 @@ export async function readAoiMetadata(folders: FolderResult[]): Promise<WaferFil
             lastModified,
         });
     }
-    return result;
+    return {
+        ...scanResult,
+        data: result
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////

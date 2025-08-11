@@ -39,3 +39,21 @@ export async function invokeReadDir(rootPath: string): Promise<FolderResult[]> {
     const entries = await invokeSafe<FolderResult[]>('rust_read_dir', { dir: rootPath });
     return entries;
 }
+
+/**
+ * Compute SHA1 hash in Rust.
+ * @param input - The string to hash.
+ * @returns Promise resolving to the SHA1 hash as a string.
+ */
+export async function invokeSha1(input: string): Promise<string> {
+    return invokeSafe<string>('rust_sha1', { input });
+}
+
+/**
+ * Compute SHA256 hash in Rust.
+ * @param input - The string to hash.
+ * @returns Promise resolving to the SHA256 hash as a string.
+ */
+export async function invokeSha256(input: string): Promise<string> {
+    return invokeSafe<string>('rust_sha256', { input });
+}

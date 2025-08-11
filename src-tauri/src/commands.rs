@@ -51,25 +51,19 @@ pub fn rust_read_dir(dir: String) -> Vec<FolderResult> {
     match fs::read_dir(root) {
         Ok(entries) => {
             for entry in entries.flatten() {
-                // Only directories
-                match entry.file_type() {
-                    Ok(ft) if ft.is_dir() => {
-                        let p = entry.path();
-                        let path_str = p.to_string_lossy().to_string();
-                        match fs::metadata(&p) {
-                            Ok(meta) => out.push(FolderResult {
-                                path: path_str,
-                                exists: true,
-                                info: Some(build_file_info(&meta, &p.to_string_lossy())),
-                            }),
-                            Err(_) => out.push(FolderResult {
-                                path: path_str,
-                                exists: false,
-                                info: None,
-                            }),
-                        }
-                    }
-                    _ => {}
+                let p = entry.path();
+                let path_str = p.to_string_lossy().to_string();
+                match fs::metadata(&p) {
+                    Ok(meta) => out.push(FolderResult {
+                        path: path_str,
+                        exists: true,
+                        info: Some(build_file_info(&meta, &p.to_string_lossy())),
+                    }),
+                    Err(_) => out.push(FolderResult {
+                        path: path_str,
+                        exists: false,
+                        info: None,
+                    }),
                 }
             }
         }

@@ -1,11 +1,11 @@
-import { invokeSafe } from '@/api/tauri';
 import { resolve, basename } from '@tauri-apps/api/path';
-import { readDir, stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're using that
+import { stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're using that
 
 import { FolderResult } from '@/types/DataSource';
-import { FolderIndexRow } from '@/db/types';
+import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { getManyFolderIndexesByPaths, upsertOneFolderIndex } from '@/db/folderIndex';
-import { invokeReadDir } from '@/api/tauri/fs';
+import { invokeReadDir, invokeSha1 } from '@/api/tauri/fs';
+import { getManyFileIndexesByPaths, upsertOneFileIndex } from '@/db/fileIndex';
 
 /**
  * Scan a directory and return the **subfolders that need processing**.
@@ -39,11 +39,12 @@ import { invokeReadDir } from '@/api/tauri/fs';
 export async function getSubfolders(
     rootPath: string,
     force: boolean = false
-): Promise<{ folders: string[]; totFolders: number; numRead: number; numCached: number }> {
+): Promise<{ folders: string[]; totDir: number; numRead: number; numCached: number }> {
     // const entries: FolderResult[] = await invokeSafe('rust_read_dir', { dir: rootPath });
-    const entries: FolderResult[] = await invokeReadDir(rootPath);
+    let entries: FolderResult[] = await invokeReadDir(rootPath);
 
-    const folderNames = await Promise.all(entries.map((value) => basename(value.path)));
+    entries = entries.filter(d => d.info?.isDirectory);
+    const folderNames = entries.map((value) => value.path);
     const folderIndexes = !force
         ? await getManyFolderIndexesByPaths(folderNames)
         : new Map<string, FolderIndexRow>();
@@ -54,13 +55,13 @@ export async function getSubfolders(
 
     for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        const folderName = folderNames[i];
+        // const folderName = folderNames[i];
 
         if (!entry) continue;
 
         // Skip unchanged only when not forcing
-        if (!force && folderIndexes.has(folderName)) {
-            const rec = folderIndexes.get(folderName);
+        if (!force && folderIndexes.has(entry.path)) {
+            const rec = folderIndexes.get(entry.path);
             if (
                 rec &&
                 entry.info &&
@@ -74,7 +75,7 @@ export async function getSubfolders(
 
         // Always upsert after deciding to (re)process, including when forcing
         upsertOneFolderIndex({
-            folder_path: folderName,
+            folder_path: entry.path,
             last_mtime: Number(entry.info?.mtime) ?? 0,
         });
 
@@ -84,11 +85,134 @@ export async function getSubfolders(
 
     return {
         folders,
-        totFolders: entries.length,
+        totDir: entries.length,
         numRead,
         numCached,
     };
 }
+
+export interface FsListOptions {
+    root: string,
+    name?: RegExp,
+    force?: boolean,
+    dirOnly?: boolean,
+    cache?: boolean,
+}
+
+export async function listDirs(
+    { root, name, force = false, dirOnly = true, cache = true }: FsListOptions
+): Promise<Promise<{ folders: string[]; cached: FolderIndexRow[], totDir: number; numRead: number; numCached: number }>> {
+    let entries = await invokeReadDir(root);
+
+    entries = entries.filter(d => !dirOnly || d.info?.isDirectory);
+    const folderPaths = entries.map(v => v.path);
+    const folderNames = await Promise.all(folderPaths.map(v => basename(v)));
+    const folderIndexes = !force
+        ? await getManyFolderIndexesByPaths(folderPaths)
+        : new Map<string, FolderIndexRow>();
+
+    const folders: string[] = [];
+    const cached: FolderIndexRow[] = [];
+    let numRead = 0;
+    let numCached = 0;
+
+    // assuming that entires and folderNames are the same length
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const folderName = folderNames[i];
+        if (name && !name.test(folderName)) continue;
+        if (!entry) continue;
+
+        if (!force && folderIndexes.has(entry.path)) {
+            const rec = folderIndexes.get(entry.path);
+            if (
+                rec &&
+                entry.info &&
+                entry.info.mtime &&
+                rec.last_mtime >= Number(entry.info.mtime)
+            ) {
+                cached.push(rec);
+                numCached += 1;
+                continue;
+            }
+        }
+        // Always upsert after deciding to (re)process, including when forcing
+        cache && upsertOneFolderIndex({
+            folder_path: entry.path,
+            last_mtime: Number(entry.info?.mtime) ?? 0,
+        });
+
+        numRead += 1;
+        folders.push(folderName);
+    }
+
+    return {
+        folders: folders,
+        cached,
+        totDir: entries.length,
+        numRead,
+        numCached,
+    };
+}
+
+export async function listFiles(
+    { root, name, force = false, cache = true }: FsListOptions
+): Promise<{ files: string[]; cached: FileIndexRow[], totDir: number; numRead: number; numCached: number }> {
+    let entries = await invokeReadDir(root);
+
+    entries = entries.filter(d => d.info?.isFile);
+    const filePaths = entries.map(v => v.path);
+    const fileNames = await Promise.all(filePaths.map(f => basename(f)));
+    const fileIndexes = !force
+        ? await getManyFileIndexesByPaths(filePaths)
+        : new Map<string, FileIndexRow>;
+
+    const files: string[] = [];
+    const cached: FileIndexRow[] = [];
+    let numRead = 0;
+    let numCached = 0;
+
+    // assuming that entires and folderNames are the same length
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const fileName = fileNames[i];
+        if (name && !name.test(fileName)) continue;
+        if (!entry) continue;
+
+        if (!force && fileIndexes.has(entry.path)) {
+            const rec = fileIndexes.get(entry.path);
+            if (
+                rec &&
+                entry.info &&
+                entry.info.mtime &&
+                rec.last_mtime >= Number(entry.info.mtime)
+            ) {
+                cached.push(rec);
+                numCached += 1;
+                continue;
+            }
+        }
+        const file_hash = await invokeSha1(entry.path);
+        // Always upsert after deciding to (re)process, including when forcing
+        cache && upsertOneFileIndex({
+            file_path: entry.path,
+            last_mtime: Number(entry.info?.mtime) ?? 0,
+            file_hash
+        });
+
+        numRead += 1;
+        files.push(fileName);
+    }
+
+    return {
+        files,
+        cached,
+        totDir: entries.length,
+        numRead,
+        numCached
+    }
+}
+
 
 /**
  * Sorts an array of full folder paths alphabetically based on their subfolder names.
@@ -124,18 +248,6 @@ export function getRelativePath(rootPath: string, fullPath: string): string {
     return fullPath.slice(rootPath.length).replace(/^[/\\]/, '');
 }
 
-type Entry = { name: string; isFile: boolean; isDirectory: boolean };
-
-export async function listDirs(root: string, name?: RegExp): Promise<Entry[]> {
-    const items = await readDir(root);
-    const children = await invokeReadDir(root);
-    return items.filter(d => d.isDirectory && (!name || name.test(d.name)));
-}
-
-export async function listFiles(root: string, name: RegExp): Promise<Entry[]> {
-    const items = await readDir(root);
-    return items.filter(f => f.isFile && name.test(f.name));
-}
 
 export async function join(root: string, name: string) {
     return resolve(root, name);
