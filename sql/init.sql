@@ -2,13 +2,13 @@
 -- Base Schema for Wafer Tracking v1
 -- =======================================
 
--- 1. OEM → Internal Product Mapping
+-- OEM -> Internal Product Mapping
 CREATE TABLE IF NOT EXISTS oem_product_map (
     oem_product_id TEXT PRIMARY KEY,    -- OEM product id
     product_id TEXT NOT NULL            -- internal product
 );
 
--- 2. Product Lot/Wafer → SubID Defect Mapping
+-- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
     product_id TEXT NOT NULL,
     lot_id TEXT NOT NULL,
@@ -21,19 +21,23 @@ CREATE TABLE IF NOT EXISTS product_defect_map (
     FOREIGN KEY (product_id) REFERENCES oem_product_map(product_id),
     FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id),
     
+    -- product defect map will get removed when file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 
 -- Enforce that each sub_id is unique to one wafer
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_subid ON product_defect_map(sub_id);
 
--- 3. Substrate Defect Files (referenced by sub_id)
+-- Substrate Defect Files (referenced by sub_id)
 CREATE TABLE IF NOT EXISTS substrate_defect (
     sub_id TEXT PRIMARY KEY,
     file_path TEXT NOT NULL -- relative to root folder
+
+    -- substrate defect map (sub_id) will get removed when file_index gets removed
+    FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 
--- 4. Wafer Map Files (FAB CP, CP-Prober, WLBI, AOI)
+-- Wafer Map Files (FAB CP, CP-Prober, WLBI, AOI)
 CREATE TABLE IF NOT EXISTS wafer_maps (
     product_id TEXT NOT NULL,
     batch_id TEXT NOT NULL,
@@ -52,6 +56,7 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
         REFERENCES product_defect_map(product_id, lot_id, wafer_id)
         ON DELETE CASCADE
     
+    -- wafer map entry will be removed when the file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 

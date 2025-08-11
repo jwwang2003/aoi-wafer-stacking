@@ -11,13 +11,17 @@ let _db: Database | null = null;
 export async function getDb(): Promise<Database> {
     if (_db) return _db;
     _db = await Database.load(`sqlite:${DB_FILENAME}`);
+    // Must be enabled per-connection in SQLite
+    await _db.execute('PRAGMA foreign_keys = ON;');
     return _db;
 }
 
 import * as fileIndex from "./fileIndex";
 import * as folderIndex from "./folderIndex";
+import * as dbTypes from "./types";
 
 export {
     fileIndex,
-    folderIndex
+    folderIndex,
+    dbTypes
 };
