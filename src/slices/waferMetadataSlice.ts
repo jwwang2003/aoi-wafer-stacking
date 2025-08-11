@@ -8,7 +8,7 @@ import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/Stepper';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
-import { dirScanResultToast, infoToast } from '@/components/Toaster';
+import { dirScanResultToast } from '@/components/Toaster';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
@@ -327,7 +327,6 @@ export async function readSubstrateMetadata(
 
     return { data: result, totDir, numRead, numCached, totMatch, totAdded, elapsed };
 }
-
 
 /**
  * TODO: Folder structure unclear at the moment (TBD)
