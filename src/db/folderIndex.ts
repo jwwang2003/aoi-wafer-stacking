@@ -123,6 +123,25 @@ export async function deleteFolderIndexByPath(file_path: string): Promise<void> 
     ));
 }
 
+/**
+ * Deletes multiple folder index records by their paths.
+ *
+ * @param folder_paths - Array of relative folder paths to delete.
+ */
+export async function deleteFolderIndexesByPaths(folder_paths: string[]): Promise<void> {
+    if (!folder_paths.length) return;
+
+    const db = await getDb();
+
+    // Build placeholders: (?, ?, ?, ...)
+    const placeholders = folder_paths.map(() => '?').join(',');
+
+    await db.execute(
+        `DELETE FROM folder_index WHERE folder_path IN (${placeholders})`,
+        folder_paths
+    );
+}
+
 
 /**
  * Deletes all records from the folder_index table.

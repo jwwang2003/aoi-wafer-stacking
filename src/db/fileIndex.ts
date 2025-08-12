@@ -115,6 +115,26 @@ export async function deleteFileIndexByPath(file_path: string): Promise<void> {
 }
 
 /**
+ * Deletes multiple file index records by their paths.
+ *
+ * @param file_paths - Array of relative file paths to delete.
+ */
+export async function deleteFileIndexesByPaths(file_paths: string[], batchSize = 500): Promise<void> {
+    if (!file_paths.length) return;
+
+    const db = await getDb();
+
+    for (let i = 0; i < file_paths.length; i += batchSize) {
+        const batch = file_paths.slice(i, i + batchSize);
+        const placeholders = batch.map(() => '?').join(',');
+        await db.execute(
+            `DELETE FROM file_index WHERE file_path IN (${placeholders})`,
+            batch
+        );
+    }
+}
+
+/**
  * Deletes all records from the file_index table.
  *
  * ⚠️ Use with caution — this will clear all file tracking data,

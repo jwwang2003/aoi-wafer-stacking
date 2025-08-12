@@ -1,11 +1,116 @@
-import { resolve, basename } from '@tauri-apps/api/path';
+import { resolve } from '@tauri-apps/api/path';
 import { stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're using that
 
 import { FolderResult } from '@/types/DataSource';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
-import { getManyFolderIndexesByPaths, upsertOneFolderIndex } from '@/db/folderIndex';
+import { deleteFolderIndexesByPaths, getManyFolderIndexesByPaths, upsertOneFolderIndex } from '@/db/folderIndex';
 import { invokeReadDir, invokeSha1 } from '@/api/tauri/fs';
-import { getManyFileIndexesByPaths, upsertOneFileIndex } from '@/db/fileIndex';
+import { deleteFileIndexesByPaths, getManyFileIndexesByPaths } from '@/db/fileIndex';
+import { getDb } from '@/db';
+
+// ---------- Globals ----------
+const file_idx = new Map<string, { last_mtime: number; file_hash?: string | null }>();
+const folder_idx = new Map<string, { last_mtime: number }>();
+
+// Pending write-behind queues
+const file_upserts: FileIndexRow[] = [];
+const folder_upserts: FolderIndexRow[] = [];
+
+const file_deletes: string[] = [];
+const folder_deletes: string[] = [];
+
+// Seen sets for a scan session (to detect deletions)
+let seenFiles: Set<string> | null = null;
+let seenFolders: Set<string> | null = null;
+
+// Flush controls
+const FLUSH_BATCH = 1000;
+let flushing = false;
+
+// ---------- Normalization ----------
+const norm = (p: string) => p.replace(/\\/g, '/'); // add .toLowerCase() if your FS is case-insensitive
+
+// ---------- Public API ----------
+
+/** Load *all* index rows once into memory (fast path for ~100k). */
+export async function warmIndexCaches(): Promise<void> {
+    // Files
+    const db = await getDb();
+    const fileRows = await db.select<FileIndexRow[]>(
+        `SELECT file_path, last_mtime, file_hash FROM file_index`
+    );
+    file_idx.clear();
+    for (const r of fileRows) {
+        const k = norm(r.file_path);
+        file_idx.set(k, { last_mtime: r.last_mtime, file_hash: r.file_hash ?? null });
+    }
+
+    // Folders
+    const folderRows = await db.select<FolderIndexRow[]>(
+        `SELECT folder_path, last_mtime FROM folder_index`
+    );
+    folder_idx.clear();
+    for (const r of folderRows) {
+        const k = norm(r.folder_path);
+        folder_idx.set(k, { last_mtime: r.last_mtime });
+    }
+}
+
+/** Begin a new scan session; enables stale-row sweeping later. */
+export function beginScanSession(): void {
+    seenFiles = new Set<string>();
+    seenFolders = new Set<string>();
+}
+
+/** Mark a file/folder as seen during the current scan session. */
+export function markSeenFile(path: string): void {
+    if (seenFiles) seenFiles.add(norm(path));
+}
+export function markSeenFolder(path: string): void {
+    if (seenFolders) seenFolders.add(norm(path));
+}
+
+/** After a scan, delete rows not seen this time (both in DB and in-memory). */
+export async function endScanSession(): Promise<void> {
+    if (!seenFiles || !seenFolders) return;
+
+    // Sweep files
+    {
+        const toDelete: string[] = [];
+        for (const k of file_idx.keys()) {
+            if (!seenFiles.has(k)) toDelete.push(k);
+        }
+        if (toDelete.length) {
+            await deleteFileIndexesByPaths(toDelete);
+            for (const k of toDelete) file_idx.delete(k);
+        }
+    }
+
+    // Sweep folders
+    {
+        const toDelete: string[] = [];
+        for (const k of folder_idx.keys()) {
+            if (!seenFolders.has(k)) toDelete.push(k);
+        }
+        if (toDelete.length) {
+            await deleteFolderIndexesByPaths(toDelete);
+            for (const k of toDelete) folder_idx.delete(k);
+        }
+    }
+
+    seenFiles = null;
+    seenFolders = null;
+}
+
+/** Get cached file meta (undefined if unknown). */
+export function getFileIndex(path: string) {
+    return file_idx.get(norm(path));
+}
+
+/** Get cached folder meta (undefined if unknown). */
+export function getFolderIndex(path: string) {
+    return folder_idx.get(norm(path));
+}
 
 /**
  * Scan a directory and return the **subfolders that need processing**.
@@ -40,55 +145,47 @@ export async function getSubfolders(
     rootPath: string,
     force: boolean = false
 ): Promise<{ folders: string[]; totDir: number; numRead: number; numCached: number }> {
-    // const entries: FolderResult[] = await invokeSafe('rust_read_dir', { dir: rootPath });
+    // 1) Read children once and filter to directories
     let entries: FolderResult[] = await invokeReadDir(rootPath);
+    entries = entries.filter(e => e.info?.isDirectory);
 
-    entries = entries.filter(d => d.info?.isDirectory);
-    const folderNames = entries.map((value) => value.path);
-    const folderIndexes = !force
-        ? await getManyFolderIndexesByPaths(folderNames)
+    const paths = entries.map(e => norm(e.path));
+    const totDir = entries.length;
+
+    // 2) Warm cache map for these paths (skip when forcing)
+    const indexMap: Map<string, FolderIndexRow> = !force
+        ? await getManyFolderIndexesByPaths(paths)
         : new Map<string, FolderIndexRow>();
 
+    // 3) Decide which to read vs. skip
     const folders: string[] = [];
     let numRead = 0;
     let numCached = 0;
 
     for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        // const folderName = folderNames[i];
+        const path = paths[i];
+        const mtime = Number(entry.info?.mtime) ?? null;
 
-        if (!entry) continue;
-
-        // Skip unchanged only when not forcing
-        if (!force && folderIndexes.has(entry.path)) {
-            const rec = folderIndexes.get(entry.path);
-            if (
-                rec &&
-                entry.info &&
-                entry.info.mtime &&
-                rec.last_mtime >= Number(entry.info.mtime)
-            ) {
-                numCached += 1;
+        if (!force) {
+            const rec = indexMap.get(path);
+            if (rec && rec.last_mtime >= mtime) {
+                numCached++;
                 continue;
             }
         }
 
-        // Always upsert after deciding to (re)process, including when forcing
-        upsertOneFolderIndex({
-            folder_path: entry.path,
-            last_mtime: Number(entry.info?.mtime) ?? 0,
+        // Upsert after deciding to (re)process (await for durability; or batch upstream)
+        await upsertOneFolderIndex({
+            folder_path: path,
+            last_mtime: mtime,
         });
 
-        numRead += 1;
-        folders.push(entry.path);
+        folders.push(path);
+        numRead++;
     }
 
-    return {
-        folders,
-        totDir: entries.length,
-        numRead,
-        numCached,
-    };
+    return { folders, totDir, numRead, numCached };
 }
 
 export interface FsListOptions {
@@ -101,118 +198,126 @@ export interface FsListOptions {
 
 export async function listDirs(
     { root, name, force = false, dirOnly = true, cache = true }: FsListOptions
-): Promise<Promise<{ folders: string[]; cached: FolderIndexRow[], totDir: number; numRead: number; numCached: number }>> {
+): Promise<{
+    listed: FolderResult[];
+    cached: FolderIndexRow[];
+    totDir: number;
+    numRead: number;
+    numCached: number;
+}> {
+    // 1) Read once and filter to directories early
     let entries = await invokeReadDir(root);
+    entries = entries.filter(e => !dirOnly || e.info?.isDirectory);
 
-    entries = entries.filter(d => !dirOnly || d.info?.isDirectory);
-    const folderPaths = entries.map(v => v.path);
-    const folderNames = await Promise.all(folderPaths.map(v => basename(v)));
-    const folderIndexes = !force
-        ? await getManyFolderIndexesByPaths(folderPaths)
-        : new Map<string, FolderIndexRow>();
+    // Normalize paths once; re-use everywhere
+    const paths = entries.map(e => norm(e.path));
+    const totDir = entries.length;
 
-    const folders: string[] = [];
+    // 2) Prep optional name filter (fast, no async)
+    const re = safeRegex(name);
+    const names = re ? paths.map(nameFromPath) : undefined;
+
+    // 3) Bulk-fetch cache rows for these paths (skip if forcing)
+    const indexMap: Map<string, FolderIndexRow> = !force
+        ? await getManyFolderIndexesByPaths(paths)
+        : new Map();
+
+    const listed: FolderResult[] = [];
     const cached: FolderIndexRow[] = [];
-    let numRead = 0;
-    let numCached = 0;
+    let numRead = 0, numCached = 0;
 
-    // assuming that entires and folderNames are the same length
     for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        const folderName = folderNames[i];
-        if (name && !name.test(folderName)) continue;
-        if (!entry) continue;
+        const path = paths[i];
+        const nameHere = names ? names[i] : undefined;
 
-        if (!force && folderIndexes.has(entry.path)) {
-            const rec = folderIndexes.get(entry.path);
-            if (
-                rec &&
-                entry.info &&
-                entry.info.mtime &&
-                rec.last_mtime >= Number(entry.info.mtime)
-            ) {
+        // Filter by name if provided
+        if (re && nameHere && !re.test(nameHere)) continue;
+
+        const entryMtime = Number(entry.info?.mtime);
+
+        if (!force) {
+            const rec = indexMap.get(path);
+            if (rec && rec.last_mtime >= entryMtime) {
                 cached.push(rec);
-                numCached += 1;
+                numCached++;
                 continue;
             }
         }
-        // Always upsert after deciding to (re)process, including when forcing
-        cache && upsertOneFolderIndex({
-            folder_path: entry.path,
-            last_mtime: Number(entry.info?.mtime) ?? 0,
-        });
 
-        numRead += 1;
-        folders.push(folderName);
+        // Queue cache write; update after the loop
+        if (cache) {
+            // Stage cache upserts; flush once at end (avoids per-row await)
+            folder_upserts.push({ folder_path: path, last_mtime: entryMtime });
+        }
+
+        listed.push(entry);
+        numRead++;
     }
 
-    return {
-        folders: folders,
-        cached,
-        totDir: entries.length,
-        numRead,
-        numCached,
-    };
+    return { listed, cached, totDir, numRead, numCached };
 }
 
 export async function listFiles(
     { root, name, force = false, cache = true }: FsListOptions
-): Promise<{ files: string[]; cached: FileIndexRow[], totDir: number; numRead: number; numCached: number }> {
+): Promise<{ files: string[]; cached: FileIndexRow[]; totDir: number; numRead: number; numCached: number }> {
+    // 1) Read once and keep only files
     let entries = await invokeReadDir(root);
+    entries = entries.filter(e => e.info?.isFile);
 
-    entries = entries.filter(d => d.info?.isFile);
-    const filePaths = entries.map(v => v.path);
-    const fileNames = await Promise.all(filePaths.map(f => basename(f)));
-    const fileIndexes = !force
-        ? await getManyFileIndexesByPaths(filePaths)
-        : new Map<string, FileIndexRow>;
+    // Normalize paths once
+    const paths = entries.map(e => norm(e.path));
+    const totDir = entries.length;
+
+    // 2) Optional filename filter (sync + cheap)
+    const re = safeRegex(name);
+    const names = re ? paths.map(nameFromPath) : undefined;
+
+    // 3) Bulk cache lookup (skip when forcing)
+    const indexMap: Map<string, FileIndexRow> = !force
+        ? await getManyFileIndexesByPaths(paths)
+        : new Map<string, FileIndexRow>();
 
     const files: string[] = [];
     const cached: FileIndexRow[] = [];
-    let numRead = 0;
-    let numCached = 0;
+    let numRead = 0, numCached = 0;
 
-    // assuming that entires and folderNames are the same length
     for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        const fileName = fileNames[i];
-        if (name && !name.test(fileName)) continue;
-        if (!entry) continue;
+        const path = paths[i];
+        const fileName = names ? names[i] : nameFromPath(path);
 
-        if (!force && fileIndexes.has(entry.path)) {
-            const rec = fileIndexes.get(entry.path);
-            if (
-                rec &&
-                entry.info &&
-                entry.info.mtime &&
-                rec.last_mtime >= Number(entry.info.mtime)
-            ) {
+        if (re && !re.test(fileName)) continue;
+
+        const mtime = Number(entry.info?.mtime);
+
+        if (!force) {
+            const rec = indexMap.get(path);
+            if (rec && rec.last_mtime >= mtime) {
                 cached.push(rec);
-                numCached += 1;
+                numCached++;
                 continue;
             }
         }
-        const file_hash = await invokeSha1(entry.path);
-        // Always upsert after deciding to (re)process, including when forcing
-        cache && upsertOneFileIndex({
-            file_path: entry.path,
-            last_mtime: Number(entry.info?.mtime) ?? 0,
-            file_hash
-        });
 
-        numRead += 1;
+        if (cache) {
+            // Stage DB upserts; flush once (replace with upsertMany for max speed)
+            file_upserts.push({ file_path: path, last_mtime: mtime, file_hash: await invokeSha1(path) });
+        }
+
         files.push(fileName);
+        numRead++;
     }
 
-    return {
-        files,
-        cached,
-        totDir: entries.length,
-        numRead,
-        numCached
-    }
+    return { files, cached, totDir, numRead, numCached };
 }
 
+// =============================================================================
+
+export const safeRegex = (re?: RegExp) => re ? new RegExp(re.source, re.flags.replace('g', '')) : undefined;
+export const pathMtime = (x: { info?: { mtime?: number | Date } }) =>
+    x?.info?.mtime != null ? Number(x.info.mtime) : 0;
+export const nameFromPath = (p: string) => (p.split(/[\\/]/).pop() ?? '');
 
 /**
  * Sorts an array of full folder paths alphabetically based on their subfolder names.
@@ -247,7 +352,6 @@ export function getRelativePath(rootPath: string, fullPath: string): string {
     if (!fullPath.startsWith(rootPath)) return fullPath; // fallback, avoid invalid slicing
     return fullPath.slice(rootPath.length).replace(/^[/\\]/, '');
 }
-
 
 export async function join(root: string, name: string) {
     return resolve(root, name);

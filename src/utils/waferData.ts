@@ -1,5 +1,5 @@
 import { basename } from '@tauri-apps/api/path';
-import { listDirs, listFiles, join, mtimeMs, match } from './fs';
+import { listDirs, listFiles, join, mtimeMs, match, nameFromPath } from './fs';
 import { logCacheReport } from './console';
 
 type FolderStep = {
@@ -65,19 +65,20 @@ export async function scanPattern<T extends Record<string, string>>(
         // descend into next-level folders
         const step = pattern.steps[level];
         const t1 = performance.now();
-        const { folders: dirs, cached, totDir: totFolders, numCached: numCachedFolder, numRead: numReadFolder } =
+        const { listed: dirs, cached, totDir: totFolders, numCached: numCachedFolder, numRead: numReadFolder } =
             await listDirs({ root: parentPath, name: step.name });
         elapsed += performance.now() - t1;
 
         totDir += totFolders; numRead += numReadFolder; numCached += numCachedFolder;
 
         for (const d of dirs) {
-            const m = match(step.name, d)!; const [, ...g] = m;
+            const name = nameFromPath(d.path);
+            const m = match(step.name, d.path)!; const [, ...g] = m;
             if (step.onMatch && step.onMatch(g) === false) continue;
             totMatch++;
             totAdded++;
-            const nextCtx = { ...ctx, ...contextFromFolder(level, d, g) } as T;
-            const nextPath = await join(parentPath, d);
+            const nextCtx = { ...ctx, ...contextFromFolder(level, name, g) } as T;
+            const nextPath = await join(parentPath, name);
             readDirs.push(nextPath);
             await walk(level + 1, nextPath, nextCtx);
         }

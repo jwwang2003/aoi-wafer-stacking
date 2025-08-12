@@ -25,6 +25,7 @@ import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceS
 import { initConsoleInterceptor } from './utils/log';
 import { PreferencesState } from './types/Preferences';
 import { infoToast } from '@/components/Toaster';
+import { warmIndexCaches } from './utils/fs';
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -92,6 +93,9 @@ export default function App() {
 
                 console.info('%cInitialization complete!', 'color: blue');
                 console.timeEnd('initialize');
+
+                // Warm-up the index caches for folders and files
+                await warmIndexCaches();
 
                 // Constantly check for a change in the folder status of the root folder
                 // TODO: Change this pooling method into a event based method!

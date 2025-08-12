@@ -179,7 +179,7 @@ export async function readSubstrateMetadata(
 
         // 1) Defect list folder
         const {
-            folders: dlFolders,
+            listed: dlFolders,
             cached: dlFoldersCached,
             totDir: totDirFolder,
             numRead: numReadFolders,
@@ -191,10 +191,10 @@ export async function readSubstrateMetadata(
         numCached += numCachedFolders;
 
         // record considered folders (absolute paths)
-        for (const d of dlFolders) considered.push(await join(folder.path, d));
+        for (const d of dlFolders) considered.push(d.path);
         for (const c of dlFoldersCached) considered.push(c.folder_path);
 
-        for (const dl of dlFolders.concat(dlFoldersCached.map((f) => f.folder_path))) {
+        for (const dl of dlFolders.concat(dlFoldersCached.map((f) => f))) {
             const dlName = await basename(dl);
             const dlPath = await join(folder.path, dlName);
 
