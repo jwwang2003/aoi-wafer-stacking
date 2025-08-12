@@ -126,7 +126,7 @@ export async function ensureOemMapping(
         }
 
         // Try to insert the mapping (will fail if product_id already mapped to another OEM ID)
-        const result = await db.execute(
+        await db.execute(
             `INSERT INTO oem_product_map (oem_product_id, product_id)
     VALUES (?, ?)`,
             [oemProductId, productId]

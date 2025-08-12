@@ -80,6 +80,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
+name = "aoi-wafer-stacking"
+version = "1.0.0"
+dependencies = [
+ "calamine",
+ "chrono",
+ "fs2",
+ "hex",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-opener",
+ "tauri-plugin-sql",
+ "thiserror 2.0.12",
+ "zip 4.1.0",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5096,29 +5119,6 @@ checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
  "libc",
-]
-
-[[package]]
-name = "wafer-overlay"
-version = "0.1.0"
-dependencies = [
- "calamine",
- "chrono",
- "fs2",
- "hex",
- "once_cell",
- "serde",
- "serde_json",
- "sha1",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-opener",
- "tauri-plugin-sql",
- "thiserror 2.0.12",
- "zip 4.1.0",
 ]
 
 [[package]]

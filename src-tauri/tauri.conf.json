@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "aoi-wafer-stacking",
+  "productName": "AOI Wafer Stacking",
   "version": "1.0.0",
-  "identifier": "com.aoi-wafer-stacking",
+  "identifier": "com.aoi.wafer.stacking",
 
   "plugins": {
     "sql": {
