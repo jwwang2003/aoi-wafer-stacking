@@ -191,10 +191,25 @@ export default function WaferStacking() {
     mapData: string[],
     header?: Record<string, string>
   ): HexMapData => {
+    const letterToNumber = {
+      A: 10,
+      B: 11,
+      C: 12,
+      D: 13,
+      E: 14,
+      F: 15,
+      G: 16,
+      H: 17,
+      I: 18,
+      J: 19,
+    };
     const grid: HexMap['grid'] = mapData.map((row) =>
       row.split('').map((char) => {
         if (char === '.' || char === 'S' || char === '*') {
           return null;
+        } else if (char.match(/[a-zA-Z]/)) {
+          const upperChar = char.toUpperCase();
+          return letterToNumber[upperChar as keyof typeof letterToNumber] || 99;
         } else if (char.match(/\d/)) {
           return parseInt(char, 10);
         }
