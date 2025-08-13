@@ -14,6 +14,7 @@ export const outputFormats = {
     mapEx: '/Users/tan/Downloads/wafer-overlay-main/aoi-wafer-stacking/src/pages/WaferStacking/输出文件/mapEx',
     wafermap: '/Users/tan/Downloads/wafer-overlay-main/aoi-wafer-stacking/src/pages/WaferStacking/输出文件/wafermap',
     HEX: '/Users/tan/Downloads/wafer-overlay-main/aoi-wafer-stacking/src/pages/WaferStacking/输出文件/HEX',
+    bin: '/Users/tan/Downloads/wafer-overlay-main/aoi-wafer-stacking/src/pages/WaferStacking/输出文件/bin'
 };
 
 export const allLayers = ['衬底', 'CP1', 'CP2', 'WLBI', 'CP3', 'AOI'];

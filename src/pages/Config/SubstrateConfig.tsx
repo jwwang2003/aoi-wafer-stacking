@@ -16,6 +16,7 @@ import {
   Flex,
   Input,
   Button,
+  InputWrapper
 } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import { resolveResource } from '@tauri-apps/api/path';
@@ -174,16 +175,17 @@ export default function SubstrateConfigPage() {
         <Text>在此处调整衬底的偏移量、缩放和扭曲强度。</Text>
 
         {/* 文件路径输入和选择区域 */}
-        <Group align='flex-end' gap='sm'>
-          <Input
-            label='文件路径'
-            value={filePath}
-            onChange={handlePathInput}
-            placeholder='输入文件路径或点击选择'
-            style={{ flex: 1 }}
-          />
-          <Button onClick={selectFile}>选择文件</Button>
-        </Group>
+<Group align='flex-end' gap='sm' style={{ width: '100%' }}>
+  {/* 用InputWrapper包裹Input来添加label */}
+  <InputWrapper label="文件路径" style={{ flex: 1, marginBottom: 0 }}>
+    <Input
+      value={filePath}
+      onChange={handlePathInput}
+      placeholder="输入文件路径或点击选择"
+    />
+  </InputWrapper>
+  <Button onClick={selectFile}>选择文件</Button>
+</Group>
 
         {/* 显示当前使用的完整路径 */}
         <Text size='sm' c={error ? 'red' : 'blue'}>

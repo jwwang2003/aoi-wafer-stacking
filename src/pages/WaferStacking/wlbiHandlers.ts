@@ -4,6 +4,43 @@ import { outputFormats, baseFileName } from './config';
 import { readFileContent } from './fileHandlers';
 
 /**
+ * 解析WLBI格式文件的header信息
+ * @param content 文件内容
+ * @returns 解析后的header字典
+ */
+export const parseWlbiHeader = (content: string): Record<string, string> => {
+    const header: Record<string, string> = {};
+    const lines = content.split(/\r?\n/);
+    let inHeaderSection = true;
+
+    for (const line of lines) {
+        const strippedLine = line.trim();
+
+        if (strippedLine === '[MAP]:') {
+            inHeaderSection = false;
+            break;
+        }
+
+        if (!inHeaderSection || !strippedLine) continue;
+
+        const colonMatch = strippedLine.match(/^\s*([^:]+?)\s*:\s*(.*?)\s*$/);
+        if (colonMatch) {
+            const [, key, value] = colonMatch;
+            header[key] = value;
+            continue;
+        }
+
+        const equalMatch = strippedLine.match(/^\s*([^=]+?)\s*=\s*(.*?)\s*$/);
+        if (equalMatch) {
+            const [, key, value] = equalMatch;
+            header[key] = value;
+            continue;
+        }
+    }
+    return header;
+};
+
+/**
  * 解析WLBI格式文件为矩阵
  * @param content 文件内容
  * @returns 解析后的地图数据
@@ -87,7 +124,8 @@ export const parseWlbiToMatrix = (content: string): string[] => {
  */
 export const printInformWafermap = async (
     overlayedMap: string[],
-    wlbiFilepath: string
+    wlbiFilepath: string,
+    header: Record<string, string>
 ) => {
     const cleanedRow: string[] = [];
     for (const row of overlayedMap) {
@@ -95,9 +133,7 @@ export const printInformWafermap = async (
     }
     const singleLine = cleanedRow.join('');
 
-    const headers: string[] = [];
     const coordinates: [number, number][] = [];
-
     const content = await readFileContent(wlbiFilepath);
     const lines = content.split('\n');
 
@@ -107,11 +143,6 @@ export const printInformWafermap = async (
 
         if (strippedLine === '[MAP]:') {
             inHeaderSection = false;
-            continue;
-        }
-
-        if (inHeaderSection && strippedLine) {
-            headers.push(strippedLine);
             continue;
         }
 
@@ -129,7 +160,6 @@ export const printInformWafermap = async (
             const x = parseInt(parts[0]);
             const y = parseInt(parts[1]);
             coordinates.push([x, y]);
-
         }
     }
 
@@ -156,24 +186,19 @@ export const printInformWafermap = async (
             totalPass += count;
         }
     }
-    const totalFail = totalTested - totalPass;
-    const yieldPercentage =
-        totalTested > 0 ? (totalPass / totalTested) * 100 : 0;
 
-    const outputLines: string[] = [];
-    for (const line of headers) {
-        if (line.startsWith('Total Tested:')) {
-            outputLines.push(`Total Tested: ${totalTested}`);
-        } else if (line.startsWith('Total Pass:')) {
-            outputLines.push(`Total Pass: ${totalPass}`);
-        } else if (line.startsWith('Total Fail:')) {
-            outputLines.push(`Total Fail: ${totalFail}`);
-        } else if (line.startsWith('Yield:')) {
-            outputLines.push(`Yield: ${yieldPercentage.toFixed(2)}%`);
-        } else {
-            outputLines.push(line);
-        }
-    }
+    const outputLines: string[] = [
+        `WaferType: ${header?.['WaferType'] ? parseInt(header['WaferType']) : 0}`,
+        `DUT: ${header?.['DUT'] ? parseInt(header['DUT']) : 0}`,
+        `Mode: ${header?.['Mode'] ? parseInt(header['Mode']) : 0}`,
+        `notch: ${header?.['Flat/Notch'] || 'Unknown'}`,
+        `Product: ${header?.['Device Name'] || 'Unknown'}`,
+        `Wafer Lots: ${header?.['Lot No.'] || 'Unknown'}`,
+        `Wafer No: ${header?.['Wafer ID'] || 'Unknown'}`,
+        `Wafer Size: ${header?.['Wafer Size'] ? parseFloat(header['Wafer Size']).toFixed(3) : 6.000}`,
+        `Index X: ${header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']).toFixed(3) : 0.000}`,
+        `Index Y: ${header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']).toFixed(3) : 0.000}`,
+    ];
 
     outputLines.push('\n[MAP]:');
     for (const [x, y, value] of updatedCoordinates) {
@@ -183,17 +208,14 @@ export const printInformWafermap = async (
     outputLines.push(`\nTotal Prober Test Dies: ${totalTested}`);
     outputLines.push(`Total Prober Pass Dies: ${totalPass}`);
 
-    // 输出Bin统计
     let binLine = '';
     for (let binNum = 0; binNum <= 150; binNum++) {
-        const binStr =
-            binNum < 100
-                ? `Bin ${binNum.toString().padStart(2, ' ')}`
-                : `Bin${binNum.toString().padStart(3, ' ')}`;
+        const binStr = binNum < 100
+            ? `Bin ${binNum.toString().padStart(2, ' ')}`
+            : `Bin${binNum.toString().padStart(3, ' ')}`;
         const count = binCounts[binNum.toString()] || 0;
 
         binLine += `${binStr}    ${count},  `;
-
         if (binNum > 0 && binNum % 7 === 0) {
             outputLines.push(binLine);
             binLine = '';
