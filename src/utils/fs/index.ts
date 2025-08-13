@@ -1,23 +1,20 @@
 import { resolve } from '@tauri-apps/api/path';
 import { stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're using that
 
-import { FolderResult } from '@/types/DataSource';
+import { DirResult } from '@/types/DataSource';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { deleteFolderIndexesByPaths, getAllFolderIndexes, getManyFolderIndexesByPaths, upsertManyFolderIndexes, upsertOneFolderIndex } from '@/db/folderIndex';
-import { invokeReadDir, invokeSha1 } from '@/api/tauri/fs';
+import { invokeReadDir,invokeSha1 } from '@/api/tauri/fs';
 import { deleteFileIndexesByPaths, getAllFileIndexes, getManyFileIndexesByPaths, upsertManyFileIndexes } from '@/db/fileIndex';
 import { getDb } from '@/db';
 
 // ---------- Globals ----------
-const file_idx = new Map<string, { last_mtime: number; file_hash?: string | null }>();
-const folder_idx = new Map<string, { last_mtime: number }>();
+const file_idx = new Map<string, FileIndexRow>();
+const folder_idx = new Map<string, FolderIndexRow>();
 
 // Pending write-behind queues
 const file_upserts: FileIndexRow[] = [];
 const folder_upserts: FolderIndexRow[] = [];
-
-const fileUpsertMap = new Map<string, FileIndexRow>();
-const folderUpsertMap = new Map<string, FolderIndexRow>();
 
 const file_deletes: string[] = [];
 const folder_deletes: string[] = [];
@@ -31,6 +28,18 @@ const FLUSH_BATCH = 1000;
 let flushing = false;
 let flushInFlight: Promise<void> | null = null;     // single-flight guard
 
+export async function resetFileIndexCache() {
+    file_idx.clear();
+    file_upserts.length = 0;
+    file_deletes.length = 0;
+}
+
+export async function resetFolderIndexCache() {
+    folder_idx.clear();
+    folder_upserts.length = 0;
+    folder_deletes.length = 0;
+}
+
 // ---------- Public API ----------
 
 /** Load *all* index rows once into memory (fast path for ~100k). */
@@ -43,7 +52,7 @@ export async function warmIndexCaches(): Promise<void> {
     file_idx.clear();
     for (const r of fileRows) {
         const k = norm(r.file_path);
-        file_idx.set(k, { last_mtime: r.last_mtime, file_hash: r.file_hash ?? null });
+        file_idx.set(k, r);
     }
 
     // Folders
@@ -53,7 +62,7 @@ export async function warmIndexCaches(): Promise<void> {
     folder_idx.clear();
     for (const r of folderRows) {
         const k = norm(r.folder_path);
-        folder_idx.set(k, { last_mtime: r.last_mtime });
+        folder_idx.set(k, r);
     }
 }
 
@@ -113,37 +122,6 @@ export function getFolderIndex(path: string) {
     return folder_idx.get(norm(path));
 }
 
-// cached upserts
-export function stageFileUpsert(row: FileIndexRow) {
-    const k = norm(row.file_path);
-    const prev = fileUpsertMap.get(k);
-    if (!prev || row.last_mtime >= prev.last_mtime) {
-        fileUpsertMap.set(k, row);
-    }
-}
-
-export function stageFolderUpsert(row: FolderIndexRow) {
-    const k = norm(row.folder_path);
-    const prev = folderUpsertMap.get(k);
-    if (!prev || row.last_mtime >= prev.last_mtime) {
-        folderUpsertMap.set(k, row);
-    }
-}
-
-// cache helpers (based on the file and folder indexes)
-export function shouldUpsertFile(path: string, mtime: number): boolean {
-    const k = norm(path);
-    const cached = file_idx.get(k);
-    return !cached || mtime > cached.last_mtime;
-}
-
-export function shouldUpsertFolder(path: string, mtime: number): boolean {
-    const k = norm(path);
-    const cached = folder_idx.get(k);
-    // process if unknown or newer
-    return !cached || mtime > cached.last_mtime;
-}
-
 // Internal helpers
 
 function dedupeFileUpserts(rows: FileIndexRow[]): FileIndexRow[] {
@@ -198,11 +176,12 @@ export function flushIndexQueues(): Promise<void> {
             }
 
             // 3) Mirror to hot caches after success
-            for (const r of uniqFolderUp) folder_idx.set(norm(r.folder_path), { last_mtime: r.last_mtime });
-            for (const r of uniqFileUp) file_idx.set(norm(r.file_path), { last_mtime: r.last_mtime, file_hash: r.file_hash ?? null });
+            for (const r of uniqFolderUp) folder_idx.set(norm(r.folder_path), r);
+            for (const r of uniqFileUp) file_idx.set(norm(r.file_path), r);
             for (const p of folderDel) folder_idx.delete(norm(p));
             for (const p of fileDel) file_idx.delete(norm(p));
         } catch (e) {
+            console.error('Error while flushing indexes');
             await db.execute('ROLLBACK');
             throw e;
         }
@@ -406,7 +385,7 @@ export async function getSubfolders(
     force: boolean = false
 ): Promise<{ folders: string[]; totDir: number; numRead: number; numCached: number }> {
     // 1) Read children once and filter to directories
-    let entries: FolderResult[] = await invokeReadDir(rootPath);
+    let entries: DirResult[] = await invokeReadDir(rootPath);
     entries = entries.filter(e => e.info?.isDirectory);
 
     const paths = entries.map(e => norm(e.path));
@@ -449,9 +428,15 @@ export async function getSubfolders(
 }
 
 // Session-scoped cache
-const folderIndexCache = new Map<string, FolderIndexRow>();
 
-async function getFolderIndexesWithLocalCache(
+/**
+ * Fetches first from the session-based memory cache, any folders not in the local cache,
+ * the method makes a call to the DB to see if it exists.
+ * @param paths 
+ * @param force 
+ * @returns 
+ */
+export async function getFolderIndexesWithLocalCache(
     paths: string[],
     force = false
 ): Promise<Map<string, FolderIndexRow>> {
@@ -462,7 +447,7 @@ async function getFolderIndexesWithLocalCache(
         // Skip cache entirely, load all from DB
         const loaded = await getManyFolderIndexesByPaths(paths);
         // Store in local cache for future calls
-        for (const [p, row] of loaded) folderIndexCache.set(p, row);
+        for (const [p, row] of loaded) folder_idx.set(p, row);
         return loaded;
     }
 
@@ -470,8 +455,8 @@ async function getFolderIndexesWithLocalCache(
 
     // Try local cache first
     for (const p of paths) {
-        if (folderIndexCache.has(p)) {
-            out.set(p, folderIndexCache.get(p)!);
+        if (folder_idx.has(p)) {
+            out.set(p, folder_idx.get(p)!);
         } else {
             misses.push(p);
         }
@@ -479,10 +464,54 @@ async function getFolderIndexesWithLocalCache(
 
     // Load only misses from DB
     if (misses.length) {
-        console.error('boom!');
+        // Technically this should not happen if the local cache is properly in sync with the DB
         const loaded = await getManyFolderIndexesByPaths(misses);
         for (const [p, row] of loaded) {
-            folderIndexCache.set(p, row);
+            folder_idx.set(p, row);
+            out.set(p, row);
+        }
+    }
+
+    return out;
+}
+
+/**
+ * Fetches first from the session-based memory cache, any files not in local cache,
+ * the method makes a call to the DB to see if it exists.
+ * @param paths 
+ * @param force 
+ * @returns 
+ */
+export async function getFileIndexesWithLocalCache(
+    paths: string[],
+    force = false
+): Promise<Map<string, FileIndexRow>> {
+    const out = new Map<string, FileIndexRow>();
+    if (!paths.length) return out;
+
+    if (force) {
+        const loaded = await getManyFileIndexesByPaths(paths);
+        // 合并到缓存对象
+        for (const [p, row] of loaded) {
+            file_idx.set(p, row);
+        }
+        return loaded;
+    }
+
+    const misses: string[] = [];
+
+    for (const p of paths) {
+        if (file_idx.has(p)) {
+            out.set(p, file_idx.get(p)!);
+        } else {
+            misses.push(p);
+        }
+    }
+
+    if (misses.length) {
+        const loaded = await getManyFileIndexesByPaths(misses);
+        for (const [p, row] of loaded) {
+            file_idx.set(p, row);
             out.set(p, row);
         }
     }
@@ -499,9 +528,9 @@ export interface FsListOptions {
 }
 
 export async function listDirs(
-    { root, name, force = false, dirOnly = true, cache = true }: FsListOptions
+    { root, name, dirOnly = true, cache = true }: FsListOptions
 ): Promise<{
-    listed: FolderResult[];
+    dirs: DirResult[];
     cached: FolderIndexRow[];
     totDir: number;
     numRead: number;
@@ -522,11 +551,9 @@ export async function listDirs(
     const names = re ? paths.map(nameFromPath) : undefined;
 
     // 3) Bulk-fetch cache rows for these paths (skip if forcing)
-    const indexMap: Map<string, FolderIndexRow> = !force
-        ? await getFolderIndexesWithLocalCache(paths)
-        : new Map();
+    const indexMap: Map<string, FolderIndexRow> = await getFolderIndexesWithLocalCache(paths, cache);
 
-    const listed: FolderResult[] = [];
+    const dirs: DirResult[] = [];
     const cached: FolderIndexRow[] = [];
     let numRead = 0, numCached = 0;
 
@@ -540,13 +567,11 @@ export async function listDirs(
 
         const entryMtime = Number(entry.info?.mtime);
 
-        if (!force) {
-            const rec = indexMap.get(path);
-            if (rec && rec.last_mtime >= entryMtime) {
-                cached.push(rec);
-                numCached++;
-                continue;
-            }
+        const rec = indexMap.get(path);
+        if (rec && rec.last_mtime >= entryMtime) {
+            cached.push(rec);
+            numCached++;
+            continue;
         }
 
         // Queue cache write; update after the loop
@@ -555,22 +580,24 @@ export async function listDirs(
             folder_upserts.push({ folder_path: path, last_mtime: entryMtime });
         }
 
-        listed.push(entry);
+        dirs.push(entry);
         numRead++;
     }
 
-    return { listed, cached, totDir, numRead, numCached };
+    return { dirs, cached, totDir, numRead, numCached };
 }
 
 export async function listFiles(
-    { root, name, force = false, cache = true }: FsListOptions
-): Promise<{ files: string[]; cached: FileIndexRow[]; totDir: number; numRead: number; numCached: number }> {
+    { root, name, cache = true }: FsListOptions
+): Promise<{ dirs: DirResult[]; cached: FileIndexRow[]; totDir: number; numRead: number; numCached: number }> {
     // 1) Read once and keep only files
     let entries = await invokeReadDir(root);
-    entries = entries.filter(e => e.info?.isFile);
+    entries = entries
+        .map(e => ({ ...e, path: norm(e.path) })) // normalize each path first
+        .filter(e => e.info?.isFile);
 
     // Normalize paths once
-    const paths = entries.map(e => norm(e.path));
+    const paths = entries.map(e => e.path);
     const totDir = entries.length;
 
     // 2) Optional filename filter (sync + cheap)
@@ -578,11 +605,9 @@ export async function listFiles(
     const names = re ? paths.map(nameFromPath) : undefined;
 
     // 3) Bulk cache lookup (skip when forcing)
-    const indexMap: Map<string, FileIndexRow> = !force
-        ? await getManyFileIndexesByPaths(paths)
-        : new Map<string, FileIndexRow>();
+    const indexMap: Map<string, FileIndexRow> = await getFileIndexesWithLocalCache(paths, cache);
 
-    const files: string[] = [];
+    const dirs: DirResult[] = [];
     const cached: FileIndexRow[] = [];
     let numRead = 0, numCached = 0;
 
@@ -595,13 +620,11 @@ export async function listFiles(
 
         const mtime = Number(entry.info?.mtime);
 
-        if (!force) {
-            const rec = indexMap.get(path);
-            if (rec && rec.last_mtime >= mtime) {
-                cached.push(rec);
-                numCached++;
-                continue;
-            }
+        const rec = indexMap.get(path);
+        if (rec && rec.last_mtime >= mtime) {
+            cached.push(rec);
+            numCached++;
+            continue;
         }
 
         if (cache) {
@@ -609,11 +632,11 @@ export async function listFiles(
             file_upserts.push({ file_path: path, last_mtime: mtime, file_hash: await invokeSha1(path) });
         }
 
-        files.push(fileName);
+        dirs.push(entry);
         numRead++;
     }
 
-    return { files, cached, totDir, numRead, numCached };
+    return { dirs, cached, totDir, numRead, numCached };
 }
 
 // =============================================================================

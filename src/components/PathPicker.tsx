@@ -4,6 +4,7 @@ import { exists, stat } from '@tauri-apps/plugin-fs';
 import * as path from '@tauri-apps/api/path';
 import { TextInput, ActionIcon } from '@mantine/core';
 import { IconFolder } from '@tabler/icons-react';
+import { norm } from '@/utils/fs';
 
 interface PathPickerProps {
     label: string;
@@ -23,7 +24,7 @@ export default function PathPicker({
     const validatePath = async (candidate: string) => {
         try {
             const normalized = await path.normalize(candidate);
-            const resolved = await path.resolve(normalized);
+            const resolved = norm(await path.resolve(normalized));
             if (!(await exists(resolved))) {
                 return [false, '路径无效或不存在'] as const;
             }
@@ -42,7 +43,7 @@ export default function PathPicker({
 
     const handleSelect = async () => {
         try {
-            const selected = await open({
+            const selected = await open({   
                 directory: mode === 'folder',
                 multiple: false,
                 title: `选择 ${label}`,

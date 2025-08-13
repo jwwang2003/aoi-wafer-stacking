@@ -1,4 +1,4 @@
-import { DataSourceType, FolderResult } from './DataSource';
+import { DataSourceType, DirResult } from './DataSource';
 
 export const enum Direction {
     'Up',
@@ -71,7 +71,7 @@ export interface WaferFileMetadata {
 // NOTE: WaferMetadata slice
 ////////////////////////////////////////////////////////////////////////////////
 
-export type FolderCollection = { [K in DataSourceType]: FolderResult[] };
+export type FolderCollection = { [K in DataSourceType]: DirResult[] };
 export type RawWaferMetadata = ExcelMetadata | WaferFileMetadata;
 export type RawWaferMetadataCollection = RawWaferMetadata[];
 

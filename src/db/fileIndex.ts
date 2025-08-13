@@ -96,6 +96,7 @@ export async function upsertManyFileIndexes(entries: FileIndexRow[]): Promise<vo
         }
         await db.execute("COMMIT");
     } catch (err) {
+        console.error('Error while upserting file indexes');
         await db.execute("ROLLBACK");
         throw err;
     }

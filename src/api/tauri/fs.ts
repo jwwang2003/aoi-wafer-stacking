@@ -1,4 +1,4 @@
-import { FolderResult } from "@/types/DataSource";
+import { DirResult } from "@/types/DataSource";
 import { invokeSafe } from ".";
 
 export interface FolderRequest { path: string };
@@ -15,8 +15,8 @@ export interface FolderRequest { path: string };
  *   const results = await readFileStatBatch([{ path: '/a/b' }, { path: '/x/y' }]);
  */
 export async function invokeReadFileStatBatch(
-    picked: string[] | FolderResult[]
-): Promise<FolderResult[]> {
+    picked: string[] | DirResult[]
+): Promise<DirResult[]> {
     const folders: FolderRequest[] =
         typeof picked[0] === 'string'
             ? (picked as string[]).map((p) => ({ path: p }))
@@ -26,7 +26,7 @@ export async function invokeReadFileStatBatch(
     // const seen = new Set<string>();
     // const unique = folders.filter(f => (seen.has(f.path) ? false : (seen.add(f.path), true)));
 
-    return await invokeSafe<FolderResult[]>('rust_read_file_stat_batch', { folders });
+    return await invokeSafe<DirResult[]>('rust_read_file_stat_batch', { folders });
 }
 
 /**
@@ -34,9 +34,9 @@ export async function invokeReadFileStatBatch(
  * The Rust side should return children as FolderResult[] with absolute `path`
  * and `info.is_directory` / `info.is_file` flags.
  */
-export async function invokeReadDir(rootPath: string): Promise<FolderResult[]> {
+export async function invokeReadDir(rootPath: string): Promise<DirResult[]> {
     // exactly as you requested
-    const entries = await invokeSafe<FolderResult[]>('rust_read_dir', { dir: rootPath });
+    const entries = await invokeSafe<DirResult[]>('rust_read_dir', { dir: rootPath });
     return entries;
 }
 

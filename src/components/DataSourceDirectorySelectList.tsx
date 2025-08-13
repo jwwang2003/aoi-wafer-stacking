@@ -4,9 +4,9 @@ import { Box, Group, Table, Checkbox, Button, Text } from '@mantine/core';
 import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { addFolder, removeFolder } from '@/slices/dataSourceStateSlice';
-import { DataSourceType, FolderResult } from '@/types/DataSource';
+import { DataSourceType, DirResult } from '@/types/DataSource';
 import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
-import { getRelativePath } from '@/utils/fs';
+import { getRelativePath, norm } from '@/utils/fs';
 import { deleteFolderIndexByPath } from '@/db/folderIndex';
 import { basename } from '@tauri-apps/api/path';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
@@ -32,15 +32,15 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             if (!result) return;
 
             const picked = Array.isArray(result) ? result : [result];
-            const responses: FolderResult[] = await invokeReadFileStatBatch(picked);
+            const responses: DirResult[] = await invokeReadFileStatBatch(picked);
 
             for (const folder of responses) {
                 if (folder.exists) {
                     const absPath = folder.path;
                     const relPath = getRelativePath(rootPath, folder.path);
                     if (paths.includes(relPath)) continue;
-                    dispatch(addDataSourcePath({ type, path: relPath }));
-                    dispatch(addFolder({ type, path: absPath }));
+                    dispatch(addDataSourcePath({ type, path: norm(relPath) }));
+                    dispatch(addFolder({ type, path: norm(absPath) }));
                 }
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,7 +59,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
     const handleRemoveSelected = async () => {
         for (const path of selected) {
-            await deleteAction(path);
+            await deleteAction(norm(path));
         }
         setSelected([]);
     };
@@ -150,7 +150,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                                             variant="light"
                                             color="red"
                                             onClick={async () => {
-                                                await deleteAction(path);
+                                                await deleteAction(norm(path));
                                                 setSelected((s) => s.filter((x) => x !== path));
                                             }}
                                         >

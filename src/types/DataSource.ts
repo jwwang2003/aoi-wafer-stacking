@@ -84,7 +84,7 @@ export interface Folder {
  * - Some low-level fields are platform-dependent and may be `null`.
  * - On Windows, `fileAttributes` may be set; it’s `null` on other platforms.
  */
-export interface FolderResult {
+export interface DirResult {
     path: string;
     exists: boolean;
     info?: FileInfo

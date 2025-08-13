@@ -25,9 +25,7 @@ import Preview from './Preview';
 
 import { FlowStepper } from '@/components';
 import { DataSourceFlowSteps } from '@/flows';
-import { ConfigStepperState } from '@/types/Stepper';
 
-import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
 import { initDataSourceConfig } from '@/slices/dataSourceConfigSlice';
 import { initPreferences } from '@/slices/preferencesSlice';
 import { initDataSourceState } from '@/slices/dataSourceStateSlice';
@@ -45,7 +43,6 @@ export default function ConfigPage() {
     const dispatch = useDispatch<AppDispatch>();
     const [mounted, setMounted] = useState<boolean>(false);
 
-    const { rootPath } = useAppSelector((s) => s.dataSourceConfig);
     const flowStep = useAppSelector((s) => s.preferences.stepper);
 
     // figure out which segment is active
@@ -61,28 +58,11 @@ export default function ConfigPage() {
         if (!mounted) setMounted(true);
     }, []);
 
-    // This runs automatically when flowStep or rootPath changes
-    useEffect(() => {
-        const doAction = async () => {
-            switch (flowStep) {
-                case ConfigStepperState.Metadata:
-                    await dispatch(fetchWaferMetadata());
-                    break;
-            }
-        };
-        if (mounted && rootPath) {
-            doAction();
-        }
-    }, [mounted, flowStep, rootPath]);
-
     // “运行全部” handler: run both thunks, then bump the refreshKey
     const handleRunAll = async () => {
         await dispatch(initPreferences());
         await dispatch(initDataSourceConfig());
         await dispatch(initDataSourceState());
-        // await dispatch(fetchWaferMetadata());
-        // force remount of every subpage component
-        // setRefreshKey((k) => k + 1);
     };
 
     return (

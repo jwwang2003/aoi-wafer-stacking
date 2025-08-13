@@ -56,9 +56,6 @@ export const initPreferences = createAsyncThunk<
                 preferences = mergeDefinedKeys(preferences, parsed);
             } else {
                 console.warn('[PREF. validation] invalid preferences structure, using defaults');
-                console.error({
-                    parsed
-                });
             }
 
             // Check if data source config file exists

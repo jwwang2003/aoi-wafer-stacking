@@ -105,6 +105,7 @@ export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promis
         }
         await db.execute("COMMIT");
     } catch (err) {
+        console.error('Error while upserting folder indexes');
         await db.execute("ROLLBACK");
         throw err;
     }

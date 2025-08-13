@@ -22,8 +22,8 @@ export function mergeDefinedKeys<T extends object>(
 
 export async function createDefaultPreferences(): Promise<PreferencesState> {
     const dir = await appDataDir();
-    const preferenceFilePath = await resolve(dir, PREFERENCES_FILENAME);
-    const dataSourceConfigPath = await resolve(dir, DATA_SOURCES_CONFIG_FILENAME);
+    const preferenceFilePath = norm(await resolve(dir, PREFERENCES_FILENAME));
+    const dataSourceConfigPath = norm(await resolve(dir, DATA_SOURCES_CONFIG_FILENAME));
 
     return {
         ...initialState,
@@ -47,6 +47,7 @@ export function prepPreferenceWriteOut(pref: PreferencesState): string {
 
 import { DataSourceConfigState } from '@/types/DataSource';
 import { initialDataSourceConfigState } from '@/constants/default';
+import { norm } from './fs';
 
 export async function createDefaultDataSourceConfig(): Promise<DataSourceConfigState> {
     // const dir = await appDataDir();

@@ -1,5 +1,5 @@
-import { basename } from '@tauri-apps/api/path';
-import { listDirs, listFiles, join, mtime, match, nameFromPath } from './fs';
+// import { basename } from '@tauri-apps/api/path';
+import { listDirs, listFiles, join, match, nameFromPath } from './fs';
 import { logCacheReport } from './console';
 
 type FolderStep = {
@@ -24,7 +24,6 @@ export async function scanPattern<T extends Record<string, string>>(
 ): Promise<{
     data: { ctx: T; filePath: string; lastModified: number }[];
     totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number; elapsed: number;
-    readDirs: string[]; cachedDirs: string[];
 }> {
     let totDir = 0, numRead = 0, numCached = 0, totMatch = 0, totAdded = 0, elapsed = 0;
 
@@ -38,26 +37,27 @@ export async function scanPattern<T extends Record<string, string>>(
         if (level === pattern.steps.length) {
             // terminal: files
             const t0 = performance.now();
-            const { files, cached, totDir: totFiles, numCached: numCachedFile, numRead: numReadFile } =
+            const { dirs, cached, totDir: totFiles, numCached: numCachedFile, numRead: numReadFile } =
                 await listFiles({ root: parentPath, name: pattern.files.name });
             elapsed += performance.now() - t0;
 
             totDir += totFiles; numRead += numReadFile; numCached += numCachedFile;
 
-            for (const f of files) {
-                const m = match(pattern.files.name, f); if (!m) continue;
+            for (const f of dirs) {
+                const name = nameFromPath(f.path);
+                const m = match(pattern.files.name, name); if (!m) continue;
                 totMatch++;
                 totAdded++;
-                const filePath = await join(parentPath, f);
+                const filePath = f.path;
                 readFiles.push(filePath);
-                pattern.files.onFile(ctx, filePath, await mtime(filePath));
+                pattern.files.onFile(ctx, filePath, Number(f.info?.mtime));
             }
             for (const cache of cached) {
                 const filepath = cache.file_path;
-                const filename = await basename(filepath);
+                const filename = nameFromPath(filepath);
                 const m = match(pattern.files.name, filename); if (!m) continue;
                 cachedFiles.push(filepath);
-                pattern.files.onFile(ctx, filepath, await mtime(filepath));
+                // pattern.files.onFile(ctx, filepath, Number(cache.last_mtime));
             }
             return;
         }
@@ -65,7 +65,7 @@ export async function scanPattern<T extends Record<string, string>>(
         // descend into next-level folders
         const step = pattern.steps[level];
         const t1 = performance.now();
-        const { listed: dirs, cached, totDir: totFolders, numCached: numCachedFolder, numRead: numReadFolder } =
+        const { dirs, cached, totDir: totFolders, numCached: numCachedFolder, numRead: numReadFolder } =
             await listDirs({ root: parentPath, name: step.name });
         elapsed += performance.now() - t1;
 
@@ -73,7 +73,8 @@ export async function scanPattern<T extends Record<string, string>>(
 
         for (const d of dirs) {
             const name = nameFromPath(d.path);
-            const m = match(step.name, d.path)!; const [, ...g] = m;
+            const m = match(step.name, name)!;
+            const [, ...g] = m;
             if (step.onMatch && step.onMatch(g) === false) continue;
             totMatch++;
             totAdded++;
@@ -85,12 +86,12 @@ export async function scanPattern<T extends Record<string, string>>(
 
         for (const d of cached as any[]) {
             const folderPath: string = typeof d === 'string' ? await join(parentPath, d) : d.folder_path;
-            const folderName = await basename(folderPath);
+            const folderName = await nameFromPath(folderPath);
             const m = match(step.name, folderName)!; const [, ...g] = m;
             if (step.onMatch && step.onMatch(g) === false) continue;
             const nextCtx = { ...ctx, ...contextFromFolder(level, folderName, g) } as T;
             cachedDirs.push(folderPath);
-            await walk(level + 1, await join(parentPath, folderName), nextCtx);
+            // await walk(level + 1, await join(parentPath, folderName), nextCtx);
         }
     }
 
@@ -104,11 +105,8 @@ export async function scanPattern<T extends Record<string, string>>(
     for (const r of roots) await walk(0, r, {} as T);
     pattern.files.onFile = originalOnFile;
 
-    // dirs should include files + folders (read + cached)
-    const considered = [...readDirs, ...cachedDirs, ...readFiles, ...cachedFiles];
-
     logCacheReport({
-        dirs: considered.length ? considered : 0,
+        dirs: 0,
         totDir,
         numCached,
         numRead,
@@ -123,8 +121,6 @@ export async function scanPattern<T extends Record<string, string>>(
         numCached,
         totMatch,
         totAdded,
-        elapsed,
-        readDirs,
-        cachedDirs,
+        elapsed
     };
 }

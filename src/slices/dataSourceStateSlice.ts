@@ -1,12 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { DataSourceType, Folder, FolderGroupsState, FolderResult } from '@/types/DataSource';
+import type { DataSourceType, Folder, FolderGroupsState, DirResult } from '@/types/DataSource';
 
 import { initialDataSourceState as initialState } from '@/constants/default';
 import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
+import { norm } from '@/utils/fs';
 
 // DEVELOPER NOTES:
 // April 10, 2025
@@ -41,7 +42,7 @@ export const initDataSourceState = createAsyncThunk<
         const relativePaths = paths[typed];
         const resolved: Folder[] = await Promise.all(
             relativePaths.map(async (relPath): Promise<Folder> => {
-                const absPath = await resolve(rootPath, relPath);
+                const absPath = norm(await resolve(rootPath, relPath));
                 return {
                     id: uuidv4(),
                     path: absPath,
@@ -72,9 +73,9 @@ export const refreshFolderStatuses = createAsyncThunk(
                 const typed = type as DataSourceType;
 
                 const folders: Folder[] = value;
-                const responses: FolderResult[] = await invokeReadFileStatBatch(folders.map((f) => f.path));
+                const responses: DirResult[] = await invokeReadFileStatBatch(folders.map((f) => f.path));
 
-                const pathToResult = new Map(responses.map(r => [r.path, r]));
+                const pathToResult = new Map(responses.map(r => [norm(r.path), r]));
 
                 updatedGroups[typed] = sortFoldersByName(
                     folders.map((folder) => {
