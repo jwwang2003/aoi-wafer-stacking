@@ -97,11 +97,11 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             >
                 {/* Percentage-based widths */}
                 <colgroup>
-                    <col style={{ width: '5%' }} />   {/* checkbox */}
-                    <col style={{ width: '10%' }} />  {/* actions */}
-                    <col style={{ width: '20%' }} />  {/* folder name */}
-                    <col style={{ width: '45%' }} />  {/* path */}
-                    <col style={{ width: '20%' }} />  {/* mtime */}
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '45%' }} />
+                    <col style={{ width: '20%' }} />
                 </colgroup>
 
                 <Table.Thead>

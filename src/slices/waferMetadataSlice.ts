@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 
-import { DataSourceConfigState, DataSourceType, DirResult, FolderGroupsState } from '@/types/DataSource';
+import { DataSourceType, DirResult, FolderGroupsState } from '@/types/DataSource';
 import { ExcelMetadata, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
 import { initialWaferMetadataState as initialState, now } from '@/constants/default';
 import { RootState } from '@/store';
@@ -28,8 +28,8 @@ export const fetchWaferMetadata = createAsyncThunk<
             // start timer
             const start = performance.now();
 
-            const dataSourcePaths = await getDataSourcePathsFolders(dataSourceState);
-            const parsed: RawWaferMetadataCollection = await readFolderData(dataSourcePaths);
+            const dataSourcePaths = await getAllWaferFolders(dataSourceState);
+            const parsed: RawWaferMetadataCollection = await readAllWaferData(dataSourcePaths);
 
             // end timer & compute duration
             const duration = performance.now() - start;
@@ -81,7 +81,7 @@ export default waferMetadataSlice.reducer;
 
 //======================================================================================================================
 
-export async function getDataSourcePathsFolders(state: FolderGroupsState): Promise<FolderCollection> {
+export async function getAllWaferFolders(state: FolderGroupsState): Promise<FolderCollection> {
     const entries = Object.entries(state).filter(([key]) => key !== 'lastModified').map(e => [e[0], e[1].map(f => f.path)]) as [DataSourceType, string[]][];
 
     const results = await Promise.all(
@@ -93,18 +93,13 @@ export async function getDataSourcePathsFolders(state: FolderGroupsState): Promi
         })
     );
 
-    console.log({
-        results
-    })
-
     const dataSourceFolders: FolderCollection = { substrate: [], fabCp: [], cpProber: [], wlbi: [], aoi: [] };
-
     for (const [key, folderResults] of results) dataSourceFolders[key] = folderResults;
 
     return dataSourceFolders;
 }
 
-export async function readFolderData(folders: FolderCollection): Promise<RawWaferMetadataCollection> {
+export async function readAllWaferData(folders: FolderCollection): Promise<RawWaferMetadataCollection> {
     // Execute all at the same time
     try {
         const substrate = await readSubstrateMetadata(folders.substrate);
@@ -134,7 +129,7 @@ export async function readFolderData(folders: FolderCollection): Promise<RawWafe
     } catch (err) {
         console.error(err);
     }
-    
+
     return [];
 }
 
@@ -189,8 +184,6 @@ export async function readSubstrateMetadata(
                 numRead: _numRead,
                 numCached: _numCached,
             } = await listFiles({ root: dlPath, name: defectXls });
-
-            console.error(dirs);
 
             totDir += _totDir; numRead += _numRead; numCached += _numCached;
 
@@ -334,13 +327,8 @@ export async function readCpProberMetadata(
         }
     );
 
-    const {
-        data: items
-    } = scanResult;
-
-    console.debug(scanResult);
-
-    // validate and map to your output type
+    const { data: items } = scanResult;
+    
     const result: WaferFileMetadata[] = [];
     for (const { ctx, filePath, lastModified } of items) {
         const ok =
@@ -434,6 +422,9 @@ export async function readWlbiMetadata(
             lastModified,
         });
     }
+
+    await flushIndexQueues();
+
     return {
         ...scanResult,
         data: result
@@ -498,6 +489,9 @@ export async function readAoiMetadata(
             lastModified,
         });
     }
+
+    await flushIndexQueues();
+
     return {
         ...scanResult,
         data: result
