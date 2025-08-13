@@ -155,7 +155,7 @@ export async function readFolderData(folders: FolderCollection): Promise<RawWafe
  * @param folders 
  * @returns 
  */
-import { listDirs, listFiles, join, mtimeMs, match } from '@/utils/fs';
+import { listDirs, listFiles, join, mtime, match, nameFromPath, flushIndexQueues } from '@/utils/fs';
 import { scanPattern } from '@/utils/waferData';
 import { logCacheReport } from '@/utils/console';
 export async function readSubstrateMetadata(
@@ -185,6 +185,7 @@ export async function readSubstrateMetadata(
             numRead: numReadFolders,
             numCached: numCachedFolders,
         } = await listDirs({ root: folder.path, name: defectListFolder });
+        flushIndexQueues();
 
         totDir += totDirFolder;
         numRead += numReadFolders;
@@ -194,8 +195,8 @@ export async function readSubstrateMetadata(
         for (const d of dlFolders) considered.push(d.path);
         for (const c of dlFoldersCached) considered.push(c.folder_path);
 
-        for (const dl of dlFolders.concat(dlFoldersCached.map((f) => f))) {
-            const dlName = await basename(dl);
+        for (const dl of considered) {
+            const dlName = nameFromPath(dl);
             const dlPath = await join(folder.path, dlName);
 
             const {
@@ -223,7 +224,7 @@ export async function readSubstrateMetadata(
                     stage: 'substrate',
                     id,
                     filePath,
-                    lastModified: await mtimeMs(filePath),
+                    lastModified: await mtime(filePath),
                 });
                 totMatch++; totAdded++;
             }
@@ -270,7 +271,7 @@ export async function readSubstrateMetadata(
                     type: ExcelType.Mapping,
                     stage: 'substrate',
                     filePath,
-                    lastModified: await mtimeMs(filePath),
+                    lastModified: await mtime(filePath),
                 });
                 totMatch++; totAdded++;
             } else if (m2) {
@@ -281,7 +282,7 @@ export async function readSubstrateMetadata(
                     oem,
                     time: parseWaferMapTimestamp(date, time).toISOString(),
                     filePath,
-                    lastModified: await mtimeMs(filePath),
+                    lastModified: await mtime(filePath),
                 });
                 totMatch++; totAdded++;
             }

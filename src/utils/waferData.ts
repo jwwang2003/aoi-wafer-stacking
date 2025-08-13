@@ -1,5 +1,5 @@
 import { basename } from '@tauri-apps/api/path';
-import { listDirs, listFiles, join, mtimeMs, match, nameFromPath } from './fs';
+import { listDirs, listFiles, join, mtime, match, nameFromPath } from './fs';
 import { logCacheReport } from './console';
 
 type FolderStep = {
@@ -50,14 +50,14 @@ export async function scanPattern<T extends Record<string, string>>(
                 totAdded++;
                 const filePath = await join(parentPath, f);
                 readFiles.push(filePath);
-                pattern.files.onFile(ctx, filePath, await mtimeMs(filePath));
+                pattern.files.onFile(ctx, filePath, await mtime(filePath));
             }
             for (const cache of cached) {
                 const filepath = cache.file_path;
                 const filename = await basename(filepath);
                 const m = match(pattern.files.name, filename); if (!m) continue;
                 cachedFiles.push(filepath);
-                pattern.files.onFile(ctx, filepath, await mtimeMs(filepath));
+                pattern.files.onFile(ctx, filepath, await mtime(filepath));
             }
             return;
         }

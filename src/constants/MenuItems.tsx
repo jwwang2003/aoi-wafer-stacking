@@ -1,18 +1,19 @@
 import {
     IconHome,
     IconSettings,
-    IconDisc,
     IconEyeSearch,
     IconDatabase,
     IconHelpCircle,
     IconInfoCircle,
     IconMessage2,
+    IconStack3,
 } from '@tabler/icons-react';
 
 import {
     Welcome as WelcomePage,
     Config as ConfigPage,
     WaferStacking as WaferStackingPage,
+    Database as DatabasePage,
     Log as LogPage,
     About as AboutPage,
     ComingSoon,
@@ -52,7 +53,7 @@ export const menuItems: MenuItem[] = [
         component: ComingSoon,
     },
     {
-        icon: IconDisc,
+        icon: IconStack3,
         label: '叠图',
         value: 'wafer',
         path: '/wafer',
@@ -63,7 +64,7 @@ export const menuItems: MenuItem[] = [
         label: '数据库',
         value: 'db',
         path: '/db',
-        component: ComingSoon,
+        component: DatabasePage,
     },
     {
         icon: IconMessage2,
