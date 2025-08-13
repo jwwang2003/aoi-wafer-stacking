@@ -169,7 +169,7 @@ export const calculateStats = (mapData: string[]): Statistics => {
         for (const char of row) {
             if (char !== '.' && char !== 'S' && char !== '*') {
                 totalTested++;
-                if (char === '1' || char === 'A' || char === 'B' || char === 'C') {
+                if (char === '1' || char === 'G' || char === 'H' || char === 'I'|| char === 'J') {
                     totalPass++;
                 }
             }
