@@ -1,4 +1,3 @@
-// SubstrateConfig.tsx
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { setOffsets } from '@/slices/preferencesSlice';
 import { OffsetConfig } from '@/types/Preferences';
@@ -20,54 +19,54 @@ import {
 } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import { resolveResource } from '@tauri-apps/api/path';
+// import { open } from '@tauri-apps/api/dialog';
 import SubstrateRenderer from '@/components/Wafer';
+
 interface SheetInfo {
     id: string;
     name: string;
 }
 
 function SubstrateThreeView({
-    xOffset,
-    yOffset,
-    scale,
-    filePath,
-    selectedSheetId,
-    sheetsData,
+  xOffset,
+  yOffset,
+  selectedSheetId,
+  sheetsData,
 }: OffsetConfig & {
     filePath: string;
     selectedSheetId: string | null;
     sheetsData: Record<string, SubstrateDefectRecord[]>;
 }) {
-    return (
-        <Box
-            style={{
-                height: '600px',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                position: 'relative',
-            }}
-        >
-            <SubstrateRenderer
-                filePath={filePath}
-                gridSize={5}
-                overlapColor={0xfa5959}
-                style={{
-                    transform: `translate(${xOffset}px, ${yOffset}px) scale(${scale})`,
-                }}
-                selectedSheetId={selectedSheetId}
-                sheetsData={sheetsData}
-            />
-            <Box
-                style={{
-                    position: 'absolute',
-                    bottom: '16px',
-                    right: '16px',
-                    display: 'flex',
-                    gap: '8px',
-                }}
-            ></Box>
-        </Box>
-    );
+  return (
+    <Box
+      style={{
+        height: '600px',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      <SubstrateRenderer
+        // 传递预设的格子尺寸：4.134mm × 3.74mm
+        gridWidth={4.134}
+        gridHeight={3.74}
+        overlapColor={0xfa5959}
+        // 将偏移量作为网格位置参数传递，而不是通过CSS变换
+        gridOffset={{ x: xOffset, y: yOffset }}
+        selectedSheetId={selectedSheetId}
+        sheetsData={sheetsData}
+      />
+      <Box
+        style={{
+          position: 'absolute',
+          bottom: '16px',
+          right: '16px',
+          display: 'flex',
+          gap: '8px',
+        }}
+      ></Box>
+    </Box>
+  );
 }
 
 export default function SubstrateConfigPage() {
