@@ -5,7 +5,7 @@ import { DirResult } from '@/types/DataSource';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { deleteFolderIndexesByPaths, getAllFolderIndexes, getManyFolderIndexesByPaths, upsertManyFolderIndexes, upsertOneFolderIndex } from '@/db/folderIndex';
 import { invokeReadDir,invokeSha1 } from '@/api/tauri/fs';
-import { deleteFileIndexesByPaths, getAllFileIndexes, getManyFileIndexesByPaths, upsertManyFileIndexes } from '@/db/fileIndex';
+import { deleteFileIndexesByPaths, getAllFileIndexes, upsertManyFileIndexes } from '@/db/fileIndex';
 import { getDb } from '@/db';
 
 // ---------- Globals ----------

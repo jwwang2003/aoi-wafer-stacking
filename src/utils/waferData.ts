@@ -258,6 +258,7 @@ export async function processNSyncWaferData(
     records: WaferFileMetadata[]
 ) {
     const name = 'Proc. N. Sync. Wafer Data';
+    console.groupCollapsed(`%c[${name}]`, "color: lightblue;");
     try {
         const dbResult = await upsertManyWaferMaps(
             records
@@ -275,8 +276,9 @@ export async function processNSyncWaferData(
         console.log({ dbResult });
     }
     catch (err) {
-        const msg = `[${name}] ${typeof err === 'object' ? err instanceof Error ? err.message : String(err): 'unknown error'}`;
+        const msg = `[${name}] ${typeof err === 'object' ? err instanceof Error ? err.message : String(err) : 'unknown error'}`;
         console.error(msg);
         throw err;
     }
+    console.groupEnd();
 }

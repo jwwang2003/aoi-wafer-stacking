@@ -30,11 +30,8 @@ export interface DataSourceConfigState {
     lastSaved: string;
 }
 
-
-// TODO: Add support for 'fab-cp' paths
 export type DataSourceType =
     'substrate' | 'fabCp' | 'cpProber' | 'wlbi' | 'aoi';
-// 'substrate' | 'fabCp' | 'cpProber' | 'wlbi' | 'aoi';
 
 /**
  * Internal DS for tracking folder state

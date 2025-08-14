@@ -20,6 +20,7 @@ import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
 import { deleteAllFileIndexes } from '@/db/fileIndex';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
 import { processNSyncExcelData, processNSyncWaferData } from '@/utils/waferData';
+import { resetSessionFileIndexCache, resetSessionFolderIndexCache } from '@/utils/fs';
 
 export default function Preview() {
     const dispatch = useDispatch<AppDispatch>();
@@ -57,8 +58,10 @@ export default function Preview() {
         try {
             // 当选择“强制重扫”时：先清空缓存表，再加载
             if (forceRescan && db) {
-                await deleteAllFileIndexes();
-                await deleteAllFolderIndexes();
+                await resetSessionFileIndexCache();
+                await resetSessionFolderIndexCache();
+                // await deleteAllFileIndexes();
+                // await deleteAllFolderIndexes();
             }
 
             const data = await dispatch(fetchWaferMetadata());
