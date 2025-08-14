@@ -1,15 +1,29 @@
-import { useState } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
+import { useEffect, useMemo, useState } from 'react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, stat } from '@tauri-apps/plugin-fs';
-import * as path from '@tauri-apps/api/path';
-import { TextInput, ActionIcon } from '@mantine/core';
-import { IconFolder } from '@tabler/icons-react';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import * as sysPath from '@tauri-apps/api/path';
+import {
+    TextInput,
+    type TextInputProps,
+    ActionIcon,
+    Group,
+    Tooltip,
+    CopyButton,
+    Stack,
+} from '@mantine/core';
+import { IconFolder, IconFolderOpen, IconCopy, IconCheck } from '@tabler/icons-react';
+import { norm } from '@/utils/fs';
 
-interface PathPickerProps {
+type Mode = 'file' | 'folder';
+
+interface PathPickerProps
+    extends Omit<TextInputProps, 'value' | 'onChange' | 'onClick' | 'leftSection' | 'rightSection'> {
     label: string;
     value: string;
     onChange: (value: string) => void;
-    mode?: 'file' | 'folder';
+    mode?: Mode;
+    disabled?: boolean;
 }
 
 export default function PathPicker({
@@ -17,13 +31,37 @@ export default function PathPicker({
     value,
     onChange,
     mode = 'folder',
+    disabled = false,
+    error: errorProp,
+    ...textInputProps
 }: PathPickerProps) {
     const [error, setError] = useState<string | null>(null);
+    const [folderPath, setFolderPath] = useState<string>('');
+
+    // keep a folder version of `value` for copy/reveal
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                if (!value) {
+                    if (alive) setFolderPath('');
+                    return;
+                }
+                const folder = mode === 'folder' ? value : await sysPath.dirname(value);
+                if (alive) setFolderPath(folder);
+            } catch {
+                if (alive) setFolderPath('');
+            }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [value, mode]);
 
     const validatePath = async (candidate: string) => {
         try {
-            const normalized = await path.normalize(candidate);
-            const resolved = await path.resolve(normalized);
+            const normalized = await sysPath.normalize(candidate);
+            const resolved = norm(await sysPath.resolve(normalized));
             if (!(await exists(resolved))) {
                 return [false, '路径无效或不存在'] as const;
             }
@@ -41,8 +79,9 @@ export default function PathPicker({
     };
 
     const handleSelect = async () => {
+        if (disabled) return;
         try {
-            const selected = await open({
+            const selected = await openDialog({
                 directory: mode === 'folder',
                 multiple: false,
                 title: `选择 ${label}`,
@@ -57,26 +96,91 @@ export default function PathPicker({
                     setError(result);
                 }
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
-            setError(`选择失败: ${e.message}`);
+            setError(`选择失败: ${e?.message ?? String(e)}`);
         }
     };
 
+    const canReveal = Boolean(folderPath);
+
     return (
-        <TextInput
-            label={label}
-            placeholder={mode === 'folder' ? '点击选择目录' : '点击选择文件'}
-            value={value}
-            readOnly
-            onClick={handleSelect}
-            error={error}
-            leftSection={
-                <ActionIcon variant='filled' aria-label='Select path' onClick={handleSelect}>
-                    <IconFolder size={16} stroke={2} />
-                </ActionIcon>
-            }
-            styles={{ input: { cursor: 'pointer' } }}
-        />
+        <Group gap="xs" align="end" wrap="nowrap" w="100%">
+            <TextInput
+                label={label}
+                placeholder={mode === 'folder' ? '点击选择目录' : '点击选择文件'}
+                value={value}
+                readOnly
+                onClick={handleSelect}
+                disabled={disabled}
+                error={error ?? errorProp}
+                leftSection={
+                    <ActionIcon
+                        variant="filled"
+                        aria-label="选择路径"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelect();
+                        }}
+                        disabled={disabled}
+                    >
+                        <IconFolder size={16} stroke={2} />
+                    </ActionIcon>
+                }
+                // fill remaining horizontal space
+                style={{ flex: 1 }}
+                w="100%"
+                // keep pointer cursor only when interactive
+                styles={{ input: { cursor: disabled ? 'default' : 'pointer' } }}
+                {...textInputProps}
+            />
+
+            {/* Right controls rendered separately; do not grow */}
+            <Group
+                gap={6}
+                align="center"
+                style={{ flex: '0 0 auto', alignSelf: 'stretch', paddingTop: label ? 22 : 0 }}
+            >
+                <Tooltip label="在文件夹中显示" withArrow>
+                    <ActionIcon
+                        size="lg"
+                        variant="light"
+                        color="gray"
+                        disabled={!canReveal}
+                        onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!canReveal) return;
+                            try {
+                                await revealItemInDir(mode === 'file' ? value : folderPath);
+                            } catch {
+                                try {
+                                    await revealItemInDir(folderPath || value);
+                                } catch {/* noop */ }
+                            }
+                        }}
+                    >
+                        <IconFolderOpen size={16} />
+                    </ActionIcon>
+                </Tooltip>
+
+                <CopyButton value={folderPath} timeout={1200}>
+                    {({ copied, copy }) => (
+                        <Tooltip label={copied ? '已复制' : '复制文件夹路径'} withArrow>
+                            <ActionIcon
+                                size="lg"
+                                variant={copied ? 'filled' : 'light'}
+                                color={copied ? 'teal' : 'gray'}
+                                disabled={!canReveal}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    copy();
+                                }}
+                            >
+                                {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                            </ActionIcon>
+                        </Tooltip>
+                    )}
+                </CopyButton>
+            </Group>
+        </Group>
     );
 }

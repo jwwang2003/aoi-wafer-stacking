@@ -1,14 +1,12 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { basename, resolve } from '@tauri-apps/api/path';
 
-import { DataSourceConfigState, DataSourceType, FolderResult } from '@/types/DataSource';
+import { DataSourceType, DirResult, FolderGroupsState } from '@/types/DataSource';
 import { ExcelMetadata, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
 import { initialWaferMetadataState as initialState, now } from '@/constants/default';
 import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/Stepper';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
-import { dirScanResultToast } from '@/components/Toaster';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.
@@ -25,13 +23,13 @@ export const fetchWaferMetadata = createAsyncThunk<
     'waferMetadata/fetch',
     async (_, thunkAPI) => {
         try {
-            const { dataSourceConfig } = thunkAPI.getState();
+            const { dataSourceState } = thunkAPI.getState();
 
             // start timer
             const start = performance.now();
 
-            const dataSourcePaths = await getDataSourcePathsFolders(dataSourceConfig);
-            const parsed: RawWaferMetadataCollection = await readFolderData(dataSourcePaths);
+            const dataSourcePaths = await getAllWaferFolders(dataSourceState);
+            const parsed: RawWaferMetadataCollection = await readAllWaferData(dataSourcePaths);
 
             // end timer & compute duration
             const duration = performance.now() - start;
@@ -81,69 +79,56 @@ const waferMetadataSlice = createSlice({
 export const { clearWaferMetadata } = waferMetadataSlice.actions;
 export default waferMetadataSlice.reducer;
 
-export async function getDataSourcePathsFolders(state: DataSourceConfigState): Promise<FolderCollection> {
-    const { rootPath, paths } = state;
+//======================================================================================================================
 
-    const entries = Object.entries(paths).filter(([key]) => key !== 'lastModified') as [DataSourceType, string[]][];
+export async function getAllWaferFolders(state: FolderGroupsState): Promise<FolderCollection> {
+    const entries = Object.entries(state).filter(([key]) => key !== 'lastModified').map(e => [e[0], e[1].map(f => f.path)]) as [DataSourceType, string[]][];
 
     const results = await Promise.all(
         entries.map(async ([key, folderList]) => {
-            const resolvedFolders = await Promise.all(
-                folderList.map(async (f) => (await resolve(rootPath, f)))
-            );
-
-            const responses: FolderResult[] = await invokeReadFileStatBatch(resolvedFolders);
-
+            const responses: DirResult[] = await invokeReadFileStatBatch(folderList);
             return [key, responses] as const;
         })
     );
 
-    const dataSourceFolders: FolderCollection = {
-        substrate: [],
-        fabCp: [],
-        cpProber: [],
-        wlbi: [],
-        aoi: [],
-    };
-
-    for (const [key, folderResults] of results) {
-        dataSourceFolders[key] = folderResults;
-    }
+    const dataSourceFolders: FolderCollection = { substrate: [], fabCp: [], cpProber: [], wlbi: [], aoi: [] };
+    for (const [key, folderResults] of results) dataSourceFolders[key] = folderResults;
 
     return dataSourceFolders;
 }
 
-export async function readFolderData(folders: FolderCollection): Promise<RawWaferMetadataCollection> {
+export async function readAllWaferData(folders: FolderCollection): Promise<RawWaferMetadataCollection> {
     // Execute all at the same time
-    const [substrate, cpProber, wlbi, aoi] = await Promise.all([
-        readSubstrateMetadata(folders.substrate),
-        readCpProberMetadata(folders.cpProber),
-        readWlbiMetadata(folders.wlbi),
-        readAoiMetadata(folders.aoi),
-    ]);
+    try {
+        const substrate = await readSubstrateMetadata(folders.substrate);
+        const cpProber = await readCpProberMetadata(folders.cpProber);
+        const wlbi = await readWlbiMetadata(folders.wlbi);
+        const aoi = await readAoiMetadata(folders.aoi);
 
-    // Aggregate metrics
-    const totDir = substrate.totDir + cpProber.totDir + wlbi.totDir + aoi.totDir;
-    const numRead = substrate.numRead + cpProber.numRead + wlbi.numRead + aoi.numRead;
-    const numCached = substrate.numCached + cpProber.numCached + wlbi.numCached + aoi.numCached;
-    const totMatch = substrate.totMatch + cpProber.totMatch + wlbi.totMatch + aoi.totMatch;
-    const totAdded = substrate.totAdded + cpProber.totAdded + wlbi.totAdded + aoi.totAdded;
-    const elapsed = (substrate as any).elapsed + (cpProber as any).elapsed + (wlbi as any).elapsed + (aoi as any).elapsed;
+        const totDir = substrate.totDir + cpProber.totDir + wlbi.totDir + aoi.totDir;
+        const numRead = substrate.numRead + cpProber.numRead + wlbi.numRead + aoi.numRead;
+        const numCached = substrate.numCached + cpProber.numCached + wlbi.numCached + aoi.numCached;
+        const totMatch = substrate.totMatch + cpProber.totMatch + wlbi.totMatch + aoi.totMatch;
+        const totAdded = substrate.totAdded + cpProber.totAdded + wlbi.totAdded + aoi.totAdded;
+        const elapsed = (substrate as any).elapsed + (cpProber as any).elapsed + (wlbi as any).elapsed + (aoi as any).elapsed;
 
-    // One toast, summed across all stages
-    dirScanResultToast(
-        { totDirs: totDir, numRead, numCached, totMatch, totAdded },
-        elapsed,
-        '读取元数据'
-    );
+        dirScanResultToast(
+            { totDirs: totDir, numRead, numCached, totMatch, totAdded },
+            elapsed,
+            '读取元数据'
+        );
 
-    // Flatten data
-    return [
-        ...substrate.data,
-        ...cpProber.data,
-        ...wlbi.data,
-        ...aoi.data,
-    ];
+        return [
+            ...substrate.data,
+            ...cpProber.data,
+            ...wlbi.data,
+            ...aoi.data,
+        ];
+    } catch (err) {
+        console.error(err);
+    }
+
+    return [];
 }
 
 /**
@@ -155,11 +140,12 @@ export async function readFolderData(folders: FolderCollection): Promise<RawWafe
  * @param folders 
  * @returns 
  */
-import { listDirs, listFiles, join, mtimeMs, match } from '@/utils/fs';
+import { listDirs, listFiles, match, nameFromPath, flushIndexQueues } from '@/utils/fs';
 import { scanPattern } from '@/utils/waferData';
 import { logCacheReport } from '@/utils/console';
+import { dirScanResultToast } from '@/components/Toaster';
 export async function readSubstrateMetadata(
-    folders: FolderResult[]
+    folders: DirResult[]
 ): Promise<{ data: ExcelMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const t0 = performance.now();
     const result: ExcelMetadata[] = [];
@@ -171,106 +157,75 @@ export async function readSubstrateMetadata(
 
     let totDir = 0, numRead = 0, numCached = 0, totMatch = 0, totAdded = 0;
 
-    // for log: everything we considered (folders + files; read + cached)
-    const considered: string[] = [];
-
     for (const folder of folders) {
         if (!folder.exists || !folder.info?.isDirectory) continue;
 
-        // 1) Defect list folder
         const {
-            listed: dlFolders,
+            dirs: dlFolders,
             cached: dlFoldersCached,
             totDir: totDirFolder,
             numRead: numReadFolders,
             numCached: numCachedFolders,
         } = await listDirs({ root: folder.path, name: defectListFolder });
 
+        console.debug({
+            dlFolders, dlFoldersCached
+        })
+
         totDir += totDirFolder;
         numRead += numReadFolders;
         numCached += numCachedFolders;
 
-        // record considered folders (absolute paths)
-        for (const d of dlFolders) considered.push(d.path);
-        for (const c of dlFoldersCached) considered.push(c.folder_path);
-
-        for (const dl of dlFolders.concat(dlFoldersCached.map((f) => f))) {
-            const dlName = await basename(dl);
-            const dlPath = await join(folder.path, dlName);
+        for (const dl of dlFolders) {
+            const dlPath = dl.path;
 
             const {
-                files,
-                cached,
-                totDir: totDirFilesInDl,
-                numRead: numReadFilesInDl,
-                numCached: numCachedFilesInDl,
+                dirs,
+                // cached,
+                totDir: _totDir,
+                numRead: _numRead,
+                numCached: _numCached,
             } = await listFiles({ root: dlPath, name: defectXls });
 
-            totDir += totDirFilesInDl;
-            numRead += numReadFilesInDl;
-            numCached += numCachedFilesInDl;
+            totDir += _totDir; numRead += _numRead; numCached += _numCached;
 
-            // record considered files
-            for (const f of files) considered.push(await join(dlPath, f));
-            for (const c of cached) considered.push(c.file_path);
-
-            for (const f of files) {
-                const m = match(defectXls, f); if (!m) continue;
+            for (const f of dirs) {
+                const m = match(defectXls, nameFromPath(f.path)); if (!m) continue;
                 const [, id] = m;
-                const filePath = await join(dlPath, f);
+                const filePath = f.path
                 result.push({
                     type: ExcelType.DefectList,
                     stage: 'substrate',
                     id,
                     filePath,
-                    lastModified: await mtimeMs(filePath),
+                    lastModified: Number(f.info?.mtime),
                 });
                 totMatch++; totAdded++;
-            }
-
-            for (const file of cached) {
-                const f = await basename(file.file_path);
-                const m = match(defectXls, f); if (!m) continue;
-                const [, id] = m;
-                result.push({
-                    type: ExcelType.DefectList,
-                    stage: 'substrate',
-                    id,
-                    filePath: file.file_path,
-                    lastModified: file.last_mtime,
-                });
-                // no numCached++ here; we already added numCachedFilesInDl
             }
         }
 
         // 2) Root-level Excel files
         const {
-            files: rootFiles,
-            cached: rootCached,
-            totDir: totDirRootFiles,
-            numRead: numReadRootFiles,
-            numCached: numCachedRootFiles,
+            dirs,
+            // cached,
+            totDir: _totDir,
+            numRead: _numRead,
+            numCached: _numCached,
         } = await listFiles({ root: folder.path, name: /.+/ });
 
-        totDir += totDirRootFiles;
-        numRead += numReadRootFiles;
-        numCached += numCachedRootFiles;
+        totDir += _totDir; numRead += _numRead; numCached += _numCached;
 
-        // record considered files
-        for (const f of rootFiles) considered.push(await join(folder.path, f));
-        for (const c of rootCached) considered.push(c.file_path);
-
-        for (const f of rootFiles) {
-            const m1 = match(productList, f);
-            const m2 = match(productMap, f);
-            const filePath = await join(folder.path, f);
+        for (const f of dirs) {
+            const m1 = match(productList, nameFromPath(f.path));
+            const m2 = match(productMap, nameFromPath(f.path));
+            const filePath = f.path;
 
             if (m1) {
                 result.push({
                     type: ExcelType.Mapping,
                     stage: 'substrate',
                     filePath,
-                    lastModified: await mtimeMs(filePath),
+                    lastModified: Number(f.info?.mtime),
                 });
                 totMatch++; totAdded++;
             } else if (m2) {
@@ -281,43 +236,19 @@ export async function readSubstrateMetadata(
                     oem,
                     time: parseWaferMapTimestamp(date, time).toISOString(),
                     filePath,
-                    lastModified: await mtimeMs(filePath),
+                    lastModified: Number(f.info?.mtime),
                 });
                 totMatch++; totAdded++;
             }
-        }
-
-        for (const file of rootCached) {
-            const f = await basename(file.file_path);
-            const m1 = match(productList, f);
-            const m2 = match(productMap, f);
-
-            if (m1) {
-                result.push({
-                    type: ExcelType.Mapping,
-                    stage: 'substrate',
-                    filePath: file.file_path,
-                    lastModified: file.last_mtime,
-                });
-            } else if (m2) {
-                const [, oem, date, time] = m2;
-                result.push({
-                    type: ExcelType.Product,
-                    stage: 'substrate',
-                    oem,
-                    time: parseWaferMapTimestamp(date, time).toISOString(),
-                    filePath: file.file_path,
-                    lastModified: file.last_mtime,
-                });
-            }
-            // no numCached++ here; we already added numCachedRootFiles
         }
     }
 
     const elapsed = performance.now() - t0;
 
+    await flushIndexQueues();
+
     logCacheReport({
-        dirs: considered.length ? considered : 0,
+        dirs: 0,
         totDir,
         numCached,
         numRead,
@@ -333,7 +264,7 @@ export async function readSubstrateMetadata(
  * @param folders 
  * @returns 
  */
-export async function readFabCpMetadata(folders: FolderResult[]): Promise<WaferFileMetadata[]> {
+export async function readFabCpMetadata(folders: DirResult[]): Promise<WaferFileMetadata[]> {
     const result: WaferFileMetadata[] = [];
     folders.filter(() => true);
     return result;
@@ -348,7 +279,7 @@ export async function readFabCpMetadata(folders: FolderResult[]): Promise<WaferF
  * @param folders 
  */
 export async function readCpProberMetadata(
-    folders: FolderResult[]
+    folders: DirResult[]
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
@@ -385,7 +316,7 @@ export async function readCpProberMetadata(
                 onFile: () => { } // no-op; we'll map after
             }
         },
-        (level, name, g) => {
+        (level, _name, g) => {
             if (level === 0) {
                 const [productModel, batch, processSubStage, retestCount] = g;
                 return { productModel, batch, processSubStage, retestCount };
@@ -398,11 +329,8 @@ export async function readCpProberMetadata(
         }
     );
 
-    const {
-        data: items
-    } = scanResult;
+    const { data: items } = scanResult;
 
-    // validate and map to your output type
     const result: WaferFileMetadata[] = [];
     for (const { ctx, filePath, lastModified } of items) {
         const ok =
@@ -427,6 +355,8 @@ export async function readCpProberMetadata(
         });
     }
 
+    await flushIndexQueues();
+
     return {
         ...scanResult,
         data: result,
@@ -442,7 +372,7 @@ export async function readCpProberMetadata(
  * @returns 
  */
 export async function readWlbiMetadata(
-    folders: FolderResult[]
+    folders: DirResult[]
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
@@ -494,6 +424,9 @@ export async function readWlbiMetadata(
             lastModified,
         });
     }
+
+    await flushIndexQueues();
+
     return {
         ...scanResult,
         data: result
@@ -509,7 +442,7 @@ export async function readWlbiMetadata(
  * @returns 
  */
 export async function readAoiMetadata(
-    folders: FolderResult[]
+    folders: DirResult[]
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
@@ -558,6 +491,9 @@ export async function readAoiMetadata(
             lastModified,
         });
     }
+
+    await flushIndexQueues();
+
     return {
         ...scanResult,
         data: result

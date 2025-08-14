@@ -1,19 +1,12 @@
 import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import {
-    Box,
-    Group,
-    Table,
-    Checkbox,
-    Button,
-    Text,
-} from '@mantine/core';
+import { Box, Group, Table, Checkbox, Button, Text } from '@mantine/core';
 import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { addFolder, removeFolder } from '@/slices/dataSourceStateSlice';
-import { DataSourceType, FolderResult } from '@/types/DataSource';
+import { DataSourceType, DirResult } from '@/types/DataSource';
 import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
-import { getRelativePath } from '@/utils/fs';
+import { getRelativePath, norm } from '@/utils/fs';
 import { deleteFolderIndexByPath } from '@/db/folderIndex';
 import { basename } from '@tauri-apps/api/path';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
@@ -39,15 +32,15 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             if (!result) return;
 
             const picked = Array.isArray(result) ? result : [result];
-            const responses: FolderResult[] = await invokeReadFileStatBatch(picked);
+            const responses: DirResult[] = await invokeReadFileStatBatch(picked);
 
             for (const folder of responses) {
                 if (folder.exists) {
                     const absPath = folder.path;
                     const relPath = getRelativePath(rootPath, folder.path);
                     if (paths.includes(relPath)) continue;
-                    dispatch(addDataSourcePath({ type, path: relPath }));
-                    dispatch(addFolder({ type, path: absPath }));
+                    dispatch(addDataSourcePath({ type, path: norm(relPath) }));
+                    dispatch(addFolder({ type, path: norm(absPath) }));
                 }
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,7 +59,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
     const handleRemoveSelected = async () => {
         for (const path of selected) {
-            await deleteAction(path);
+            await deleteAction(norm(path));
         }
         setSelected([]);
     };
@@ -97,7 +90,20 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
     return (
         <Box>
-            <Table>
+            <Table
+                highlightOnHover
+                striped
+                style={{ tableLayout: 'fixed', width: '100%' }}
+            >
+                {/* Percentage-based widths */}
+                <colgroup>
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '45%' }} />
+                    <col style={{ width: '20%' }} />
+                </colgroup>
+
                 <Table.Thead>
                     <Table.Tr>
                         <Table.Th />
@@ -134,33 +140,31 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                                     />
                                 </Table.Td>
 
-                                <Table.Td style={{ display: 'flex', gap: 4 }}>
-                                    <Button
-                                        size="xs"
-                                        variant="light"
-                                        onClick={() => handleModify(path)}
-                                    >
-                                        <IconEdit size={14} />
-                                    </Button>
-                                    <Button
-                                        size="xs"
-                                        variant="light"
-                                        color="red"
-                                        onClick={async () => {
-                                            await deleteAction(path);   // passed in abs. path
-                                            await setSelected((s) => s.filter((x) => x !== path));
-                                        }}
-                                    >
-                                        <IconTrash size={14} />
-                                    </Button>
+                                <Table.Td>
+                                    <Group gap={4} wrap="nowrap">
+                                        <Button size="xs" variant="light" onClick={() => handleModify(path)}>
+                                            <IconEdit size={14} />
+                                        </Button>
+                                        <Button
+                                            size="xs"
+                                            variant="light"
+                                            color="red"
+                                            onClick={async () => {
+                                                await deleteAction(norm(path));
+                                                setSelected((s) => s.filter((x) => x !== path));
+                                            }}
+                                        >
+                                            <IconTrash size={14} />
+                                        </Button>
+                                    </Group>
                                 </Table.Td>
 
-                                <Table.Td>
+                                <Table.Td style={{ whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                                     <Text c={error ? 'red' : undefined}>{name}</Text>
                                 </Table.Td>
 
-                                <Table.Td>
-                                    <Text size="sm" color={error ? 'red' : undefined}>
+                                <Table.Td style={{ whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                    <Text size="sm" c={error ? 'red' : undefined}>
                                         {path}
                                     </Text>
                                 </Table.Td>
@@ -169,7 +173,15 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                                     {error
                                         ? 'Not found'
                                         : info?.mtime
-                                            ? new Date(info.mtime).toLocaleString()
+                                            ? new Date(info.mtime).toLocaleString('zh-CN', {
+                                                year: 'numeric',
+                                                month: '2-digit',
+                                                day: '2-digit',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                hour12: false
+                                            })
                                             : '-'}
                                 </Table.Td>
                             </Table.Tr>
@@ -177,6 +189,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                     })}
                 </Table.Tbody>
             </Table>
+
 
             <Group mt="md" justify="flex-start">
                 <Button leftSection={<IconPlus size={16} />} onClick={handleAdd}>

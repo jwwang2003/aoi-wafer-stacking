@@ -4,34 +4,42 @@
 
 -- OEM -> Internal Product Mapping
 CREATE TABLE IF NOT EXISTS oem_product_map (
-    oem_product_id TEXT PRIMARY KEY,    -- OEM product id
-    product_id TEXT NOT NULL UNIQUE            -- internal product
+    oem_product_id TEXT PRIMARY KEY,            -- OEM product id
+    product_id TEXT NOT NULL UNIQUE             -- internal product
+);
+
+-- Unique offsets for each product
+CREATE TABLE IF NOT EXISTS oem_product_map (
+    oem_product_id TEXT PRIMARY KEY,
+    
+    x_offset DOUBLE NOT NULL,
+    y_offset DOUBLE NOT NULL,
+
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );
 
 -- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
-    product_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,           -- This actually maps to the oem_product_id
     lot_id TEXT NOT NULL,
     wafer_id TEXT NOT NULL,
-    sub_id TEXT NOT NULL,
+    sub_id TEXT NOT NULL UNIQUE,
 
     file_path TEXT NOT NULL,
 
     PRIMARY KEY (product_id, lot_id, wafer_id),
-    FOREIGN KEY (product_id) REFERENCES oem_product_map(product_id),
-    FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id),
+    FOREIGN KEY (product_id) REFERENCES oem_product_map(oem_product_id), -- NOTE:
     
     -- product defect map will get removed when file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 
--- Enforce that each sub_id is unique to one wafer
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_subid ON product_defect_map(sub_id);
-
 -- Substrate Defect Files (referenced by sub_id)
 CREATE TABLE IF NOT EXISTS substrate_defect (
     sub_id TEXT PRIMARY KEY,
     file_path TEXT NOT NULL, -- relative to root folder
+
+    FOREIGN KEY (sub_id) REFERENCES product_defect_map(sub_id) ON DELETE CASCADE
 
     -- substrate defect map (sub_id) will get removed when file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
@@ -39,22 +47,24 @@ CREATE TABLE IF NOT EXISTS substrate_defect (
 
 -- Wafer Map Files (FAB CP, CP-Prober, WLBI, AOI)
 CREATE TABLE IF NOT EXISTS wafer_maps (
+    idx INTEGER PRIMARY KEY AUTOINCREMENT,     -- NEW: increasing primary key
+
     product_id TEXT NOT NULL,
     batch_id TEXT NOT NULL,
     wafer_id INTEGER NOT NULL,
 
-    stage TEXT NOT NULL,             -- e.g. CP, WLBI, AOI
-    sub_stage TEXT,                  -- optional: e.g. substage 2
+    stage TEXT NOT NULL,                       -- e.g. CP, WLBI, AOI
+    sub_stage TEXT,                            -- optional: e.g. substage 2
 
     retest_count INTEGER DEFAULT 0,
-    time INTEGER,
-    
-    file_path TEXT NOT NULL,
+    time INTEGER,                              -- epoch ms (nullable OK)
 
-    PRIMARY KEY (product_id, batch_id, wafer_id),
-    FOREIGN KEY (product_id, batch_id, wafer_id)
-        REFERENCES product_defect_map(product_id, lot_id, wafer_id) ON DELETE CASCADE,
-    
+    file_path TEXT NOT NULL UNIQUE,
+
+    -- Keep a FK to product catalog; your oem_product_map.product_id is UNIQUE
+    FOREIGN KEY (product_id)
+        REFERENCES oem_product_map(product_id) ON DELETE CASCADE,
+
     -- wafer map entry will be removed when the file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
@@ -86,13 +96,25 @@ ON product_defect_map (product_id, lot_id, wafer_id);
 CREATE INDEX IF NOT EXISTS idx_substrate_defect_path
 ON substrate_defect (file_path);
 
+
 -- Lookup wafer maps by file path
 CREATE INDEX IF NOT EXISTS idx_wafer_file_path
 ON wafer_maps (file_path);
 
--- Optional: search wafer maps by stage
 CREATE INDEX IF NOT EXISTS idx_wafer_stage
 ON wafer_maps (stage);
+
+CREATE INDEX IF NOT EXISTS idx_stage_product
+ON wafer_maps (product_id);
+
+CREATE INDEX IF NOT EXISTS idx_wafer_maps_natural
+ON wafer_maps (product_id, batch_id, wafer_id);
+
+CREATE INDEX IF NOT EXISTS idx_wafer_maps_time
+ON wafer_maps (time);
+
+CREATE INDEX IF NOT EXISTS idx_wafer_maps_stage
+ON wafer_maps (stage, product_id);
 
 
 CREATE INDEX IF NOT EXISTS idx_file_index_path
@@ -104,6 +126,3 @@ ON file_index (file_hash);
 
 CREATE INDEX IF NOT EXISTS idx_folder_index_path
 ON folder_index (folder_path);
-
-CREATE INDEX IF NOT EXISTS idx_stage_product
-ON wafer_maps (stage, product_id);

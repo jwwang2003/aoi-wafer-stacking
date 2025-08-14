@@ -16,7 +16,7 @@ const store = configureStore({
         log: loggingReducer,
     },
     middleware: (gDM) => gDM({
-        // serializableCheck: false
+        serializableCheck: false
     }).concat(validationPersistenceMiddleware)
     // redux-thunk is included by default, so our async initConfigFilePath thunk will work out of the box
 });
