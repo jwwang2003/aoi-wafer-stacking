@@ -1,7 +1,7 @@
 import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
 import { Card, Group, Stack, Text, Badge, Tooltip, ActionIcon, CopyButton, Kbd } from '@mantine/core';
 import { IconCopy, IconCheck, IconClock, IconFileText, IconHash, IconTag, IconDeviceFloppy, IconFolderOpen } from '@tabler/icons-react';
-import { revealItemInDir } from '@tauri-apps/plugin-opener'; // ⬅️ Tauri 2.0 opener
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { useMemo } from 'react';
 
 // ===== Small utils =====

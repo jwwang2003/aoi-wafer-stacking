@@ -46,6 +46,13 @@ export const menuItems: MenuItem[] = [
         component: ConfigPage,
     },
     {
+        icon: IconDatabase,
+        label: '数据库',
+        value: 'db',
+        path: '/db',
+        component: DatabasePage,
+    },
+    {
         icon: IconEyeSearch,
         label: 'AOI',
         value: 'aoi',
@@ -58,13 +65,6 @@ export const menuItems: MenuItem[] = [
         value: 'wafer',
         path: '/wafer',
         component: WaferStackingPage,
-    },
-    {
-        icon: IconDatabase,
-        label: '数据库',
-        value: 'db',
-        path: '/db',
-        component: DatabasePage,
     },
     {
         icon: IconMessage2,

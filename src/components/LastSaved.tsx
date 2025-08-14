@@ -1,12 +1,9 @@
-// import { Button, Indicator } from '@mantine/core';
 import { Group, Stack, Text } from '@mantine/core';
 
 interface LastSavedSectionProps {
     dirty: boolean;
     lastModified: string;
     lastSaved: string;
-    // onSave: () => void;
-    // label?: string;
 }
 
 export default function LastSavedSection({

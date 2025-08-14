@@ -4,7 +4,7 @@ import { logCacheReport } from './console';
 import { ExcelMetadata, ExcelType, WaferFileMetadata } from '@/types/Wafer';
 import { invokeParseProductMappingXls, invokeParseProductXls } from '@/api/tauri/wafer';
 import { maintainOemMapping, upsertManyProductDefectMaps, upsertSubstrateDefect } from '@/db/spreadSheet';
-import { upsertManyWaferMaps } from '@/db/waferData';
+import { upsertManyWaferMaps } from '@/db/wafermaps';
 
 type FolderStep = {
     name: RegExp;                       // regex to select child dirs

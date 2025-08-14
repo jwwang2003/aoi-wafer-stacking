@@ -5,7 +5,7 @@ import { DirResult } from '@/types/DataSource';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { deleteFolderIndexesByPaths, getAllFolderIndexes, getManyFolderIndexesByPaths, upsertManyFolderIndexes, upsertOneFolderIndex } from '@/db/folderIndex';
 import { invokeReadDir,invokeSha1 } from '@/api/tauri/fs';
-import { deleteFileIndexesByPaths, getAllFileIndexes, upsertManyFileIndexes } from '@/db/fileIndex';
+import { deleteFileIndexesByPaths, getAllFileIndexes, getManyFileIndexesByPaths, upsertManyFileIndexes } from '@/db/fileIndex';
 import { getDb } from '@/db';
 
 // ---------- Globals ----------
@@ -461,13 +461,13 @@ export async function getFolderIndexesWithLocalCache(
     }
 
     // Load only misses from DB
-    if (misses.length) {
+    if (!force && misses.length) {
         // Technically this should not happen if the local cache is properly in sync with the DB
-        // const loaded = await getManyFolderIndexesByPaths(misses);
-        // for (const [p, row] of loaded) {
-        //     folder_idx.set(p, row);
-        //     out.set(p, row);
-        // }
+        const loaded = await getManyFolderIndexesByPaths(misses);
+        for (const [p, row] of loaded) {
+            folder_idx.set(p, row);
+            out.set(p, row);
+        }
     }
 
     return out;
@@ -506,12 +506,12 @@ export async function getFileIndexesWithLocalCache(
         }
     }
 
-    if (misses.length) {
-        // const loaded = await getManyFileIndexesByPaths(misses);
-        // for (const [p, row] of loaded) {
-        //     file_idx.set(p, row);
-        //     out.set(p, row);
-        // }
+    if (!force && misses.length) {
+        const loaded = await getManyFileIndexesByPaths(misses);
+        for (const [p, row] of loaded) {
+            file_idx.set(p, row);
+            out.set(p, row);
+        }
     }
 
     return out;

@@ -263,6 +263,114 @@ export async function getProductDefectMap(
 }
 
 /**
+ * Fetch product_defect_map rows by product_id.
+ *
+ * @param product_id - Internal product id.
+ * @param opts.limit  - Optional LIMIT (default: no limit).
+ * @param opts.offset - Optional OFFSET (default: 0).
+ * @param opts.orderBy - Optional sort key (default: lot_id ASC, then wafer_id ASC).
+ */
+export async function getProductDefectMapsByProductId(
+    product_id: string,
+    opts?: { limit?: number; offset?: number; orderBy?: 'lot_id' | 'wafer_id' | 'sub_id' }
+): Promise<ProductDefectMapRow[]> {
+    const db = await getDb();
+    const limit = Number.isFinite(opts?.limit) ? opts!.limit! : undefined;
+    const offset = Number.isFinite(opts?.offset) ? opts!.offset! : 0;
+
+    const orderBy =
+        opts?.orderBy === 'wafer_id'
+            ? 'wafer_id ASC, lot_id ASC'
+            : opts?.orderBy === 'sub_id'
+                ? 'sub_id ASC, lot_id ASC, wafer_id ASC'
+                : 'lot_id ASC, wafer_id ASC'; // default
+
+    const bindings: (string | number)[] = [product_id];
+
+    let sql = `
+SELECT product_id, lot_id, wafer_id, sub_id, file_path
+FROM product_defect_map
+WHERE product_id = ?
+ORDER BY ${orderBy}
+`;
+
+    if (typeof limit === 'number') {
+        sql += ` LIMIT ? OFFSET ?`;
+        bindings.push(limit, offset);
+    }
+
+    return db.select<ProductDefectMapRow[]>(sql, bindings);
+}
+
+/**
+ * Fetch all distinct batches (lot_id) for a given product_id.
+ *
+ * @param product_id - Internal product id.
+ * @returns Array of { lot_id } objects sorted alphabetically/ascending.
+ */
+export async function getBatchesByProductId(
+    product_id: string
+): Promise<{ lot_id: string }[]> {
+    const db = await getDb();
+    return db.select<{ lot_id: string }[]>(
+        `SELECT DISTINCT lot_id
+FROM product_defect_map
+WHERE product_id = ?
+ORDER BY lot_id ASC`,
+        [product_id]
+    );
+}
+
+/**
+ * Fetch all distinct wafer_ids for a specific product_id and lot_id (batch).
+ *
+ * @param product_id - Internal product id.
+ * @param lot_id - Lot/Batch id.
+ * @returns Array of { wafer_id } objects sorted ascending.
+ */
+export async function getWafersByProductAndBatch(
+    product_id: string,
+    lot_id: string
+): Promise<{ wafer_id: string }[]> {
+    const db = await getDb();
+    return db.select<{ wafer_id: string }[]>(
+        `SELECT DISTINCT wafer_id
+FROM product_defect_map
+WHERE product_id = ? AND lot_id = ?
+ORDER BY wafer_id ASC`,
+        [product_id, lot_id]
+    );
+}
+
+/**
+ * Get sub_ids (and file_path) for a (product, batch, wafer) triple.
+ * - Note: `batch_id` maps to `lot_id` in `product_defect_map`.
+ * - Typically this returns 0–1 row due to the PK (product_id, lot_id, wafer_id),
+ *   but is typed as an array for flexibility.
+ *
+ * @param product_id - Internal product id
+ * @param batch_id   - Batch/Lot id (stored as `lot_id`)
+ * @param wafer_id   - Wafer id (string, per your schema)
+ * @returns Array of { sub_id, file_path } (empty if none)
+ */
+export async function getSubIdsByProductBatchWafer(
+    product_id: string,
+    batch_id: string,
+    wafer_id: string
+): Promise<{ sub_id: string; file_path: string }[]> {
+    const db = await getDb();
+    return db.select<{ sub_id: string; file_path: string }[]>(
+        `SELECT sub_id, file_path
+    FROM product_defect_map
+WHERE product_id = ?
+    AND lot_id     = ?
+    AND wafer_id   = ?
+ORDER BY sub_id ASC`,
+        [product_id, batch_id, wafer_id]
+    );
+}
+
+/**
  * Insert or update a single product_defect_map row (UPSERT by PK).
  * Relies on SQL constraints (FKs, etc.) for validity.
  *

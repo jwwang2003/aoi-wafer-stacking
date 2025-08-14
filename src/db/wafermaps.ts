@@ -1,4 +1,3 @@
-// src/db/waferMaps.ts
 import { getDb } from "@/db";
 import { WaferMapRow } from "./types"; // Ensure this includes `idx?: number`
 
@@ -20,17 +19,13 @@ import { WaferMapRow } from "./types"; // Ensure this includes `idx?: number`
  * }
  */
 
-/* =========================
-   GETTERS
-   ========================= */
-
 /** Get one row by idx (PK). */
 export async function getWaferMapByIdx(idx: number): Promise<WaferMapRow | null> {
     const db = await getDb();
     const rows = await db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-       FROM wafer_maps
-      WHERE idx = ?`,
+    FROM wafer_maps
+WHERE idx = ?`,
         [idx]
     );
     return rows[0] ?? null;
@@ -45,9 +40,9 @@ export async function getWaferMapsByTriple(
     const db = await getDb();
     return db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-       FROM wafer_maps
-      WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
-      ORDER BY COALESCE(time, 0) DESC, idx DESC`,
+    FROM wafer_maps
+WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
+ORDER BY COALESCE(time, 0) DESC, idx DESC`,
         [product_id, batch_id, wafer_id]
     );
 }
@@ -61,10 +56,10 @@ export async function getLatestWaferMapByTriple(
     const db = await getDb();
     const rows = await db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-       FROM wafer_maps
-      WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
-      ORDER BY COALESCE(time, 0) DESC, idx DESC
-      LIMIT 1`,
+    FROM wafer_maps
+WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
+ORDER BY COALESCE(time, 0) DESC, idx DESC
+LIMIT 1`,
         [product_id, batch_id, wafer_id]
     );
     return rows[0] ?? null;
@@ -78,8 +73,8 @@ export async function getWaferMapByFilePath(file_path: string): Promise<WaferMap
     const db = await getDb();
     const rows = await db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-       FROM wafer_maps
-      WHERE file_path = ?`,
+    FROM wafer_maps
+WHERE file_path = ?`,
         [file_path]
     );
     return rows[0] ?? null;
@@ -99,24 +94,20 @@ export async function getAllWaferMaps(
     const db = await getDb();
     return db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-       FROM wafer_maps
-      ORDER BY product_id, batch_id, wafer_id, COALESCE(time, 0) DESC, idx DESC
-      LIMIT ? OFFSET ?`,
+    FROM wafer_maps
+ORDER BY product_id, batch_id, wafer_id, COALESCE(time, 0) DESC, idx DESC
+LIMIT ? OFFSET ?`,
         [limit, offset]
     );
 }
-
-/* =========================
-   INSERT / UPDATE
-   ========================= */
 
 /** Insert a new row (no idx). Will throw on duplicate file_path. Returns the new idx. */
 export async function insertWaferMap(row: Omit<WaferMapRow, "idx">): Promise<number> {
     const db = await getDb();
     await db.execute(
         `INSERT INTO wafer_maps
-       (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             row.product_id,
             row.batch_id,
@@ -136,10 +127,10 @@ export async function insertWaferMap(row: Omit<WaferMapRow, "idx">): Promise<num
 
 /** Reusable SQL: idempotent upsert on unique file_path. */
 const UPSERT_ON_FILE_SQL = `
-  INSERT INTO wafer_maps
+INSERT INTO wafer_maps
     (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(file_path) DO UPDATE SET
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(file_path) DO UPDATE SET
     product_id   = excluded.product_id,
     batch_id     = excluded.batch_id,
     wafer_id     = excluded.wafer_id,
@@ -161,15 +152,15 @@ export async function upsertWaferMap(row: WaferMapRow): Promise<number> {
     if (row.idx != null) {
         await db.execute(
             `UPDATE wafer_maps
-          SET product_id = ?,
-              batch_id = ?,
-              wafer_id = ?,
-              stage = ?,
-              sub_stage = ?,
-              retest_count = ?,
-              time = ?,
-              file_path = ?
-        WHERE idx = ?`,
+SET product_id = ?,
+    batch_id = ?,
+    wafer_id = ?,
+    stage = ?,
+    sub_stage = ?,
+    retest_count = ?,
+    time = ?,
+    file_path = ?
+WHERE idx = ?`,
             [
                 row.product_id,
                 row.batch_id,
@@ -248,8 +239,8 @@ export async function insertManyWaferMaps(rows: Array<Omit<WaferMapRow, "idx">>)
         for (const r of rows) {
             await db.execute(
                 `INSERT INTO wafer_maps
-           (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     r.product_id,
                     r.batch_id,
@@ -269,10 +260,6 @@ export async function insertManyWaferMaps(rows: Array<Omit<WaferMapRow, "idx">>)
         throw e;
     }
 }
-
-/* =========================
-   DELETES
-   ========================= */
 
 /** Delete one row by idx. Returns rows deleted (0/1). */
 export async function deleteWaferMapByIdx(idx: number): Promise<number> {
@@ -339,5 +326,4 @@ export async function deleteManyWaferMapsByPK(
         total += (res as any)?.rowsAffected ?? 0;
     }
     return total;
-
 }

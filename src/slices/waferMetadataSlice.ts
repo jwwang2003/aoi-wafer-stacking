@@ -181,13 +181,11 @@ export async function readSubstrateMetadata(
 
             const {
                 dirs,
-                cached,
+                // cached,
                 totDir: _totDir,
                 numRead: _numRead,
                 numCached: _numCached,
             } = await listFiles({ root: dlPath, name: defectXls });
-
-
 
             totDir += _totDir; numRead += _numRead; numCached += _numCached;
 
