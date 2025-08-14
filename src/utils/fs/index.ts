@@ -28,13 +28,13 @@ const FLUSH_BATCH = 1000;
 let flushing = false;
 let flushInFlight: Promise<void> | null = null;     // single-flight guard
 
-export async function resetFileIndexCache() {
+export function resetSessionFileIndexCache() {
     file_idx.clear();
     file_upserts.length = 0;
     file_deletes.length = 0;
 }
 
-export async function resetFolderIndexCache() {
+export function resetSessionFolderIndexCache() {
     folder_idx.clear();
     folder_upserts.length = 0;
     folder_deletes.length = 0;
@@ -231,8 +231,6 @@ export async function revalidateAllIndexes(opts: RevalidateOptions = {}): Promis
         onProgress,
         yieldEvery = 500,
     } = opts;
-
-    const db = await getDb();
 
     // Load current DB views
 
@@ -443,13 +441,13 @@ export async function getFolderIndexesWithLocalCache(
     const out = new Map<string, FolderIndexRow>();
     if (!paths.length) return out;
 
-    if (force) {
-        // Skip cache entirely, load all from DB
-        const loaded = await getManyFolderIndexesByPaths(paths);
-        // Store in local cache for future calls
-        for (const [p, row] of loaded) folder_idx.set(p, row);
-        return loaded;
-    }
+    // if (force) {
+    //     // Skip cache entirely, load all from DB
+    //     const loaded = await getManyFolderIndexesByPaths(paths);
+    //     // Store in local cache for future calls
+    //     for (const [p, row] of loaded) folder_idx.set(p, row);
+    //     return loaded;
+    // }
 
     const misses: string[] = [];
 
@@ -465,11 +463,11 @@ export async function getFolderIndexesWithLocalCache(
     // Load only misses from DB
     if (misses.length) {
         // Technically this should not happen if the local cache is properly in sync with the DB
-        const loaded = await getManyFolderIndexesByPaths(misses);
-        for (const [p, row] of loaded) {
-            folder_idx.set(p, row);
-            out.set(p, row);
-        }
+        // const loaded = await getManyFolderIndexesByPaths(misses);
+        // for (const [p, row] of loaded) {
+        //     folder_idx.set(p, row);
+        //     out.set(p, row);
+        // }
     }
 
     return out;
@@ -489,14 +487,14 @@ export async function getFileIndexesWithLocalCache(
     const out = new Map<string, FileIndexRow>();
     if (!paths.length) return out;
 
-    if (force) {
-        const loaded = await getManyFileIndexesByPaths(paths);
-        // 合并到缓存对象
-        for (const [p, row] of loaded) {
-            file_idx.set(p, row);
-        }
-        return loaded;
-    }
+    // if (force) {
+    //     const loaded = await getManyFileIndexesByPaths(paths);
+    //     // 合并到缓存对象
+    //     for (const [p, row] of loaded) {
+    //         file_idx.set(p, row);
+    //     }
+    //     return loaded;
+    // }
 
     const misses: string[] = [];
 
@@ -509,11 +507,11 @@ export async function getFileIndexesWithLocalCache(
     }
 
     if (misses.length) {
-        const loaded = await getManyFileIndexesByPaths(misses);
-        for (const [p, row] of loaded) {
-            file_idx.set(p, row);
-            out.set(p, row);
-        }
+        // const loaded = await getManyFileIndexesByPaths(misses);
+        // for (const [p, row] of loaded) {
+        //     file_idx.set(p, row);
+        //     out.set(p, row);
+        // }
     }
 
     return out;
@@ -551,7 +549,7 @@ export async function listDirs(
     const names = re ? paths.map(nameFromPath) : undefined;
 
     // 3) Bulk-fetch cache rows for these paths (skip if forcing)
-    const indexMap: Map<string, FolderIndexRow> = await getFolderIndexesWithLocalCache(paths, cache);
+    const indexMap: Map<string, FolderIndexRow> = await getFolderIndexesWithLocalCache(paths, cache);    
 
     const dirs: DirResult[] = [];
     const cached: FolderIndexRow[] = [];

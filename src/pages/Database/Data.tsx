@@ -14,14 +14,8 @@ import {
 } from 'react-router-dom';
 import { useMemo } from 'react';
 
-// Sub-pages
-import Cache from './Cache';
-import Data from './Data';
-import ComingSoon from '../ComingSoon';
-
 const subpageOptions = [
-    { label: 'Wafer数据据', value: 'data' },
-    { label: '缓存', value: 'cache' },
+    { label: '产品信息', value: 'product' },
 ];
 
 export default function DatabaseIndexPage() {
@@ -31,11 +25,11 @@ export default function DatabaseIndexPage() {
     // figure out which segment is active
     const currentValue = useMemo(() => {
         const match = subpageOptions.find((opt) => location.pathname.endsWith(opt.value));
-        return match?.value ?? 'data';
+        return match?.value ?? 'oem';
     }, [location.pathname]);
 
     const handleChange = (value: string) => {
-        navigate(`/db/${value}`);
+        navigate(`/db/data/${value}`);
     };
 
     return (
@@ -53,13 +47,19 @@ export default function DatabaseIndexPage() {
                     />
 
                     <Routes>
-                        <Route path="/" element={<Navigate to="data" replace />} />
-                        <Route path="data/*" element={<Data />} />
-                        <Route path="cache" element={<Cache />} />
-                        <Route path="*" element={<ComingSoon />} />
+                        <Route path="/" element={<Navigate to="oem" replace />} />
+                        <Route path="product" element={<>Test1</>} />
                     </Routes>
                 </Stack>
             </Container>
         </Group>
     );
+}
+
+
+function ProductSubPage() {
+    return (
+        <>
+        </>
+    )
 }

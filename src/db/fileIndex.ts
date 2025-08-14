@@ -1,5 +1,6 @@
 import { getDb } from "@/db";
 import { FileIndexRow } from "./types";
+import { resetSessionFileIndexCache } from "@/utils/fs";
 
 /**
  * Retrieves a single file index record by its path.
@@ -143,5 +144,6 @@ export async function deleteFileIndexesByPaths(file_paths: string[], batchSize =
  */
 export async function deleteAllFileIndexes(): Promise<void> {
     const db = await getDb();
+    resetSessionFileIndexCache();
     await db.execute(`DELETE FROM file_index`);
 }

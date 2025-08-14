@@ -1,3 +1,4 @@
+import { resetSessionFolderIndexCache } from "@/utils/fs";
 import { getDb } from "./index";
 import { FolderIndexRow } from "./types";
 
@@ -159,5 +160,6 @@ export async function deleteFolderIndexesByPaths(
  */
 export async function deleteAllFolderIndexes(): Promise<void> {
     const db = await getDb();
+    resetSessionFolderIndexCache();
     await db.execute(`DELETE FROM folder_index`);
 }

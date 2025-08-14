@@ -32,3 +32,15 @@ export interface SubstrateDefectRow {
     sub_id: string;
     file_path: string;
 }
+
+export interface WaferMapRow {
+    idx?: number;              // NEW: autoincrement PK
+    product_id: string;
+    batch_id: string;
+    wafer_id: number;          // INTEGER in DB
+    stage: string;             // NOT NULL
+    sub_stage: string | null;  // nullable
+    retest_count: number;      // defaults to 0
+    time: number | null;       // epoch ms (nullable)
+    file_path: string;         // NOT NULL
+}

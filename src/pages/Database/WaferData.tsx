@@ -24,7 +24,7 @@ interface TableState {
     sortBy: SortKey;
     sortDir: SortDir;
     // filters
-    q: string;            // 文本搜索：product / batch / wafer / sub_id / file_path
+    q: string;            // 文本搜索：product / batch / wafer / sub_id / 路径 / oem_product_id
     stage: string | null; // CP / WLBI / AOI（null 代表全部）
 }
 
@@ -40,6 +40,8 @@ const DEFAULT_STATE: TableState = {
 type Row = {
     product_id: string;
     oem_product_id: string | null;
+    // NEW: whether OEM mapping exists (derived as 0/1 from NOT NULL check)
+    has_oem_map: 0 | 1; // NEW
     batch_id: string;
     wafer_id: number;
     sub_id: string | null;
@@ -47,8 +49,17 @@ type Row = {
     sub_stage: string | null;
     retest_count: number | null;
     time: number | null;
-    defect_path: string | null;
-    map_path: string | null;
+
+    // Files / paths
+    defect_path: string | null; // substrate_defect.file_path
+    map_path: string | null;    // wafer_maps.file_path
+    pdm_path: string | null;    // NEW: product_defect_map.file_path
+
+    // FileIndex metadata
+    defect_mtime: number | null; // NEW: file_index.last_mtime for defect
+    defect_hash: string | null;  // NEW: file_index.file_hash for defect
+    map_mtime: number | null;    // NEW: file_index.last_mtime for wafer map
+    map_hash: string | null;     // NEW: file_index.file_hash for wafer map
 };
 
 async function fetchStages(): Promise<string[]> {
@@ -69,17 +80,20 @@ function buildWhere(state: TableState) {
     }
 
     if (state.q) {
-        // 跨字段搜索
+        // 跨字段搜索（扩展包含 OEM 映射与 PDM 来源路径）
         wh.push(`(
-wm.product_id LIKE ?
-OR wm.batch_id LIKE ?
-OR CAST(wm.wafer_id AS TEXT) LIKE ?
-OR IFNULL(pdm.sub_id,'') LIKE ?
-OR IFNULL(sd.file_path,'') LIKE ?
-OR IFNULL(wm.file_path,'') LIKE ?
-)`);
+      wm.product_id LIKE ?
+      OR wm.batch_id LIKE ?
+      OR CAST(wm.wafer_id AS TEXT) LIKE ?
+      OR IFNULL(pdm.sub_id,'') LIKE ?
+      OR IFNULL(sd.file_path,'') LIKE ?
+      OR IFNULL(wm.file_path,'') LIKE ?
+      OR IFNULL(opm.oem_product_id,'') LIKE ?     -- NEW
+      OR IFNULL(pdm.file_path,'') LIKE ?          -- NEW
+    )`);
         const like = `%${state.q}%`;
-        params.push(like, like, like, like, like, like);
+        // Existing 6 + NEW 2 = 8 params
+        params.push(like, like, like, like, like, like, like, like);
     }
 
     const where = wh.length ? `WHERE ${wh.join(" AND ")}` : "";
@@ -91,16 +105,18 @@ async function queryCount(state: TableState): Promise<number> {
     const { where, params } = buildWhere(state);
 
     const sql = `
-SELECT COUNT(*) AS total
-FROM wafer_maps wm
-LEFT JOIN product_defect_map pdm
-    ON pdm.product_id = wm.product_id AND pdm.lot_id = wm.batch_id AND pdm.wafer_id = CAST(wm.wafer_id AS TEXT)
-LEFT JOIN substrate_defect sd
-    ON sd.sub_id = pdm.sub_id
-LEFT JOIN oem_product_map opm
-    ON opm.product_id = wm.product_id
-${where}
-`;
+    SELECT COUNT(*) AS total
+    FROM wafer_maps wm
+    LEFT JOIN product_defect_map pdm
+      ON pdm.product_id = wm.product_id
+     AND pdm.lot_id = wm.batch_id
+     AND pdm.wafer_id = CAST(wm.wafer_id AS TEXT)
+    LEFT JOIN substrate_defect sd
+      ON sd.sub_id = pdm.sub_id
+    LEFT JOIN oem_product_map opm
+      ON opm.product_id = wm.product_id
+    ${where}
+  `;
     const rows = await db.select<{ total: number }[]>(sql, params);
     return rows[0]?.total ?? 0;
 }
@@ -111,29 +127,51 @@ async function queryRows(state: TableState): Promise<Row[]> {
     const sortCol = SORT_COLS[state.sortBy] ?? SORT_COLS.time;
 
     const sql = `
-SELECT
-    wm.product_id,
-    opm.oem_product_id,
-    wm.batch_id,
-    wm.wafer_id,
-    pdm.sub_id,
-    wm.stage,
-    wm.sub_stage,
-    wm.retest_count,
-    wm.time,
-    sd.file_path AS defect_path,
-    wm.file_path AS map_path
-FROM wafer_maps wm
-LEFT JOIN product_defect_map pdm
-    ON pdm.product_id = wm.product_id AND pdm.lot_id = wm.batch_id AND pdm.wafer_id = CAST(wm.wafer_id AS TEXT)
-LEFT JOIN substrate_defect sd
-    ON sd.sub_id = pdm.sub_id
-LEFT JOIN oem_product_map opm
-    ON opm.product_id = wm.product_id
-${where}
-ORDER BY ${sortCol} ${state.sortDir}
-LIMIT ? OFFSET ?
-`;
+    SELECT
+      wm.product_id,
+      opm.oem_product_id,
+      CASE WHEN opm.oem_product_id IS NULL THEN 0 ELSE 1 END AS has_oem_map, -- NEW
+
+      wm.batch_id,
+      wm.wafer_id,
+      pdm.sub_id,
+      wm.stage,
+      wm.sub_stage,
+      wm.retest_count,
+      wm.time,
+
+      sd.file_path AS defect_path,
+      wm.file_path AS map_path,
+      pdm.file_path AS pdm_path, -- NEW
+
+      -- FileIndex for defect file
+      fi_sd.last_mtime AS defect_mtime, -- NEW
+      fi_sd.file_hash  AS defect_hash,  -- NEW
+
+      -- FileIndex for wafer map file
+      fi_map.last_mtime AS map_mtime, -- NEW
+      fi_map.file_hash  AS map_hash   -- NEW
+
+    FROM wafer_maps wm
+    LEFT JOIN product_defect_map pdm
+      ON pdm.product_id = wm.product_id
+     AND pdm.lot_id = wm.batch_id
+     AND pdm.wafer_id = CAST(wm.wafer_id AS TEXT)
+    LEFT JOIN substrate_defect sd
+      ON sd.sub_id = pdm.sub_id
+    LEFT JOIN oem_product_map opm
+      ON opm.product_id = wm.product_id
+
+    -- NEW: join file_index for both files we display
+    LEFT JOIN file_index fi_sd
+      ON fi_sd.file_path = sd.file_path
+    LEFT JOIN file_index fi_map
+      ON fi_map.file_path = wm.file_path
+
+    ${where}
+    ORDER BY ${sortCol} ${state.sortDir}
+    LIMIT ? OFFSET ?
+  `;
     const pageParams = [...params, state.pageSize, (state.page - 1) * state.pageSize];
     return db.select<Row[]>(sql, pageParams);
 }
@@ -203,6 +241,7 @@ export default function WaferDataWindow() {
         const header = [
             "product_id",
             "oem_product_id",
+            "has_oem_map",     // NEW
             "batch_id",
             "wafer_id",
             "sub_id",
@@ -211,12 +250,18 @@ export default function WaferDataWindow() {
             "retest_count",
             "time",
             "defect_path",
+            "defect_mtime",    // NEW
+            "defect_hash",     // NEW
             "map_path",
+            "map_mtime",       // NEW
+            "map_hash",        // NEW
+            "pdm_path",        // NEW
         ].join(",");
         const body = rows.map(r =>
             [
                 r.product_id,
                 r.oem_product_id ?? "",
+                r.has_oem_map, // NEW
                 r.batch_id,
                 r.wafer_id,
                 r.sub_id ?? "",
@@ -225,7 +270,12 @@ export default function WaferDataWindow() {
                 r.retest_count ?? "",
                 r.time ?? "",
                 r.defect_path ?? "",
+                r.defect_mtime ?? "", // NEW
+                r.defect_hash ?? "",  // NEW
                 r.map_path ?? "",
+                r.map_mtime ?? "",    // NEW
+                r.map_hash ?? "",     // NEW
+                r.pdm_path ?? "",     // NEW
             ]
                 .map(v => (String(v).includes(",") ? `"${String(v).replace(/"/g, '""')}"` : String(v)))
                 .join(",")
@@ -244,39 +294,11 @@ export default function WaferDataWindow() {
     const renderSkeletonRows = (count: number) =>
         Array.from({ length: count }).map((_, i) => (
             <tr key={`skeleton-${i}`}>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="80%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="60%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="70%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="40%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="50%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="55%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="45%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="70%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="90%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="90%" radius="sm" />
-                </td>
-                <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
-                    <Skeleton height={14} width="60%" radius="sm" />
-                </td>
+                {Array.from({ length: 16 }).map((__, j) => ( // NEW: skeleton cells = new column count
+                    <td key={`sk-${i}-${j}`} style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                        <Skeleton height={14} width={`${50 + (j % 5) * 10}%`} radius="sm" />
+                    </td>
+                ))}
             </tr>
         ));
 
@@ -291,7 +313,7 @@ export default function WaferDataWindow() {
                 </div>
 
                 <Group gap="xs">
-                    { loading ? 
+                    {loading ?
                         (<Skeleton height={22} width={120} radius="sm" />)
                         : (<Badge variant="light">{total.toLocaleString()} 条记录</Badge>)
                     }
@@ -304,7 +326,6 @@ export default function WaferDataWindow() {
                         </Tooltip>
                     )}
 
-                    {/* NEW: Refresh button */}
                     <Tooltip label="刷新">
                         <ActionIcon variant="light" aria-label="刷新" onClick={refresh} disabled={loading}>
                             {loading ? <Skeleton height={16} width={16} radius="xl" /> : <IconRefresh size={16} />}
@@ -319,7 +340,7 @@ export default function WaferDataWindow() {
                     size="sm"
                     style={{ minWidth: 260 }}
                     leftSection={<IconSearch size={14} />}
-                    placeholder="搜索 产品/批次/晶圆/SubID/路径…"
+                    placeholder="搜索 产品/批次/晶圆/SubID/路径/OEM…"
                     value={state.q}
                     onChange={(e) => setState((s) => ({ ...s, page: 1, q: e.currentTarget.value }))}
                     rightSection={
@@ -395,15 +416,24 @@ export default function WaferDataWindow() {
                         <tr style={{ background: "var(--mantine-color-gray-0)" }}>
                             <th style={{ textAlign: "left", padding: 8, width: 150 }}>产品</th>
                             <th style={{ textAlign: "left", padding: 8, width: 150 }}>OEM 产品</th>
+                            <th style={{ textAlign: "left", padding: 8, width: 90 }}>OEM 映射</th> {/* NEW */}
                             <th style={{ textAlign: "left", padding: 8, width: 140 }}>批次/Lot</th>
                             <th style={{ textAlign: "left", padding: 8, width: 80 }}>晶圆</th>
                             <th style={{ textAlign: "left", padding: 8, width: 110 }}>工序</th>
                             <th style={{ textAlign: "left", padding: 8, width: 120 }}>子工序</th>
                             <th style={{ textAlign: "left", padding: 8, width: 110 }}>复测次数</th>
                             <th style={{ textAlign: "left", padding: 8, width: 180 }}>时间</th>
+
                             <th style={{ textAlign: "left", padding: 8 }}>缺陷文件</th>
+                            <th style={{ textAlign: "left", padding: 8, width: 160 }}>缺陷mtime</th> {/* NEW */}
+                            <th style={{ textAlign: "left", padding: 8, width: 160 }}>缺陷hash</th> {/* NEW */}
+
                             <th style={{ textAlign: "left", padding: 8 }}>晶圆图文件</th>
+                            <th style={{ textAlign: "left", padding: 8, width: 160 }}>图mtime</th> {/* NEW */}
+                            <th style={{ textAlign: "left", padding: 8, width: 160 }}>图hash</th>   {/* NEW */}
+
                             <th style={{ textAlign: "left", padding: 8, width: 140 }}>SubID</th>
+                            <th style={{ textAlign: "left", padding: 8 }}>PDM 来源</th> {/* NEW */}
                         </tr>
                     </thead>
                     <tbody>
@@ -418,6 +448,15 @@ export default function WaferDataWindow() {
                                         <code style={{ fontSize: 12 }}>{r.oem_product_id ?? ""}</code>
                                     </td>
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                                        {/* NEW: has_oem_map as badge */}
+                                        {r.has_oem_map ? (
+                                            <Badge size="xs" color="green" variant="light">已映射</Badge>
+                                        ) : (
+                                            <Badge size="xs" color="gray" variant="outline">未映射</Badge>
+                                        )}
+                                    </td>
+
+                                    <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
                                         <code style={{ fontSize: 12 }}>{r.batch_id}</code>
                                     </td>
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>{r.wafer_id}</td>
@@ -425,21 +464,43 @@ export default function WaferDataWindow() {
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>{r.sub_stage ?? "—"}</td>
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>{r.retest_count ?? 0}</td>
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>{fmtTime(r.time)}</td>
+
+                                    {/* Substrate defect file & metadata */}
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
                                         <code style={{ fontSize: 12 }}>{r.defect_path ?? ""}</code>
                                     </td>
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                                        {fmtTime(r.defect_mtime)}
+                                    </td>
+                                    <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                                        <code style={{ fontSize: 12 }}>{r.defect_hash ?? ""}</code>
+                                    </td>
+
+                                    {/* Wafer map file & metadata */}
+                                    <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
                                         <code style={{ fontSize: 12 }}>{r.map_path ?? ""}</code>
                                     </td>
                                     <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                                        {fmtTime(r.map_mtime)}
+                                    </td>
+                                    <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                                        <code style={{ fontSize: 12 }}>{r.map_hash ?? ""}</code>
+                                    </td>
+
+                                    <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
                                         <code style={{ fontSize: 12 }}>{r.sub_id ?? ""}</code>
+                                    </td>
+
+                                    {/* PDM source path */}
+                                    <td style={{ padding: 8, borderTop: "1px solid var(--mantine-color-gray-3)" }}>
+                                        <code style={{ fontSize: 12 }}>{r.pdm_path ?? ""}</code>
                                     </td>
                                 </tr>
                             ))}
 
                         {!showSkeleton && rows.length === 0 && (
                             <tr>
-                                <td colSpan={11} style={{ padding: 12, textAlign: "center", color: "var(--mantine-color-dimmed)" }}>
+                                <td colSpan={16} style={{ padding: 12, textAlign: "center", color: "var(--mantine-color-dimmed)" }}>
                                     无结果
                                 </td>
                             </tr>

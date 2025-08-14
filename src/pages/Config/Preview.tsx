@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-    Table, TextInput, Title, ScrollArea,
-    Stack, Button, Group, Tooltip, NumberInput,
-    Select, Divider, Indicator, SegmentedControl,   // ⬅️ added SegmentedControl
-    Code,
-    Text
+    Title, ScrollArea, Stack, Button,
+    Group, Tooltip, Divider, Indicator,
+    SegmentedControl, Code, Text
 } from '@mantine/core';
 import { IconDownload, IconLoader } from '@tabler/icons-react';
 
@@ -18,11 +16,10 @@ import RawWaferSummary from '@/components/RawWaferSummary';
 import { useAppSelector } from '@/hooks';
 import { ConfigStepperState } from '@/types/Stepper';
 import { advanceStepper, setStepper } from '@/slices/preferencesSlice';
-import { MapData, WaferFileMetadata } from '@/types/Wafer';
-import { syncWaferMapsBatch } from '@/sqlDB';
-import { invoke } from '@tauri-apps/api/core';
+import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
 import { deleteAllFileIndexes } from '@/db/fileIndex';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
+import { processNSyncExcelData, processNSyncWaferData } from '@/utils/waferData';
 
 export default function Preview() {
     const dispatch = useDispatch<AppDispatch>();
@@ -75,28 +72,16 @@ export default function Preview() {
         }
     };
 
-    async function loadMapData(path: string): Promise<MapData | null> {
-        try {
-            const data = await invoke<MapData>('rust_parse_wafer_map_data', { path });
-            console.debug('MapData:', data);
-            return data;
-        } catch (err) {
-            console.error('Failed to parse wafer map data:', err);
-            return null;
-        }
-    }
-
     const handleSync = async () => {
         if (!db) return;
         setLoading(true);
         try {
-            // 1) filter only wafer‐file records
-            const waferRecords = rawWaferMetadata.filter(
-                (r): r is WaferFileMetadata => 'waferId' in r
-            );
+            const excelRecords = rawWaferMetadata.filter((r): r is ExcelMetadata => 'type' in r);
+            const waferRecords = rawWaferMetadata.filter((r): r is WaferFileMetadata => 'waferId' in r);
 
             // 2) batch‐upsert in one transaction
-            // await syncWaferMapsBatch(db, waferRecords);
+            await processNSyncExcelData(excelRecords);
+            await processNSyncWaferData(waferRecords);
 
             // 3) advance to next step
             await dispatch(advanceStepper(ConfigStepperState.Database + 1));
@@ -124,7 +109,7 @@ export default function Preview() {
                     onChange={(v) => setForceRescan(v === 'force')}
                     data={[
                         { label: '使用缓存', value: 'cache' },
-                        { label: '强制重扫', value: 'force' },
+                        { label: '重扫', value: 'force' },
                     ]}
                     disabled={loading}
                 />

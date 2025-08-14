@@ -86,8 +86,6 @@ export async function getAllWaferFolders(state: FolderGroupsState): Promise<Fold
 
     const results = await Promise.all(
         entries.map(async ([key, folderList]) => {
-            // const folders = await getFolderIndexesWithLocalCache(folderList);
-            // const missing = folderList.filter(f => !folders.has(f));
             const responses: DirResult[] = await invokeReadFileStatBatch(folderList);
             return [key, responses] as const;
         })
@@ -164,11 +162,15 @@ export async function readSubstrateMetadata(
 
         const {
             dirs: dlFolders,
-            // cached: dlFoldersCached,
+            cached: dlFoldersCached,
             totDir: totDirFolder,
             numRead: numReadFolders,
             numCached: numCachedFolders,
         } = await listDirs({ root: folder.path, name: defectListFolder });
+
+        console.debug({
+            dlFolders, dlFoldersCached
+        })
 
         totDir += totDirFolder;
         numRead += numReadFolders;
@@ -179,11 +181,13 @@ export async function readSubstrateMetadata(
 
             const {
                 dirs,
-                // cached,
+                cached,
                 totDir: _totDir,
                 numRead: _numRead,
                 numCached: _numCached,
             } = await listFiles({ root: dlPath, name: defectXls });
+
+
 
             totDir += _totDir; numRead += _numRead; numCached += _numCached;
 
@@ -328,7 +332,7 @@ export async function readCpProberMetadata(
     );
 
     const { data: items } = scanResult;
-    
+
     const result: WaferFileMetadata[] = [];
     for (const { ctx, filePath, lastModified } of items) {
         const ok =
