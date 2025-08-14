@@ -1,65 +1,27 @@
+// SubstrateRenderer.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Box, Text } from '@mantine/core';
+import { Box } from '@mantine/core';
 import { SubstrateDefectRecord } from '@/types/Wafer';
-import { invokeParseSubstrateDefectXls } from '@/api/tauri/wafer';
-
-export type FileSpec = {
-  id: string;
-  label: string;
-  file: string;
-};
-
-export type ClassColor = {
-  class: string;
-  color: number;
-};
-
-export type DefectViewerProps = {
-  files: FileSpec[];
-  initialFileId?: string;
-  classColorMap?: ClassColor[];
-  gridSize?: number;
-  overlapColor?: number;
-  loader?: (filePath: string) => Promise<SubstrateDefectRecord[]>;
-  style?: React.CSSProperties;
-  className?: string;
-};
-
-const DEFAULT_CLASS_COLORS: ClassColor[] = [
-  { class: 'Unclassified', color: 0xff0000 },
-  { class: 'Particle', color: 0x000000 },
-  { class: 'Pit', color: 0x00ff00 },
-  { class: 'Bump', color: 0xadaf08 },
-  { class: 'MicroPipe', color: 0x0000ff },
-  { class: 'Line', color: 0x00ffff },
-  { class: 'carrot', color: 0xff92f8 },
-  { class: 'triangle', color: 0xc15dd7 },
-  { class: 'Downfall', color: 0x0000ff },
-  { class: 'scratch', color: 0xc15dd7 },
-  { class: 'PL_Black', color: 0xffa500 },
-  { class: 'PL_White', color: 0xff007b },
-  { class: 'PL_BPD', color: 0x38d1ff },
-  { class: 'PL_SF', color: 0x6d6df2 },
-  { class: 'PL_BSF', color: 0xff92f8 },
-];
 
 interface SubstrateRendererProps {
   filePath: string;
   gridSize?: number;
   overlapColor?: number;
   style?: React.CSSProperties;
+  selectedSheetId: string | null;
+  sheetsData: Record<string, SubstrateDefectRecord[]>;
 }
 
 export default function SubstrateRenderer({
-  filePath,
   gridSize = 5,
   overlapColor = 0xfa5959,
   style,
+  selectedSheetId,
+  sheetsData,
 }: SubstrateRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const sceneRef = useRef<THREE.Scene>(new THREE.Scene());
@@ -70,9 +32,23 @@ export default function SubstrateRenderer({
   const gridObjectsRef = useRef<THREE.Object3D[]>([]);
 
   // 颜色映射表
-  const colorMap = new Map<string, number>(
-    DEFAULT_CLASS_COLORS.map((item) => [item.class, item.color])
-  );
+  const colorMap = new Map<string, number>([
+    ['Unclassified', 0xff0000],
+    ['Particle', 0x000000],
+    ['Pit', 0x00ff00],
+    ['Bump', 0xadaf08],
+    ['MicroPipe', 0x0000ff],
+    ['Line', 0x00ffff],
+    ['carrot', 0xff92f8],
+    ['triangle', 0xc15dd7],
+    ['Downfall', 0x0000ff],
+    ['scratch', 0xc15dd7],
+    ['PL_Black', 0xffa500],
+    ['PL_White', 0xff007b],
+    ['PL_BPD', 0x38d1ff],
+    ['PL_SF', 0x6d6df2],
+    ['PL_BSF', 0xff92f8],
+  ]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -100,12 +76,12 @@ export default function SubstrateRenderer({
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
     controlsRef.current = controls;
-    controls.enableRotate = false; // 禁用旋转
-    controls.enablePan = true; // 启用平移
+    controls.enableRotate = false;
+    controls.enablePan = true;
     controls.mouseButtons = {
-      LEFT: THREE.MOUSE.PAN, // 左键平移
-      MIDDLE: THREE.MOUSE.DOLLY, // 中键缩放
-      RIGHT: THREE.MOUSE.ROTATE, // 右键旋转（已禁用）
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE,
     };
 
     const handleResize = () => {
@@ -136,98 +112,87 @@ export default function SubstrateRenderer({
   }, []);
 
   useEffect(() => {
-    const loadDefects = async () => {
-      if (!filePath) return;
+    if (!selectedSheetId || !sheetsData[selectedSheetId]) {
+      defectObjectsRef.current.forEach((obj) => sceneRef.current.remove(obj));
+      gridObjectsRef.current.forEach((obj) => sceneRef.current.remove(obj));
+      setError('没有选中的工作表或工作表数据为空');
+      return;
+    }
 
-      setLoading(true);
-      setError(null);
+    const renderSheetData = () => {
+      defectObjectsRef.current.forEach((obj) => sceneRef.current.remove(obj));
+      gridObjectsRef.current.forEach((obj) => sceneRef.current.remove(obj));
 
-      try {
-        defectObjectsRef.current.forEach((obj) => sceneRef.current.remove(obj));
-        gridObjectsRef.current.forEach((obj) => sceneRef.current.remove(obj));
+      const defects = sheetsData[selectedSheetId] as SubstrateDefectRecord[];
 
-        const result = await invokeParseSubstrateDefectXls(filePath);
-        const defects = Object.values(result).flat() as SubstrateDefectRecord[];
+      if (defects.length === 0) {
+        setError('当前工作表中未找到缺陷数据');
+        return;
+      }
 
-        if (defects.length === 0) {
-          setError('未找到缺陷数据');
-          return;
-        }
-
-        const defectObjects: THREE.Object3D[] = [];
-        defects.forEach((item) => {
-          const geometry = new THREE.PlaneGeometry(item.w / 300, item.h / 300);
-          const color = colorMap.get(item.class) || 0xff00ff;
-          const material = new THREE.MeshBasicMaterial({
-            color,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.8,
-          });
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.set(item.x, item.y, 0);
-          sceneRef.current.add(mesh);
-          defectObjects.push(mesh);
+      // 创建缺陷对象
+      const defectObjects: THREE.Object3D[] = [];
+      defects.forEach((item) => {
+        const geometry = new THREE.PlaneGeometry(item.w / 300, item.h / 300);
+        const color = colorMap.get(item.class) || 0xff00ff;
+        const material = new THREE.MeshBasicMaterial({
+          color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.8,
         });
-        defectObjectsRef.current = defectObjects;
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(item.x, item.y, 0);
+        sceneRef.current.add(mesh);
+        defectObjects.push(mesh);
+      });
+      defectObjectsRef.current = defectObjects;
 
-        // 计算边界并创建网格
-        let minX = Infinity,
-          maxX = -Infinity;
-        let minY = Infinity,
-          maxY = -Infinity;
+      let minX = Infinity,
+        maxX = -Infinity;
+      let minY = Infinity,
+        maxY = -Infinity;
 
-        defects.forEach((item) => {
-          minX = Math.min(minX, item.x - item.w / 600);
-          maxX = Math.max(maxX, item.x + item.w / 600);
-          minY = Math.min(minY, item.y - item.h / 600);
-          maxY = Math.max(maxY, item.y + item.h / 600);
-        });
+      defects.forEach((item) => {
+        minX = Math.min(minX, item.x - item.w / 600);
+        maxX = Math.max(maxX, item.x + item.w / 600);
+        minY = Math.min(minY, item.y - item.h / 600);
+        maxY = Math.max(maxY, item.y + item.h / 600);
+      });
 
-        createGrid({ minX, maxX, minY, maxY }, defects);
+      createGrid({ minX, maxX, minY, maxY }, defects);
 
-        if (cameraRef.current && controlsRef.current) {
-          const camera = cameraRef.current;
-          const controls = controlsRef.current;
-          const container = containerRef.current;
+      if (cameraRef.current && controlsRef.current && containerRef.current) {
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        const container = containerRef.current;
+        const { width, height } = container.getBoundingClientRect();
+        const dataWidth = maxX - minX;
+        const dataHeight = maxY - minY;
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const margin = 1.3;
 
-          if (container) {
-            const { width, height } = container.getBoundingClientRect();
-            const dataWidth = maxX - minX;
-            const dataHeight = maxY - minY;
-            const centerX = (minX + maxX) / 2;
-            const centerY = (minY + maxY) / 2;
-            const margin = 1.3;
+        const scaleX = width / (dataWidth * margin || 1);
+        const scaleY = height / (dataHeight * margin || 1);
+        const scale = Math.min(scaleX, scaleY) || 1;
 
-            const scaleX = width / (dataWidth * margin || 1);
-            const scaleY = height / (dataHeight * margin || 1);
-            const scale = Math.min(scaleX, scaleY) || 1;
+        camera.left = -width / 2 / scale;
+        camera.right = width / 2 / scale;
+        camera.top = height / 2 / scale;
+        camera.bottom = -height / 2 / scale;
+        camera.position.x = centerX;
+        camera.position.y = centerY;
+        camera.updateProjectionMatrix();
 
-            camera.left = -width / 2 / scale;
-            camera.right = width / 2 / scale;
-            camera.top = height / 2 / scale;
-            camera.bottom = -height / 2 / scale;
-            camera.position.x = centerX;
-            camera.position.y = centerY;
-            camera.updateProjectionMatrix();
-
-            controls.target.set(centerX, centerY, 0);
-            controls.update();
-          }
-        }
-      } catch (err) {
-        console.error('加载缺陷数据失败:', err);
-        setError(
-          '加载缺陷数据失败: ' +
-            (err instanceof Error ? err.message : String(err))
-        );
-      } finally {
-        setLoading(false);
+        controls.target.set(centerX, centerY, 0);
+        controls.update();
       }
     };
 
-    loadDefects();
-  }, [filePath, gridSize, overlapColor]);
+    renderSheetData();
+    setError(null);
+  }, [selectedSheetId, sheetsData, gridSize, overlapColor]);
 
   const createGrid = (
     bounds: { minX: number; maxX: number; minY: number; maxY: number },
@@ -313,23 +278,6 @@ export default function SubstrateRenderer({
         ...style,
       }}
     >
-      {loading && (
-        <Box
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <Text color='white'>加载中...</Text>
-        </Box>
-      )}
       {error && (
         <Box
           style={{
