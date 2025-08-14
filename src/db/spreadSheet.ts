@@ -337,7 +337,7 @@ export async function getWafersByProductAndBatch(
         `SELECT DISTINCT wafer_id
 FROM product_defect_map
 WHERE product_id = ? AND lot_id = ?
-ORDER BY wafer_id ASC`,
+ORDER BY CAST(wafer_id AS INTEGER) ASC`,
         [product_id, lot_id]
     );
 }

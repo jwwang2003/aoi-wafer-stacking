@@ -48,7 +48,7 @@ export default function DatabaseIndexPage() {
                     <Routes>
                         <Route path="/" element={<Navigate to="browse" replace />} />
                         <Route path="browse" element={<BrowsePage />} />
-                        <Route path="search" element={<SearchPage />} />
+                        <Route path="search" element={<ComingSoon />} />
                         <Route path="*" element={<ComingSoon />} />
                     </Routes>
                 </Stack>
@@ -64,8 +64,8 @@ function BrowsePage() {
     )
 }
 
-function SearchPage() {
-    return (
-        <>Search</>
-    )
-}
+// function SearchPage() {
+//     return (
+//         <></>
+//     )
+// }
