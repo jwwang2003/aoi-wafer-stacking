@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 export default function ComingSoon() {
     return (
-        <Container size="sm" h="100vh">
+        <Container fluid h="100%">
             <Center h="100%">
                 <Stack align="center">
                     <IconClock size={64} stroke={1.5} />
