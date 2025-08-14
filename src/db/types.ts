@@ -20,6 +20,24 @@ export interface OemProductMapRow {
     product_id: string;
 }
 
+export interface OemProductOffset {
+    oem_product_id: string;
+    x_offset: number;
+    y_offset: number;
+}
+
+export type OemProductOffsetMap = Map<string, { x_offset: number; y_offset: number }>;
+
+export function applyOemOffset(
+    x: number,
+    y: number,
+    offset?: Pick<OemProductOffset, "x_offset" | "y_offset">
+): { x: number; y: number } {
+    if (!offset) return { x, y };
+    return { x: x + offset.x_offset, y: y + offset.y_offset };
+}
+
+
 export interface ProductDefectMapRow {
     product_id: string;
     lot_id: string;

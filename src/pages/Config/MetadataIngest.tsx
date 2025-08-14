@@ -1,26 +1,33 @@
 import { useEffect, useState } from 'react';
 import {
-    Title, ScrollArea, Stack, Button,
+    Title, Stack, Button,
     Group, Tooltip, Divider, Indicator,
-    SegmentedControl, Code, Text
+    SegmentedControl, Text, Checkbox
 } from '@mantine/core';
-import { IconDownload, IconLoader } from '@tabler/icons-react';
+import { IconLoader, IconReload } from '@tabler/icons-react';
 
-// import { open } from '@tauri-apps/plugin-dialog';
 import Database from '@tauri-apps/plugin-sql';
 import { useDispatch } from 'react-redux';
 
+// Store
 import { AppDispatch } from '@/store';
-import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
-import RawWaferSummary from '@/components/RawWaferSummary';
 import { useAppSelector } from '@/hooks';
-import { ConfigStepperState } from '@/types/Stepper';
+import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
 import { advanceStepper, setStepper } from '@/slices/preferencesSlice';
-import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
+// DB
+import { getDb } from '@/db';
 import { deleteAllFileIndexes } from '@/db/fileIndex';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
-import { processNSyncExcelData, processNSyncWaferData } from '@/utils/waferData';
+// Cache
 import { resetSessionFileIndexCache, resetSessionFolderIndexCache } from '@/utils/fs';
+// Components
+import RawWaferSummary from '@/components/RawWaferSummary';
+// Utils
+import { processNSyncExcelData, processNSyncWaferData } from '@/utils/waferData';
+// Types
+import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
+import { ConfigStepperState } from '@/types/Stepper';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
 
 export default function Preview() {
     const dispatch = useDispatch<AppDispatch>();
@@ -32,7 +39,9 @@ export default function Preview() {
     const [db, setDb] = useState<Database | null>(null);
     const [loading, setLoading] = useState(false);
 
-    const [forceRescan, setForceRescan] = useState(false);
+    // Write-throuch session cache
+    const [ignoreSessionCache, setIgnoreSessionCache] = useState<boolean>(false);
+    const [resetCache, setResetCache] = useState<boolean>(false);
 
     // =========================================================================
     // NOTE: INIT
@@ -43,25 +52,29 @@ export default function Preview() {
         }
 
         // Init DB connection on first load
-        const connectDB = async () => {
-            const db = await Database.load('sqlite:data.db');
-            setDb(db);
-        };
+        const connectDB = async () => setDb(await getDb());
         connectDB();
     }, []);
 
     // =========================================================================
     // NOTE: METHODS
     // =========================================================================
-    const load = async () => {
+    const handleLoadWaferMetadata = async () => {
         setLoading(true);
         try {
-            // 当选择“强制重扫”时：先清空缓存表，再加载
-            if (forceRescan && db) {
+            if (!db) return;
+
+            if (ignoreSessionCache) {
+                // Clear the session file and folder caches
                 await resetSessionFileIndexCache();
                 await resetSessionFolderIndexCache();
-                // await deleteAllFileIndexes();
-                // await deleteAllFolderIndexes();
+                setIgnoreSessionCache(false);   // reset
+
+                if (resetCache) {
+                    await deleteAllFileIndexes();
+                    await deleteAllFolderIndexes();
+                    setResetCache(false);       // reset
+                }
             }
 
             const data = await dispatch(fetchWaferMetadata());
@@ -75,7 +88,11 @@ export default function Preview() {
         }
     };
 
-    const handleSync = async () => {
+    /**
+     * Any files/folders that had defected changes will be reprocessed and upserted into the database.
+     * @returns 
+     */
+    const handleSQLSynchronize = async () => {
         if (!db) return;
         setLoading(true);
         try {
@@ -99,27 +116,29 @@ export default function Preview() {
     // NOTE: REACT
     // =========================================================================
     useEffect(() => {
-        if (mounted && stepper >= ConfigStepperState.Metadata) load();
-    }, [mounted]);
+        // Triggers when mounted or db changes
+        if (mounted && stepper >= ConfigStepperState.Metadata)
+            handleLoadWaferMetadata();
+    }, [mounted, db]);  
 
     return (
         <Stack>
-            <Title order={2}>文件数据信息</Title>
+            <Title order={2}>元文件数据信息</Title>
 
             <Group align="center" gap="sm">
                 <SegmentedControl
-                    value={forceRescan ? 'force' : 'cache'}
-                    onChange={(v) => setForceRescan(v === 'force')}
+                    value={ignoreSessionCache ? 'force' : 'cache'}
+                    onChange={(v) => setIgnoreSessionCache(v === 'force')}
                     data={[
                         { label: '使用缓存', value: 'cache' },
-                        { label: '重扫', value: 'force' },
+                        { label: '重扫（写穿缓存）', value: 'force' },
                     ]}
                     disabled={loading}
                 />
                 <Tooltip
                     label={
-                        forceRescan
-                            ? '清空已有的缓冲，然后重新扫描并刷新缓存（数据库不变） '
+                        ignoreSessionCache
+                            ? '清空已有的缓冲，然后重新扫描并刷新缓存（数据库不变）'
                             : '优先使用已有缓存（更快）'
                     }
                     withArrow
@@ -139,15 +158,22 @@ export default function Preview() {
                             color="blue"
                             leftSection={<IconLoader size={16} />}
                             loading={loading}
-                            onClick={load}
+                            onClick={handleLoadWaferMetadata}
                         >
                             加载/刷新
                         </Button>
                     </Indicator>
                 </Tooltip>
+
+                <Checkbox
+                    label="重置缓存"
+                    checked={resetCache}
+                    onChange={(event) => setResetCache(event.currentTarget.checked)}
+                    disabled={loading || !ignoreSessionCache}
+                />
             </Group>
 
-            <RawWaferSummary />
+            <RawWaferSummary description='新/修改过的数据'/>
 
             <Tooltip label="将未知数据添加进数据库（手动）" withArrow>
                 <Indicator
@@ -164,9 +190,9 @@ export default function Preview() {
                         fullWidth
                         variant="light"
                         color="blue"
-                        leftSection={<IconDownload size={16} />}
+                        leftSection={<IconReload size={16} />}
                         loading={loading}
-                        onClick={handleSync}
+                        onClick={handleSQLSynchronize}
                     >
                         同步数据库
                     </Button>
@@ -178,11 +204,20 @@ export default function Preview() {
             {rawWaferMetadata.length ?
                 <>
                     <Title order={3}>{'新数据'}</Title>
-                    <ScrollArea>
-                        <Code block fz="xs" style={{ whiteSpace: 'pre-wrap' }}>
-                            {JSON.stringify(rawWaferMetadata, null, 2)}
-                        </Code>
-                    </ScrollArea>
+                    {
+                        rawWaferMetadata
+                            .filter((r): r is ExcelMetadata => 'type' in r)
+                            .map((r) =>
+                                <ExcelMetadataCard key={r.filePath} data={r} onClick={() => open(r.filePath)} />
+                            )
+                    }
+                    {
+                        rawWaferMetadata
+                            .filter((r): r is WaferFileMetadata => 'waferId' in r)
+                            .map((r) =>
+                                <WaferFileMetadataCard key={r.filePath} data={r} />
+                            )
+                    }
                 </>
                 : <>
                     <Text>{'暂无新数据'}</Text>

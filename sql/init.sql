@@ -4,29 +4,35 @@
 
 -- OEM -> Internal Product Mapping
 CREATE TABLE IF NOT EXISTS oem_product_map (
-    oem_product_id TEXT PRIMARY KEY,    -- OEM product id
-    product_id TEXT NOT NULL UNIQUE            -- internal product
+    oem_product_id TEXT PRIMARY KEY,            -- OEM product id
+    product_id TEXT NOT NULL UNIQUE             -- internal product
+);
+
+-- Unique offsets for each product
+CREATE TABLE IF NOT EXISTS oem_product_map (
+    oem_product_id TEXT PRIMARY KEY,
+    
+    x_offset DOUBLE NOT NULL,
+    y_offset DOUBLE NOT NULL,
+
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );
 
 -- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
-    product_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,           -- This actually maps to the oem_product_id
     lot_id TEXT NOT NULL,
     wafer_id TEXT NOT NULL,
-    sub_id TEXT NOT NULL,
+    sub_id TEXT NOT NULL UNIQUE,
 
     file_path TEXT NOT NULL,
 
     PRIMARY KEY (product_id, lot_id, wafer_id),
-    FOREIGN KEY (product_id) REFERENCES oem_product_map(oem_product_id),
-    -- FOREIGN KEY (sub_id) REFERENCES substrate_defect(sub_id),
+    FOREIGN KEY (product_id) REFERENCES oem_product_map(oem_product_id), -- NOTE:
     
     -- product defect map will get removed when file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
-
--- Enforce that each sub_id is unique to one wafer
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_subid ON product_defect_map(sub_id);
 
 -- Substrate Defect Files (referenced by sub_id)
 CREATE TABLE IF NOT EXISTS substrate_defect (

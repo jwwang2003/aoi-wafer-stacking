@@ -1,10 +1,16 @@
 import { useMemo } from 'react';
-import { Card, Badge, Group, Title, Divider } from '@mantine/core';
+import { Card, Badge, Group, Title, Divider, Text } from '@mantine/core';
 import { useAppSelector } from '@/hooks';
 import { DataSourcePaths } from '@/types/DataSource';
 import { initialDataSourceState } from '@/constants/default';
 
-export default function RawWaferSummary() {
+export default function RawWaferSummary({
+    title = "数据总览",
+    description = ""
+}: {
+    title?: string,
+    description?: string
+}) {
     const rawData = useAppSelector((state) => state.waferMetadata.data);
 
     const total = rawData.length;
@@ -19,10 +25,29 @@ export default function RawWaferSummary() {
     const knownTotal = stages.reduce((acc, s) => acc + (counts.get(s as string) ?? 0), 0);
     const otherCount = Math.max(0, total - knownTotal);
 
+    // =========================================================================
+    // NOTE: INIT
+    // =========================================================================
+
+    // =========================================================================
+    // NOTE: METHODS
+    // =========================================================================
+
+    // =========================================================================
+    // NOTE: REACT
+    // =========================================================================
+
     return (
         <Card withBorder radius="md" p="sm">
-            <Group justify="space-between" mb="xs">
-                <Title order={5}>原始文件数据源总览</Title>
+            <Group justify="space-between" mb="xs" align="flex-start">
+                <div>
+                    <Title order={5}>{title}</Title>
+                    {description ? (
+                        <Text size="sm" c="dimmed" mt={2}>
+                            {description}
+                        </Text>
+                    ) : null}
+                </div>
                 <Badge size="sm" color="blue">{total}</Badge>
             </Group>
 

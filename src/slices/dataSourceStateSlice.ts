@@ -89,7 +89,7 @@ export const refreshFolderStatuses = createAsyncThunk(
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
-            console.error('An error occured while refreshing data source folder status:', err);
+            console.error('An error occurred while refreshing data source folder status:', err);
         }
 
         return updatedGroups;
