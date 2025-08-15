@@ -5,14 +5,15 @@ import {
 } from '@mantine/core';
 import { IconRefresh, IconSearch, IconX, IconAlertCircle } from '@tabler/icons-react';
 
-import type { OemProductMapRow, WaferMapRow } from '@/db/types';
-import { ExcelType, type WaferFileMetadata } from '@/types/wafer';
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
-import { getSubstrateDefectBySubId } from '@/db/spreadSheet';
-import { useAppSelector } from '@/hooks';
 import { useDispatch } from 'react-redux';
+import { useAppSelector } from '@/hooks';
 import { AppDispatch } from '@/store';
 import { clearJob, setJob } from '@/slices/stackingJob';
+import type { OemProductMapRow, WaferMapRow } from '@/db/types';
+
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+
+import { ExcelType, type WaferFileMetadata } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
 
 // ---------------- 中文 UI 文案 ----------------
@@ -162,7 +163,7 @@ function useFetchList<T>(
         cancelRef.current = false;
         void doLoad();
         return () => { cancelRef.current = true; };
-         
+
     }, [enabled, bump.current, ...deps]);
 
     return {
@@ -186,7 +187,7 @@ type Props = {
 
 export default function ProductBatchNavigator({
     initialProductId,
-    searchable = true,
+    // searchable = true,
 
     getAllOemProductMappings = defaultGetAllOemProductMappings,
     getBatchesByOemId = defaultGetBatchesByOemId,
@@ -238,7 +239,7 @@ export default function ProductBatchNavigator({
             setSelectedOemId(found.oem_product_id);
             setSelectedProductId(found.product_id);
         }
-         
+
     }, [initialProductId, mappingsState.data]);
 
     // 过滤映射（按两列分别过滤）
@@ -258,7 +259,7 @@ export default function ProductBatchNavigator({
         [selectedOemId],
         [],
     );
-    useEffect(() => { resetAfterProduct(); }, [selectedOemId]);  
+    useEffect(() => { resetAfterProduct(); }, [selectedOemId]);
 
     const filteredBatches = useMemo(() => {
         const q = lotFilter.trim().toLowerCase();
@@ -274,7 +275,7 @@ export default function ProductBatchNavigator({
         // 数字升序
         (arr) => [...arr].sort((a, b) => Number(a.wafer_id) - Number(b.wafer_id))
     );
-    useEffect(() => { resetAfterBatch(); }, [selectedLotId]);  
+    useEffect(() => { resetAfterBatch(); }, [selectedLotId]);
 
     const filteredWafers = useMemo(() => {
         const q = waferFilter.trim().toLowerCase();
@@ -288,7 +289,7 @@ export default function ProductBatchNavigator({
         [selectedOemId, selectedLotId, selectedWaferId],
         [],
     );
-    useEffect(() => { resetAfterWafer(); }, [selectedWaferId]);  
+    useEffect(() => { resetAfterWafer(); }, [selectedWaferId]);
 
     const filteredSubs = useMemo(() => {
         const qs = subIdFilter.trim().toLowerCase();
@@ -321,6 +322,7 @@ export default function ProductBatchNavigator({
 
         setMapsLoading(true);
         try {
+            const { getSubstrateDefectBySubId } = await import('@/db/spreadSheet');
             const substrate = await getSubstrateDefectBySubId(sub_id);
             const maps = await getWaferMapsByTriple(selectedProductId, selectedLotId, waferNum);
             await dispatch(setJob({ substrate, maps }))
