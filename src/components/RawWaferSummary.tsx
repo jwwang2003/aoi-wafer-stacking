@@ -5,8 +5,8 @@ import { DataSourcePaths } from '@/types/dataSource';
 import { initialDataSourceState } from '@/constants/default';
 
 export default function RawWaferSummary({
-    title = "数据总览",
-    description = ""
+    title = '数据总览',
+    description = ''
 }: {
     title?: string,
     description?: string

@@ -140,7 +140,7 @@ export async function deleteFileIndexesByPaths(file_paths: string[], batchSize =
  * Deletes all records from the file_index table.
  *
  * ⚠️ Use with caution — this will clear all file tracking data,
- * forcing all files to be treated as 'new' on the next scan.
+ * forcing all files to be treated as "new" on the next scan.
  */
 export async function deleteAllFileIndexes(): Promise<void> {
     const db = await getDb();

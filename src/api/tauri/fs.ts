@@ -11,8 +11,8 @@ export interface FolderRequest { path: string };
  * @returns Promise<FolderResult[]>
  *
  * Usage:
- *   const results = await readFileStatBatch(['/a/b', '/x/y']);
- *   const results = await readFileStatBatch([{ path: '/a/b' }, { path: '/x/y' }]);
+ *   const results = await readFileStatBatch(["/a/b", "/x/y"]);
+ *   const results = await readFileStatBatch([{ path: "/a/b" }, { path: "/x/y" }]);
  */
 export async function invokeReadFileStatBatch(
     picked: string[] | DirResult[]

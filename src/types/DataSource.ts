@@ -37,7 +37,7 @@ export enum DataSourceType {
     Wlbi = 'wlbi',
     Aoi = 'aoi'
 }
-// export type DataSourceType = 'substrate' | 'fabCp' | 'cpProber' | 'wlbi' | 'aoi';
+// export type DataSourceType = "substrate" | "fabCp" | "cpProber" | "wlbi" | "aoi";
 
 // NOTE: For dataSourceStateSlice
 

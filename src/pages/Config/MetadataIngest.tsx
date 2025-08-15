@@ -174,7 +174,7 @@ export default function Preview() {
                 />
             </Group>
 
-            <RawWaferSummary description='新/修改过的数据'/>
+            <RawWaferSummary description="新/修改过的数据"/>
 
             <Tooltip label="将未知数据添加进数据库（手动）" withArrow>
                 <Indicator

@@ -79,10 +79,10 @@ function InfoToastContent({ payload }: { payload: InfoToastPayload }) {
  * Show a compact info toast with optional title, message, and key-value lines.
  *
  * Usage:
- *   infoToast({ title: '提示', message: '已保存设置' });
- *   infoToast({ title: '扫描信息', lines: [
- *     { label: '总文件夹', value: 12 },
- *     { label: '命中缓存', value: 9, color: '#228be6' },
+ *   infoToast({ title: "提示", message: "已保存设置" });
+ *   infoToast({ title: "扫描信息", lines: [
+ *     { label: "总文件夹", value: 12 },
+ *     { label: "命中缓存", value: 9, color: "#228be6" },
  *   ]});
  */
 export function infoToast(payload: InfoToastPayload, options?: ToastOptions) {

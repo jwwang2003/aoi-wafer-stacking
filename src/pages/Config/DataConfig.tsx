@@ -104,19 +104,19 @@ export default function DataConfigSubpage() {
     return (
         <>
             {/* Section: Root Directory */}
-            <Stack align='stretch' gap='md'>
+            <Stack align="stretch" gap="md">
                 <Title order={2}>根目录选择</Title>
-                <PathPicker label='根目录' value={rootPath} onChange={handleRootFolderChange} />
+                <PathPicker label="根目录" value={rootPath} onChange={handleRootFolderChange} />
                 <LastSaved dirty={rootDirty} lastModified={rootLastModified} lastSaved={lastSaved} />
 
-                <Group justify='flex-start'>
+                <Group justify="flex-start">
                     <Chip.Group multiple value={rootFolderStageOptions} onChange={setRootFolderStageOptions}>
                         <Group>
-                            <Chip value='displaySubFolderRegex'>显示子目录正则表达式</Chip>
-                            {/* <Chip value='auto'>自动识别子目录</Chip> */}
+                            <Chip value="displaySubFolderRegex">显示子目录正则表达式</Chip>
+                            {/* <Chip value="auto">自动识别子目录</Chip> */}
                         </Group>
                     </Chip.Group>
-                    <Divider orientation='vertical' />
+                    <Divider orientation="vertical" />
                     <Button leftSection={<IconScanEye size={18} />} onClick={handleAutoFolderRecognition}>
                         触发子目录识别
                     </Button>
@@ -125,9 +125,9 @@ export default function DataConfigSubpage() {
 
             {/* Section: Regex expressions */}
             {rootFolderStageOptions.includes('displaySubFolderRegex') && (
-                <Stack align='stretch' gap='md'>
+                <Stack align="stretch" gap="md">
                     <Title order={3}>子目录自动识别配置</Title>
-                    <Stack align='stretch' gap='md'>
+                    <Stack align="stretch" gap="md">
                         {regexConfig.map(({ label, key }) =>
                             <RegexInput
                                 key={key}
@@ -141,10 +141,10 @@ export default function DataConfigSubpage() {
                 </Stack>
             )}
 
-            <Divider my='sm' />
+            <Divider my="sm" />
 
             {/* Section: Data source subdirectories */}
-            <Stack align='stretch' gap='md'>
+            <Stack align="stretch" gap="md">
                 <Title order={2}>子目录选择</Title>
                 {dataSourceFlow.map(({ type, name }) =>
                     <SubfolderSelectorSection key={type} type={type} title={name} />

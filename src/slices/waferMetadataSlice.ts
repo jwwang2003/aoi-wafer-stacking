@@ -315,7 +315,7 @@ export async function readCpProberMetadata(
             ],
             files: {
                 name: fileName,
-                onFile: () => { } // no-op; we'll map after
+                onFile: () => { } // no-op; we"ll map after
             }
         },
         (level, _name, g) => {
@@ -507,7 +507,7 @@ export async function readAoiMetadata(
 ////////////////////////////////////////////////////////////////////////////////
 
 function parseWaferMapTimestamp(dateStr: string, timeStr: string): Date {
-    // Example: dateStr = '20250709', timeStr = '120302'
+    // Example: dateStr = "20250709", timeStr = "120302"
     const year = parseInt(dateStr.slice(0, 4), 10);
     const month = parseInt(dateStr.slice(4, 6), 10) - 1; // JS months are 0-indexed
     const day = parseInt(dateStr.slice(6, 8), 10);

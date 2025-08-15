@@ -182,12 +182,12 @@ const preferencesSlice = createSlice({
             if (current < target) {
                 state.stepper = target;
                 // } else if ((target - current) > 1) {
-                //     console.error('Config advance stepper gap is larger than 1!');
+                //     console.error("Config advance stepper gap is larger than 1!");
             } else if (target == current) {
-                // console.warn('Config stepper unchanged', state.stepper);
+                // console.warn("Config stepper unchanged", state.stepper);
             } else {
                 // Do nothing...
-                // console.warn('Config stepper: something went wrong...');
+                // console.warn("Config stepper: something went wrong...");
             }
         },
         setStepper(state, action: PayloadAction<ConfigStepperState>) {

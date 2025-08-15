@@ -93,7 +93,7 @@ export default function LoggingPage() {
 
             <Group mb="xs" justify="space-between" wrap="nowrap">
                 {/* Left: Filters + Label */}
-                <Group align='center'>
+                <Group align="center">
                     <Text size="xs" c="dimmed" fw={500}>
                         筛选条件
                     </Text>

@@ -40,7 +40,7 @@ export interface ExcelMetadata {
     stage: DataSourceType;
     type: ExcelType;
 
-    /** Optional extracted timestamp from filename or context (e.g., '20250709_120302') */
+    /** Optional extracted timestamp from filename or context (e.g., "20250709_120302") */
     id?: string;
     oem?: string;
     time?: string;      // timestamp from the filename

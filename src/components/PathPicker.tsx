@@ -103,7 +103,7 @@ export default function PathPicker({
     const canReveal = Boolean(folderPath);
 
     return (
-        <Group gap='xs' align='end' wrap='nowrap' w='100%'>
+        <Group gap="xs" align="end" wrap="nowrap" w="100%">
             <TextInput
                 label={label}
                 placeholder={mode === 'folder' ? '点击选择目录' : '点击选择文件'}
@@ -114,8 +114,8 @@ export default function PathPicker({
                 error={error ?? errorProp}
                 leftSection={
                     <ActionIcon
-                        variant='filled'
-                        aria-label='选择路径'
+                        variant="filled"
+                        aria-label="选择路径"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleSelect();
@@ -127,7 +127,7 @@ export default function PathPicker({
                 }
                 // fill remaining horizontal space
                 style={{ flex: 1 }}
-                w='100%'
+                w="100%"
                 // keep pointer cursor only when interactive
                 styles={{ input: { cursor: disabled ? 'default' : 'pointer' } }}
                 {...textInputProps}
@@ -136,14 +136,14 @@ export default function PathPicker({
             {/* Right controls rendered separately; do not grow */}
             <Group
                 gap={6}
-                align='center'
+                align="center"
                 style={{ flex: '0 0 auto', alignSelf: 'stretch', paddingTop: label ? 22 : 0 }}
             >
-                <Tooltip label='在文件夹中显示' withArrow>
+                <Tooltip label="在文件夹中显示" withArrow>
                     <ActionIcon
-                        size='lg'
-                        variant='light'
-                        color='gray'
+                        size="lg"
+                        variant="light"
+                        color="gray"
                         disabled={!canReveal}
                         onClick={async (e) => {
                             e.stopPropagation();
@@ -165,7 +165,7 @@ export default function PathPicker({
                     {({ copied, copy }) => (
                         <Tooltip label={copied ? '已复制' : '复制文件夹路径'} withArrow>
                             <ActionIcon
-                                size='lg'
+                                size="lg"
                                 variant={copied ? 'filled' : 'light'}
                                 color={copied ? 'teal' : 'gray'}
                                 disabled={!canReveal}

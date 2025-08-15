@@ -3,7 +3,7 @@ type CacheReportIn = {
     totDir?: number;           // optional: total candidates discovered
     numCached: number;         // cache hits (skipped)
     numRead: number;           // actually read (misses)
-    label?: string;            // e.g. 'WLBI', 'CP-prober'
+    label?: string;            // e.g. "WLBI", "CP-prober"
     durationMs?: number;       // optional timing
 };
 

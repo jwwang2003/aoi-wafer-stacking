@@ -47,7 +47,7 @@ export async function warmIndexCaches(): Promise<void> {
     // Files
     const db = await getDb();
     const fileRows = await db.select<FileIndexRow[]>(
-        `SELECT file_path, last_mtime, file_hash FROM file_index`
+        'SELECT file_path, last_mtime, file_hash FROM file_index'
     );
     file_idx.clear();
     for (const r of fileRows) {
@@ -57,7 +57,7 @@ export async function warmIndexCaches(): Promise<void> {
 
     // Folders
     const folderRows = await db.select<FolderIndexRow[]>(
-        `SELECT folder_path, last_mtime FROM folder_index`
+        'SELECT folder_path, last_mtime FROM folder_index'
     );
     folder_idx.clear();
     for (const r of folderRows) {

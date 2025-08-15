@@ -48,8 +48,8 @@ export type SubstrateDefectXlsResult = Record<string, SubstrateDefectRecord[]>;
 /**
  * For storing FAB CP, CP-prober, and AOI
  * NOTE:
- * - FAB CP uses '*' for alignment
- * - CP-prober and AOI uses a special character 'S' for alignment
+ * - FAB CP uses "*" for alignment
+ * - CP-prober and AOI uses a special character "S" for alignment
  * - These are the only times a non-numerical number should appear in the data,
  *      the actual bins should all be numbers.
  */
@@ -57,11 +57,11 @@ export type SubstrateDefectXlsResult = Record<string, SubstrateDefectRecord[]>;
 // Primitives / enums
 
 /** Rust: enum BinValue { Number(i32), Special(char) }
- *  Serde → { 'number': 1 } | { 'special': 'S' }
+ *  Serde → { "number": 1 } | { "special": "S" }
  */
 export type BinValue =
     | { number: number }   // numeric bin
-    | { special: string }; // single-char like 'S' or '*'
+    | { special: string }; // single-char like "S" or "*"
 
 // ASCII map (shared)
 export interface AsciiDie {
@@ -87,7 +87,7 @@ export interface Wafer {
     passDie: number;    // u32
     failDie: number;    // u32
     totalYield: number; // f64 (e.g., 94.69)
-    notch: string;      // e.g., 'Down'
+    notch: string;      // e.g., "Down"
     map: AsciiMap;      // raw + dies
 }
 
@@ -97,7 +97,7 @@ export interface MapData {
     deviceName: string;
     lotNo: string;
     waferId: string;
-    waferSize: string;   // Rust keeps as string, e.g. `6'`
+    waferSize: string;   // Rust keeps as string, e.g. `6"`
     diceSizeX: number;   // f64
     diceSizeY: number;   // f64
     flatNotch: string;
@@ -166,10 +166,10 @@ export type HexCell = number | null;
 
 /**
  * Carries the raw RowData lines, parsed grid, and flattened dies.
- * `raw` / `dies` are optional because Rust uses `skip_serializing_if = 'Vec::is_empty'`.
+ * `raw` / `dies` are optional because Rust uses `skip_serializing_if = "Vec::is_empty"`.
  */
 export interface HexMap {
-    raw?: string[];           // exact text after 'RowData:' (one per row)
+    raw?: string[];           // exact text after "RowData:" (one per row)
     grid: HexCell[][];        // [row][col] numbers or nulls (for `--`)
     dies?: AsciiDie[];        // centered (x,y) with numeric bins
 }
@@ -185,7 +185,7 @@ export interface HexHeader {
     bcequ?: number;           // BCEQU (optional)
     refpx: number;            // REFPX
     refpy: number;            // REFPY
-    dutMs: string;            // DUTMS (e.g., 'MM')
+    dutMs: string;            // DUTMS (e.g., "MM")
     xDies: number;            // XDIES
     yDies: number;            // YDIES
 }

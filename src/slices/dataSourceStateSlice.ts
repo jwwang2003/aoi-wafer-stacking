@@ -15,8 +15,8 @@ import { initialDataSourceState as initialState } from '@/constants/default';
 
 // DEVELOPER NOTES:
 // April 10, 2025
-// - assuming that there won't be over 1-10K number of sub folders within the root
-//      data folder, using Tauri's built-in resolve SHOULD not pose any significant
+// - assuming that there won"t be over 1-10K number of sub folders within the root
+//      data folder, using Tauri"s built-in resolve SHOULD not pose any significant
 //      performance bottlenecks
 
 // Specifically for the folder type
@@ -39,7 +39,7 @@ export const initDataSourceState = createAsyncThunk<
     const result: FolderGroupsState = { ...initialState };
 
     for (const [type] of Object.entries(paths)) {
-        // Filter out the 'lastModified' attribute that DNE in the type
+        // Filter out the "lastModified" attribute that DNE in the type
         if (type === 'lastModified') continue;
         const typed = type as DataSourceType;
 

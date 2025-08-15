@@ -82,12 +82,12 @@ function ClearableInput(props: React.ComponentProps<typeof TextInput> & { onClea
             leftSection={<IconSearch size={14} />}
             rightSection={
                 hasValue ? (
-                    <ActionIcon size='sm' variant='subtle' aria-label='清除' onClick={onClear}>
+                    <ActionIcon size="sm" variant="subtle" aria-label="清除" onClick={onClear}>
                         <IconX size={14} />
                     </ActionIcon>
                 ) : null
             }
-            size='xs'
+            size="xs"
             {...rest}
         />
     );
@@ -162,7 +162,7 @@ function useFetchList<T>(
         cancelRef.current = false;
         void doLoad();
         return () => { cancelRef.current = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [enabled, bump.current, ...deps]);
 
     return {
@@ -238,7 +238,7 @@ export default function ProductBatchNavigator({
             setSelectedOemId(found.oem_product_id);
             setSelectedProductId(found.product_id);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [initialProductId, mappingsState.data]);
 
     // 过滤映射（按两列分别过滤）
@@ -258,7 +258,7 @@ export default function ProductBatchNavigator({
         [selectedOemId],
         [],
     );
-    useEffect(() => { resetAfterProduct(); }, [selectedOemId]); // eslint-disable-line
+    useEffect(() => { resetAfterProduct(); }, [selectedOemId]);  
 
     const filteredBatches = useMemo(() => {
         const q = lotFilter.trim().toLowerCase();
@@ -274,7 +274,7 @@ export default function ProductBatchNavigator({
         // 数字升序
         (arr) => [...arr].sort((a, b) => Number(a.wafer_id) - Number(b.wafer_id))
     );
-    useEffect(() => { resetAfterBatch(); }, [selectedLotId]); // eslint-disable-line
+    useEffect(() => { resetAfterBatch(); }, [selectedLotId]);  
 
     const filteredWafers = useMemo(() => {
         const q = waferFilter.trim().toLowerCase();
@@ -288,7 +288,7 @@ export default function ProductBatchNavigator({
         [selectedOemId, selectedLotId, selectedWaferId],
         [],
     );
-    useEffect(() => { resetAfterWafer(); }, [selectedWaferId]); // eslint-disable-line
+    useEffect(() => { resetAfterWafer(); }, [selectedWaferId]);  
 
     const filteredSubs = useMemo(() => {
         const qs = subIdFilter.trim().toLowerCase();
@@ -353,23 +353,23 @@ export default function ProductBatchNavigator({
     }
 
     return (
-        <Stack gap='md'>
-            <Group align='start' gap='md' wrap='nowrap'>
+        <Stack gap="md">
+            <Group align="start" gap="md" wrap="nowrap">
                 {/* 列 1：OEM ↔ 产品 */}
-                <Card withBorder radius='lg' w={360} p='sm' style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                    <Group justify='space-between' mb='xs'>
+                <Card withBorder radius="lg" w={360} p="sm" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                    <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.oemProduct}</Title>
                         <Tooltip label={zh.reload} withArrow>
-                            <ActionIcon variant='light' onClick={mappingsState.reload} aria-label={zh.reload}>
+                            <ActionIcon variant="light" onClick={mappingsState.reload} aria-label={zh.reload}>
                                 <IconRefresh size={16} />
                             </ActionIcon>
                         </Tooltip>
                     </Group>
 
-                    {mappingsState.error && <Alert color='red' icon={<IconAlertCircle size={16} />} mb='xs'>{mappingsState.error}</Alert>}
+                    {mappingsState.error && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{mappingsState.error}</Alert>}
 
-                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type='hover' scrollbarSize={8} style={{ flex: 1 }}>
-                        <Table striped highlightOnHover withRowBorders={false} horizontalSpacing='sm' verticalSpacing='xs'>
+                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
+                        <Table striped highlightOnHover withRowBorders={false} horizontalSpacing="sm" verticalSpacing="xs">
                             <Table.Thead {...stickyHeadProps}>
                                 <Table.Tr>
                                     <Table.Th>{zh.oemIdCol}</Table.Th>
@@ -397,9 +397,9 @@ export default function ProductBatchNavigator({
                             </Table.Thead>
                             <Table.Tbody>
                                 {mappingsState.loading ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Group justify='center' p='md'><Loader size='sm' /></Group></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td colSpan={2}><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : filteredMappings.length === 0 ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Text c='dimmed' ta='center'>{zh.none}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{zh.none}</Text></Table.Td></Table.Tr>
                                 ) : filteredMappings.map((row) => {
                                     const active = row.product_id === selectedProductId || row.oem_product_id === selectedOemId;
                                     return (
@@ -417,23 +417,23 @@ export default function ProductBatchNavigator({
                         </Table>
                     </ScrollArea.Autosize>
 
-                    <Group justify='space-between' mt='xs'>
-                        <Text size='xs' c='dimmed'>{zh.mapped(filteredMappings.length)}</Text>
-                        {selectedProductId && <Badge radius='sm' variant='light'>{zh.product}: {selectedProductId}</Badge>}
+                    <Group justify="space-between" mt="xs">
+                        <Text size="xs" c="dimmed">{zh.mapped(filteredMappings.length)}</Text>
+                        {selectedProductId && <Badge radius="sm" variant="light">{zh.product}: {selectedProductId}</Badge>}
                     </Group>
                 </Card>
 
                 {/* 列 2：批次 */}
-                <Card withBorder radius='lg' w={220} p='sm' style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                    <Group justify='space-between' mb='xs'>
+                <Card withBorder radius="lg" w={220} p="sm" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                    <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.batches}</Title>
-                        <Group gap={1} align='end' style={{ alignItems: 'center' }}>
-                            <Text size='xs' c='dimmed'>{zh.oem}</Text>
-                            <Text size='sm' fw={600}>{selectedOemId ?? '—'}</Text>
+                        <Group gap={1} align="end" style={{ alignItems: 'center' }}>
+                            <Text size="xs" c="dimmed">{zh.oem}</Text>
+                            <Text size="sm" fw={600}>{selectedOemId ?? '—'}</Text>
                         </Group>
                     </Group>
-                    {batchesState.error && <Alert color='red' icon={<IconAlertCircle size={16} />} mb='xs'>{batchesState.error}</Alert>}
-                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type='hover' scrollbarSize={8} style={{ flex: 1 }}>
+                    {batchesState.error && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{batchesState.error}</Alert>}
+                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
                         <Table striped highlightOnHover withRowBorders={false}>
                             <Table.Thead {...stickyHeadProps}>
                                 <Table.Tr><Table.Th>{zh.lotIdCol}</Table.Th></Table.Tr>
@@ -451,11 +451,11 @@ export default function ProductBatchNavigator({
                             </Table.Thead>
                             <Table.Tbody>
                                 {batchesState.loading ? (
-                                    <Table.Tr><Table.Td><Group justify='center' p='md'><Loader size='sm' /></Group></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : !selectedProductId ? (
-                                    <Table.Tr><Table.Td><Text c='dimmed' ta='center'>{zh.selectProduct}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.selectProduct}</Text></Table.Td></Table.Tr>
                                 ) : filteredBatches.length === 0 ? (
-                                    <Table.Tr><Table.Td><Text c='dimmed' ta='center'>{zh.noBatches}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.noBatches}</Text></Table.Td></Table.Tr>
                                 ) : filteredBatches.map(b => {
                                     const active = b.lot_id === selectedLotId;
                                     return (
@@ -471,22 +471,22 @@ export default function ProductBatchNavigator({
                             </Table.Tbody>
                         </Table>
                     </ScrollArea.Autosize>
-                    <Group justify='space-between' mt='xs'>
-                        <Text size='xs' c='dimmed'>{selectedProductId ? zh.batchesCount(filteredBatches.length) : '—'}</Text>
+                    <Group justify="space-between" mt="xs">
+                        <Text size="xs" c="dimmed">{selectedProductId ? zh.batchesCount(filteredBatches.length) : '—'}</Text>
                     </Group>
                 </Card>
 
                 {/* 列 3：晶圆 */}
-                <Card withBorder radius='lg' w={220} p='sm' style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                    <Group justify='space-between' mb='xs'>
+                <Card withBorder radius="lg" w={220} p="sm" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                    <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.wafers}</Title>
-                        <Group gap={1} align='end' style={{ alignItems: 'center' }}>
-                            <Text size='xs' c='dimmed'>{zh.batch}</Text>
-                            <Text size='sm' fw={600}>{selectedLotId ?? '—'}</Text>
+                        <Group gap={1} align="end" style={{ alignItems: 'center' }}>
+                            <Text size="xs" c="dimmed">{zh.batch}</Text>
+                            <Text size="sm" fw={600}>{selectedLotId ?? '—'}</Text>
                         </Group>
                     </Group>
-                    {wafersState.error && <Alert color='red' icon={<IconAlertCircle size={16} />} mb='xs'>{wafersState.error}</Alert>}
-                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type='hover' scrollbarSize={8} style={{ flex: 1 }}>
+                    {wafersState.error && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{wafersState.error}</Alert>}
+                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
                         <Table striped highlightOnHover withRowBorders={false}>
                             <Table.Thead {...stickyHeadProps}>
                                 <Table.Tr><Table.Th>{zh.waferIdCol}</Table.Th></Table.Tr>
@@ -504,11 +504,11 @@ export default function ProductBatchNavigator({
                             </Table.Thead>
                             <Table.Tbody>
                                 {wafersState.loading ? (
-                                    <Table.Tr><Table.Td><Group justify='center' p='md'><Loader size='sm' /></Group></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : !selectedLotId ? (
-                                    <Table.Tr><Table.Td><Text c='dimmed' ta='center'>{zh.selectBatch}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.selectBatch}</Text></Table.Td></Table.Tr>
                                 ) : filteredWafers.length === 0 ? (
-                                    <Table.Tr><Table.Td><Text c='dimmed' ta='center'>{zh.noWafers}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.noWafers}</Text></Table.Td></Table.Tr>
                                 ) : filteredWafers.map(w => {
                                     const active = w.wafer_id === selectedWaferId;
                                     return (
@@ -524,22 +524,22 @@ export default function ProductBatchNavigator({
                             </Table.Tbody>
                         </Table>
                     </ScrollArea.Autosize>
-                    <Group justify='space-between' mt='xs'>
-                        <Text size='xs' c='dimmed'>{selectedLotId ? zh.wafersCount(filteredWafers.length) : '—'}</Text>
+                    <Group justify="space-between" mt="xs">
+                        <Text size="xs" c="dimmed">{selectedLotId ? zh.wafersCount(filteredWafers.length) : '—'}</Text>
                     </Group>
                 </Card>
 
                 {/* 列 4：子编号（最后列宽度自适应，路径列可伸展） */}
-                <Card withBorder radius='lg' p='sm' style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                    <Group justify='space-between' mb='xs'>
+                <Card withBorder radius="lg" p="sm" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                    <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.subs}</Title>
-                        <Group gap={1} align='end' style={{ alignItems: 'center' }}>
-                            <Text size='xs' c='dimmed'>{zh.wafer}</Text>
-                            <Text size='sm' fw={600}>{selectedWaferId ?? '—'}</Text>
+                        <Group gap={1} align="end" style={{ alignItems: 'center' }}>
+                            <Text size="xs" c="dimmed">{zh.wafer}</Text>
+                            <Text size="sm" fw={600}>{selectedWaferId ?? '—'}</Text>
                         </Group>
                     </Group>
-                    {subsState.error && <Alert color='red' icon={<IconAlertCircle size={16} />} mb='xs'>{subsState.error}</Alert>}
-                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type='hover' scrollbarSize={8} style={{ flex: 1 }}>
+                    {subsState.error && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{subsState.error}</Alert>}
+                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
                         <Table
                             striped
                             highlightOnHover
@@ -561,7 +561,7 @@ export default function ProductBatchNavigator({
                                             onChange={(e) => setSubIdFilter(e.currentTarget.value)}
                                             onClear={() => setSubIdFilter('')}
                                             placeholder={`${zh.subId} ${zh.searchPlaceholder}`}
-                                            w='100%'
+                                            w="100%"
                                         />
                                     </Table.Th>
                                     <Table.Th>
@@ -570,18 +570,18 @@ export default function ProductBatchNavigator({
                                             onChange={(e) => setPathFilter(e.currentTarget.value)}
                                             onClear={() => setPathFilter('')}
                                             placeholder={`${zh.filePathCol} ${zh.searchPlaceholder}`}
-                                            w='100%'
+                                            w="100%"
                                         />
                                     </Table.Th>
                                 </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
                                 {subsState.loading ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Group justify='center' p='md'><Loader size='sm' /></Group></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td colSpan={2}><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : !selectedWaferId ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Text c='dimmed' ta='center'>{zh.selectWafer}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{zh.selectWafer}</Text></Table.Td></Table.Tr>
                                 ) : filteredSubs.length === 0 ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Text c='dimmed' ta='center'>{zh.noSubs}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{zh.noSubs}</Text></Table.Td></Table.Tr>
                                 ) : filteredSubs.map(s => {
                                     const active = s.sub_id === selectedSubId;
                                     return (
@@ -593,7 +593,7 @@ export default function ProductBatchNavigator({
                                         >
                                             {/* 第一列固定宽 */}
                                             <Table.Td style={{ width: 160 }}>
-                                                <Text fw={active ? 700 : 400} truncate='end'>{s.sub_id}</Text>
+                                                <Text fw={active ? 700 : 400} truncate="end">{s.sub_id}</Text>
                                             </Table.Td>
                                             {/* 最后一列自适应 + 单行省略号 */}
                                             <Table.Td style={{ overflow: 'hidden' }}>
@@ -610,8 +610,8 @@ export default function ProductBatchNavigator({
                             </Table.Tbody>
                         </Table>
                     </ScrollArea.Autosize>
-                    <Group justify='space-between' mt='xs'>
-                        <Text size='xs' c='dimmed'>
+                    <Group justify="space-between" mt="xs">
+                        <Text size="xs" c="dimmed">
                             {selectedWaferId ? zh.subsCount(filteredSubs.length) : '—'}
                         </Text>
                     </Group>
@@ -619,27 +619,27 @@ export default function ProductBatchNavigator({
             </Group>
 
             {/* 晶圆叠图面板 */}
-            <Card withBorder radius='lg' p='sm' style={{ display: 'flex', flexDirection: 'column' }}>
-                <Group justify='space-between' mb='xs'>
+            <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column' }}>
+                <Group justify="space-between" mb="xs">
                     <Title order={4}>{zh.waferMaps}</Title>
-                    <Stack gap={0} align='end'>
-                        <Text size='xs' c='dimmed'>{zh.selected}</Text>
-                        <Text size='sm' fw={600}>
+                    <Stack gap={0} align="end">
+                        <Text size="xs" c="dimmed">{zh.selected}</Text>
+                        <Text size="sm" fw={600}>
                             {selectedProductId ? `${selectedOemId} (${selectedProductId})` : '—'} / {selectedLotId ?? '—'} / {selectedWaferId ?? '—'} {selectedSubId ? ` / ${selectedSubId}` : ''}
                         </Text>
                     </Stack>
                 </Group>
 
-                {mapsError && <Alert color='red' icon={<IconAlertCircle size={16} />} mb='xs'>{mapsError}</Alert>}
+                {mapsError && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{mapsError}</Alert>}
 
                 {mapsLoading ? (
-                    <Group justify='center' p='md'><Loader size='sm' /></Group>
+                    <Group justify="center" p="md"><Loader size="sm" /></Group>
                 ) : !selectedProductId || !selectedLotId || !selectedWaferId || !selectedSubId ? (
-                    <Text c='dimmed' ta='center'>{zh.selectSubTip}</Text>
+                    <Text c="dimmed" ta="center">{zh.selectSubTip}</Text>
                 ) : waferMaps.length === 0 ? (
-                    <Text c='dimmed' ta='center'>{zh.noMaps}</Text>
+                    <Text c="dimmed" ta="center">{zh.noMaps}</Text>
                 ) : (
-                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
+                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
                         {waferMaps.map((r, i) => (
                             <WaferFileMetadataCard key={`${r.idx}-${i}`} data={toWaferFileMetadata(r)} />
                         ))}

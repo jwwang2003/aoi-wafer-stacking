@@ -11,12 +11,12 @@ export default function LastSavedSection({
     lastModified,
     lastSaved,
     // onSave,
-    // label = '保存',
+    // label = "保存",
 }: LastSavedSectionProps) {
     return (
         <Group align="flex-start">
             {/* <Indicator color="blue" withBorder disabled={!dirty}>
-                <Button color={dirty ? 'green' : undefined} onClick={onSave}>
+                <Button color={dirty ? "green" : undefined} onClick={onSave}>
                     {label}
                 </Button>
             </Indicator> */}

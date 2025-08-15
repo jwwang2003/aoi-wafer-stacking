@@ -18,7 +18,7 @@ import {
 } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import { resolveResource } from '@tauri-apps/api/path';
-// import { open } from '@tauri-apps/api/dialog';
+// import { open } from "@tauri-apps/api/dialog";
 import SubstrateRenderer from '@/components/Wafer';
 
 interface SheetInfo {
@@ -91,7 +91,7 @@ export default function SubstrateConfigPage() {
         try {
             const result = await invokeParseSubstrateDefectXls(filePath);
             const sheetList: SheetInfo[] = Object.entries(result).map(
-                ([id, _data], index) => ({
+                ([id], index) => ({
                     id,
                     name: `工作表 ${index + 1}`,
                 })
@@ -218,7 +218,7 @@ export default function SubstrateConfigPage() {
         max: number,
         step: number
     ) => (
-        <Group align='center'>
+        <Group align="center">
             <NumberInput
                 label={label}
                 value={offset[key] || 0}
@@ -240,19 +240,19 @@ export default function SubstrateConfigPage() {
     );
 
     return (
-        <Flex gap='lg' align='flex-start' justify='space-between'>
+        <Flex gap="lg" align="flex-start" justify="space-between">
             {/* Left Panel: Controls */}
-            <Stack w='50%' gap='md'>
+            <Stack w="50%" gap="md">
                 <Title order={2}>衬底配置</Title>
                 <Text>在此处调整衬底的偏移量、缩放和扭曲强度。</Text>
 
                 {/* 文件路径输入区域 */}
-                <Group align='flex-end' gap='sm' style={{ width: '100%' }}>
-                    <InputWrapper label='文件路径' style={{ flex: 1, marginBottom: 0 }}>
+                <Group align="flex-end" gap="sm" style={{ width: '100%' }}>
+                    <InputWrapper label="文件路径" style={{ flex: 1, marginBottom: 0 }}>
                         <Input
                             value={filePath}
                             onChange={handlePathInput}
-                            placeholder='输入文件路径'
+                            placeholder="输入文件路径"
                         />
                     </InputWrapper>
                     <Button onClick={selectFile}>选择文件</Button>
@@ -279,7 +279,7 @@ export default function SubstrateConfigPage() {
                     )}
                 </Group>
 
-                <Text size='sm' c={error ? 'red' : 'blue'}>
+                <Text size="sm" c={error ? 'red' : 'blue'}>
                     {loadingSheets
                         ? '加载工作表中...'
                         : error
@@ -296,13 +296,13 @@ export default function SubstrateConfigPage() {
                 {renderControl('缩放 (Scale)', 'scale', 0.1, 10, 0.1)}
                 {renderControl('扭曲 (Warp)', 'warp', -100, 100, 1)}
 
-                <Text size='sm' c='dimmed' mt='xs'>
+                <Text size="sm" c="dimmed" mt="xs">
                     所有更改都会自动保存，无需手动操作。
                 </Text>
             </Stack>
 
             {/* Right Panel: Three.js Canvas */}
-            <Box w='50%'>
+            <Box w="50%">
                 <SubstrateThreeView
                     {...offset}
                     filePath={filePath}

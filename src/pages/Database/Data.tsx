@@ -40,7 +40,7 @@ export default function DatabaseIndexPage() {
         <Group grow>
             <Container fluid p="md">
                 <Stack gap="md">
-                    <SegmentedControl w={"min-content"} data={subpageOptions} value={currentValue} onChange={handleChange} />
+                    <SegmentedControl w={'min-content'} data={subpageOptions} value={currentValue} onChange={handleChange} />
                     <Routes>
                         <Route path="/" element={<Navigate to="browse" replace />} />
                         <Route path="browse" element={<BrowsePage />} />

@@ -51,6 +51,6 @@ export async function autoRecognizeFoldersByType(
         }
     }
 
-    // console.debug('子目录自动识别结果:', folderMatches);
+    // console.debug("子目录自动识别结果:", folderMatches);
     return folderMatches;
 }

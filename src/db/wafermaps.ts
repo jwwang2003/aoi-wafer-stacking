@@ -1,5 +1,5 @@
 import { getDb } from '@/db';
-import { WaferMapRow } from './types'; // Ensure this includes `idx?: number`
+import { WaferMapRow } from './types'; // Ensure this includes "idx?: number"
 
 /**
  * NOTE: DB should enforce: CREATE UNIQUE INDEX IF NOT EXISTS uq_wafer_maps_file_path ON wafer_maps(file_path);

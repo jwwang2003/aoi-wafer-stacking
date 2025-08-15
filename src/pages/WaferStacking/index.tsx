@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
 import ProcessRouteStepper from '@/components/ProcessRouteStepper';
 import { infoToast } from '@/components/Toaster';
@@ -56,7 +56,7 @@ export default function WaferStacking() {
     const [tasks, setTasks] = useState<string[][]>([]);
     const [processing, setProcessing] = useState(false);
     const [result, setResult] = useState<string | null>(null);
-    const [_debugInfo, setDebugInfo] = useState<string | null>(null);
+    const [debugInfo, setDebugInfo] = useState<string | null>(null);
     const [combinedHeaders, setCombinedHeaders] = useState<
         Record<string, string>
     >({});
@@ -100,16 +100,16 @@ export default function WaferStacking() {
     //   stats: Statistics,
     //   header: Record<string, string>
     // ): Wafer => ({
-    //   operator: header?.['Operator'] || 'Unknown',
-    //   device: header?.['Device Name'] || 'Unknown',
-    //   lotId: header?.['Lot No.'] || 'Unknown',
-    //   waferId: header?.['Wafer ID'] || 'Unknown',
+    //   operator: header?.["Operator"] || "Unknown",
+    //   device: header?.["Device Name"] || "Unknown",
+    //   lotId: header?.["Lot No."] || "Unknown",
+    //   waferId: header?.["Wafer ID"] || "Unknown",
     //   measTime: new Date().toISOString(),
     //   grossDie: stats.totalTested,
     //   passDie: stats.totalPass,
     //   failDie: stats.totalFail,
     //   totalYield: stats.yieldPercentage,
-    //   notch: header?.['Notch'] || 'Down',
+    //   notch: header?.["Notch"] || "Down",
     //   map: {
     //     raw: mapData,
     //     dies: parseDies(mapData),
@@ -323,11 +323,11 @@ export default function WaferStacking() {
             // 导出wafermap格式
             // const waferData = convertToWafer(overlayedMap, stats, useHeader);
             // const wafermapPath = await join(
-            //   outputFormats['wafermap'],
+            //   outputFormats["wafermap"],
             //   `${baseFileName}_overlayed.wafermap`
             // );
             // await exportWafer(waferData, wafermapPath);
-            // console.log('wafermap数据（预期header）:', waferData); // 检查控制台输出的字段
+            // console.log("wafermap数据（预期header）:", waferData); // 检查控制台输出的字段
 
             // 导出bin格式
             const binData = convertToBinMapData(overlayedMap, useHeader);
@@ -371,16 +371,20 @@ export default function WaferStacking() {
         setTasks([]);
     };
 
+    useEffect(() => {
+        console.debug(debugInfo);
+    }, [debugInfo])
+
     return (
         <Group grow>
-            <Container fluid p='md'>
-                <Stack gap='md'>
+            <Container fluid p="md">
+                <Stack gap="md">
                     <Title order={1}>晶圆叠图</Title>
 
-                    <Group justify='space-between' align='center'>
+                    <Group justify="space-between" align="center">
                         <Title order={2}>工艺路线</Title>
                         <Switch
-                            label='显示工艺路线'
+                            label="显示工艺路线"
                             checked={showRoute}
                             onChange={(event) => setShowRoute(event.currentTarget.checked)}
                         />
@@ -388,26 +392,26 @@ export default function WaferStacking() {
 
                     {showRoute && <ProcessRouteStepper demoMode />}
 
-                    <Divider my='md' label='叠图处理区' labelPosition='center' />
+                    <Divider my="md" label="叠图处理区" labelPosition="center" />
 
-                    <Group align='flex-start' grow>
+                    <Group align="flex-start" grow>
                         {/* 左侧：参数设置区 */}
-                        <Stack w='50%' gap='sm'>
+                        <Stack w="50%" gap="sm">
                             <Switch
-                                label='显示叠图示意图'
+                                label="显示叠图示意图"
                                 checked={showDiagram}
                                 onChange={(event) =>
                                     setShowDiagram(event.currentTarget.checked)
                                 }
                             />
                             {showDiagram && (
-                                <Paper shadow='xs' p='sm' h={200}>
+                                <Paper shadow="xs" p="sm" h={200}>
                                     <Box
-                                        bg='gray.1'
-                                        h='100%'
+                                        bg="gray.1"
+                                        h="100%"
                                         style={{ border: '1px dashed #ccc' }}
                                     >
-                                        <Text ta='center' pt='xl'>
+                                        <Text ta="center" pt="xl">
                                             [ThreeJS 叠图 + 缺陷示意图]
                                         </Text>
                                     </Box>
@@ -415,18 +419,18 @@ export default function WaferStacking() {
                             )}
 
                             <Checkbox.Group
-                                label='选择叠图层'
+                                label="选择叠图层"
                                 value={selectedLayers}
                                 onChange={setSelectedLayers}
                             >
-                                <Stack gap='xs' mt='sm'>
+                                <Stack gap="xs" mt="sm">
                                     {allLayers.map((layer) => (
                                         <Checkbox key={layer} value={layer} label={layer} />
                                     ))}
                                 </Stack>
                             </Checkbox.Group>
 
-                            <Group mt='md'>
+                            <Group mt="md">
                                 <Button
                                     onClick={processMapping}
                                     loading={processing}
@@ -439,16 +443,16 @@ export default function WaferStacking() {
                         </Stack>
 
                         {/* 右侧：任务列表区 */}
-                        <Stack w='50%' gap='sm'>
+                        <Stack w="50%" gap="sm">
                             <Title order={3}>待处理任务</Title>
                             <ScrollArea h={200}>
-                                <Stack gap='xs'>
+                                <Stack gap="xs">
                                     {tasks.length === 0 ? (
-                                        <Text c='dimmed'>暂无任务</Text>
+                                        <Text c="dimmed">暂无任务</Text>
                                     ) : (
                                         tasks.map((task, idx) => (
-                                            <Paper key={idx} shadow='xs' p='xs' radius='sm'>
-                                                <Text size='sm'>
+                                            <Paper key={idx} shadow="xs" p="xs" radius="sm">
+                                                <Text size="sm">
                                                     任务 {idx + 1}: {task.join(', ')}
                                                 </Text>
                                             </Paper>
@@ -467,7 +471,7 @@ export default function WaferStacking() {
 
                     {result !== null && (
                         <Alert
-                            title='处理结果'
+                            title="处理结果"
                             withCloseButton
                             onClose={() => setResult(null)}
                         >
@@ -475,7 +479,7 @@ export default function WaferStacking() {
                             {/* 穿插debuginfo */}
 
                             <Button
-                                mt='md'
+                                mt="md"
                                 leftSection={<IconDownload size={16} />}
                                 onClick={() =>
                                     infoToast({ title: '提示', message: '文件已保存到输出目录' })
@@ -492,29 +496,29 @@ export default function WaferStacking() {
 }
 
 // {debugInfo && (
-//   <div style={{ marginTop: '1rem' }}>
+//   <div style={{ marginTop: "1rem" }}>
 //     <Title order={4}>调试信息</Title>
 //     <div
 //       style={{
-//         height: '200px',
-//         overflow: 'auto',
-//         backgroundColor: '#f5f5f5',
-//         padding: '0.5rem',
-//         borderRadius: '4px',
+//         height: "200px",
+//         overflow: "auto",
+//         backgroundColor: "#f5f5f5",
+//         padding: "0.5rem",
+//         borderRadius: "4px",
 //       }}
 //     >
 //       <textarea
 //         value={debugInfo}
 //         readOnly
 //         style={{
-//           width: '100%',
-//           height: '100%',
-//           whiteSpace: 'pre-wrap',
-//           fontFamily: 'monospace',
-//           border: 'none',
-//           background: 'transparent',
-//           resize: 'none',
-//           outline: 'none',
+//           width: "100%",
+//           height: "100%",
+//           whiteSpace: "pre-wrap",
+//           fontFamily: "monospace",
+//           border: "none",
+//           background: "transparent",
+//           resize: "none",
+//           outline: "none",
 //         }}
 //       />
 //     </div>
@@ -522,31 +526,31 @@ export default function WaferStacking() {
 // )}
 
 // {Object.keys(combinedHeaders).length > 0 && (
-//   <div style={{ marginTop: '1rem' }}>
+//   <div style={{ marginTop: "1rem" }}>
 //     <Title order={4}>合并的Header信息</Title>
 //     <div
 //       style={{
-//         height: '200px',
-//         overflow: 'auto',
-//         backgroundColor: '#f5f5f5',
-//         padding: '0.5rem',
-//         borderRadius: '4px',
+//         height: "200px",
+//         overflow: "auto",
+//         backgroundColor: "#f5f5f5",
+//         padding: "0.5rem",
+//         borderRadius: "4px",
 //       }}
 //     >
 //       <textarea
 //         value={Object.entries(combinedHeaders)
 //           .map(([key, value]) => `${key}: ${value}`)
-//           .join('\n')}
+//           .join("\n")}
 //         readOnly
 //         style={{
-//           width: '100%',
-//           height: '100%',
-//           whiteSpace: 'pre-wrap',
-//           fontFamily: 'monospace',
-//           border: 'none',
-//           background: 'transparent',
-//           resize: 'none',
-//           outline: 'none',
+//           width: "100%",
+//           height: "100%",
+//           whiteSpace: "pre-wrap",
+//           fontFamily: "monospace",
+//           border: "none",
+//           background: "transparent",
+//           resize: "none",
+//           outline: "none",
 //         }}
 //       />
 //     </div>

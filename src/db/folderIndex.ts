@@ -137,7 +137,7 @@ export async function deleteFolderIndexesByPaths(
 ): Promise<void> {
     if (!folder_paths.length) return;
 
-    // Be safe under SQLite's typical 999 bound-parameter limit
+    // Be safe under SQLite"s typical 999 bound-parameter limit
     const CHUNK = Math.max(1, Math.min(batchSize, 900));
 
     const db = await getDb();
@@ -156,7 +156,7 @@ export async function deleteFolderIndexesByPaths(
  * Deletes all records from the folder_index table.
  *
  * ⚠️ Use with caution — this will remove all folder tracking information
- * and force the application to treat every folder as 'new' on the next scan.
+ * and force the application to treat every folder as "new" on the next scan.
  */
 export async function deleteAllFolderIndexes(): Promise<void> {
     const db = await getDb();

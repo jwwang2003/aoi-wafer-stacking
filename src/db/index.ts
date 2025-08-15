@@ -1,5 +1,5 @@
-import { DB_FILENAME } from "@/constants";
-import Database from "@tauri-apps/plugin-sql";
+import { DB_FILENAME } from '@/constants';
+import Database from '@tauri-apps/plugin-sql';
 
 let _db: Database | null = null;
 
@@ -19,9 +19,9 @@ export async function getDb(): Promise<Database> {
     return _db;
 }
 
-import * as fileIndex from "./fileIndex";
-import * as folderIndex from "./folderIndex";
-import * as dbTypes from "./types";
+import * as fileIndex from './fileIndex';
+import * as folderIndex from './folderIndex';
+import * as dbTypes from './types';
 
 export {
     fileIndex,

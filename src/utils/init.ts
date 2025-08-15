@@ -10,7 +10,7 @@ import Database from '@tauri-apps/plugin-sql';
 
 /**
  * Developer notes:
- * - The ROOT of the application's data folder is based on BaseDirectory
+ * - The ROOT of the application"s data folder is based on BaseDirectory
  * - Preferences, config data, etc. will be stored in AppData (can roam)
  * - Other app-specific data will be stored in LocalData (not intended to roam)
  */
@@ -61,7 +61,7 @@ export async function init_pref(): Promise<boolean> {
         }
         // Lock the file using Tauri backend command
         // TODO: Implement locks?
-        // await invoke('lock_file', { path: fullPath });
+        // await invoke("lock_file", { path: fullPath });
         return true;
     } catch (err) {
         console.error(`Failed to initialize preferences file in ${fullPath}:`, err);
@@ -70,9 +70,9 @@ export async function init_pref(): Promise<boolean> {
         // Always try to unlock even if an error occurs
         // try {
         //     const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
-        //     await invoke('unlock_file', { path: fullPath });
+        //     await invoke("unlock_file", { path: fullPath });
         // } catch (unlockErr) {
-        //     console.warn('Failed to unlock preferences file:', unlockErr);
+        //     console.warn("Failed to unlock preferences file:", unlockErr);
         // }
     }
 }
@@ -98,7 +98,7 @@ export async function init_data_source(): Promise<boolean> {
             );
         }
         // TODO: Implement locks?
-        // await invoke('lock_file', { path: fullPath });
+        // await invoke("lock_file", { path: fullPath });
         return true;
     } catch (err) {
         console.error('Failed to initialize data sources file:', err);
@@ -106,9 +106,9 @@ export async function init_data_source(): Promise<boolean> {
     } finally {
         // try {
         //     const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
-        //     await invoke('unlock_file', { path: fullPath });
+        //     await invoke("unlock_file", { path: fullPath });
         // } catch (unlockErr) {
-        //     console.warn('Failed to unlock data sources file:', unlockErr);
+        //     console.warn("Failed to unlock data sources file:", unlockErr);
         // }
     }
 }
@@ -145,7 +145,7 @@ export async function get_folder(
         // Resolve full path (required for creating/checking)
         const fullPath = typeof path === 'string'
             ? await resolve(path.toString())
-            : path.toString(); // In case URL is passed, assume it's absolute
+            : path.toString(); // In case URL is passed, assume it"s absolute
 
         const folderExists = await exists(path.toString(), options);
 
@@ -158,6 +158,6 @@ export async function get_folder(
 
         return fullPath;
     } catch (error) {
-        throw new Error(`Failed to get or create folder '${path}': ${error}`);
+        throw new Error(`Failed to get or create folder "${path}": ${error}`);
     }
 }
