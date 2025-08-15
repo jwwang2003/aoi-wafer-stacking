@@ -13,8 +13,8 @@ import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { toast } from 'react-toastify';
 
 // TYPES
-import { DataSourceConfigState, DataSourceType } from '@/types/DataSource';
-import { ConfigStepperState } from '@/types/Stepper';
+import { DataSourceConfigState, DataSourceType } from '@/types/dataSource';
+import { ConfigStepperState } from '@/types/stepper';
 
 // STATE
 import { RootState } from '@/store';
@@ -25,7 +25,7 @@ import { addFolder } from './dataSourceStateSlice';
 import { arraysAreEqual, getRelativePath, getSubfolders, sortBySubfolderName } from '@/utils/fs';
 import { autoRecognizeFoldersByType } from '@/utils/dataSource';
 import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
-import { createDefaultDataSourceConfig, mergeDefinedKeys } from '@/utils/helper';
+import { mergeDefinedKeys } from '@/utils/helper';
 
 import { baseDir, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
 import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
@@ -43,8 +43,6 @@ export const initDataSourceConfig = createAsyncThunk<
         try {
             const { preferences } = thunkAPI.getState();
             const { dataSourceConfigPath } = preferences;
-
-            config = await createDefaultDataSourceConfig();
 
             const path = dataSourceConfigPath || DATA_SOURCES_CONFIG_FILENAME;  // with fallback
 
@@ -231,7 +229,7 @@ export const scanDataSourceFolders = createAsyncThunk<
             dirScanResultToast(
                 { totDirs: totFolders, numRead, numCached, totMatch, totAdded },
                 duration,
-                "子目录识别"
+                '子目录识别'
             );
 
             return { totMatch, totAdded };

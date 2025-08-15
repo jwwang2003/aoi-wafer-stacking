@@ -1,4 +1,4 @@
-import { DataSourceRegexState, DataSourceType } from '@/types/DataSource';
+import { DataSourceRegexState, DataSourceType } from '@/types/dataSource';
 
 /**
  * Categorize subfolder **paths** by data source type using provided regex rules.

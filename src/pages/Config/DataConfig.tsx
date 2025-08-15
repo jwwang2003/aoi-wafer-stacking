@@ -24,7 +24,7 @@ import {
     LastSaved
 } from '@/components';
 
-import { DataSourceRegex, DataSourceType } from '@/types/DataSource';
+import { DataSourceRegex, DataSourceType } from '@/types/dataSource';
 import { resetFolders } from '@/slices/dataSourceStateSlice';
 
 export function SubfolderSelectorSection({ title, type }: { title: string, type: DataSourceType }) {

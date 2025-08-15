@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS oem_product_map (
 );
 
 -- Unique offsets for each product
-CREATE TABLE IF NOT EXISTS oem_product_map (
+CREATE TABLE IF NOT EXISTS product_offsets (
     oem_product_id TEXT PRIMARY KEY,
     
     x_offset DOUBLE NOT NULL,
@@ -20,15 +20,15 @@ CREATE TABLE IF NOT EXISTS oem_product_map (
 
 -- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
-    product_id TEXT NOT NULL,           -- This actually maps to the oem_product_id
+    oem_product_id TEXT NOT NULL,
     lot_id TEXT NOT NULL,
     wafer_id TEXT NOT NULL,
     sub_id TEXT NOT NULL UNIQUE,
 
     file_path TEXT NOT NULL,
 
-    PRIMARY KEY (product_id, lot_id, wafer_id),
-    FOREIGN KEY (product_id) REFERENCES oem_product_map(oem_product_id), -- NOTE:
+    PRIMARY KEY (oem_product_id, lot_id, wafer_id),
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id),
     
     -- product defect map will get removed when file_index gets removed
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS wafer_maps (
     batch_id TEXT NOT NULL,
     wafer_id INTEGER NOT NULL,
 
-    stage TEXT NOT NULL,                       -- e.g. CP, WLBI, AOI
+    stage TEXT NOT NULL,                    -- e.g. CP = 0, WLBI , AOI
     sub_stage TEXT,                            -- optional: e.g. substage 2
 
     retest_count INTEGER DEFAULT 0,
@@ -90,7 +90,7 @@ ON product_defect_map (file_path);
 
 -- Find SubID by product, lot, wafer
 CREATE INDEX IF NOT EXISTS idx_product_defect_map_product_lot_wafer
-ON product_defect_map (product_id, lot_id, wafer_id);
+ON product_defect_map (oem_product_id, lot_id, wafer_id);
 
 -- Lookup defect file by sub_id
 CREATE INDEX IF NOT EXISTS idx_substrate_defect_path

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Box } from '@mantine/core';
-import { SubstrateDefectRecord } from '@/types/Wafer';
+import { SubstrateDefectRecord } from '@/types/wafer';
 
 interface SubstrateRendererProps {
     gridWidth?: number;

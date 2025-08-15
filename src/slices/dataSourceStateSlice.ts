@@ -1,13 +1,17 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { v4 as uuidv4 } from 'uuid';
-
-import type { DataSourceType, Folder, FolderGroupsState, DirResult } from '@/types/DataSource';
-
-import { initialDataSourceState as initialState } from '@/constants/default';
-import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
+
+// IPC
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
+// UTILS
 import { norm } from '@/utils/fs';
+// STATE
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { RootState } from '@/store';
+
+import type { DataSourceType, Folder, FolderGroupsState } from '@/types/dataSource';
+import type { DirResult } from '@/types/ipc';
+import { initialDataSourceState as initialState } from '@/constants/default';
 
 // DEVELOPER NOTES:
 // April 10, 2025

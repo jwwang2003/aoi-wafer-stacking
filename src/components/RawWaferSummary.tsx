@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Card, Badge, Group, Title, Divider, Text } from '@mantine/core';
 import { useAppSelector } from '@/hooks';
-import { DataSourcePaths } from '@/types/DataSource';
+import { DataSourcePaths } from '@/types/dataSource';
 import { initialDataSourceState } from '@/constants/default';
 
 export default function RawWaferSummary({
@@ -11,7 +11,7 @@ export default function RawWaferSummary({
     title?: string,
     description?: string
 }) {
-    const rawData = useAppSelector((state) => state.waferMetadata.data);
+    const rawData = useAppSelector((state) => state.waferMetadata);
 
     const total = rawData.length;
     const stages = Object.keys(initialDataSourceState) as (keyof DataSourcePaths)[];

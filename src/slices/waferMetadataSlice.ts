@@ -1,11 +1,12 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 
-import { DataSourceType, DirResult, FolderGroupsState } from '@/types/DataSource';
-import { ExcelMetadata, ExcelType, FolderCollection, RawWaferMetadataCollection, WaferFileMetadata, WaferMetadataState } from '@/types/Wafer';
-import { initialWaferMetadataState as initialState, now } from '@/constants/default';
+import type { DirResult } from '@/types/ipc';
+import { DataSourceType, FolderGroupsState } from '@/types/dataSource';
+import { ExcelMetadata, ExcelType, DirCollection, RawWaferMetadataCollection, WaferFileMetadata } from '@/types/wafer';
+import { initialWaferMetadataState as initialState } from '@/constants/default';
 import { RootState } from '@/store';
 import { advanceStepper, setStepper } from './preferencesSlice';
-import { ConfigStepperState } from '@/types/Stepper';
+import { ConfigStepperState } from '@/types/stepper';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 
 /**
@@ -16,7 +17,7 @@ import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 
 // Async thunk to fetch and parse all wafer metadata
 export const fetchWaferMetadata = createAsyncThunk<
-    WaferMetadataState['data'],
+    RawWaferMetadataCollection,
     void,
     { state: RootState; rejectValue: string }
 >(
@@ -42,6 +43,8 @@ export const fetchWaferMetadata = createAsyncThunk<
                 await thunkAPI.dispatch(setStepper(ConfigStepperState.Metadata));
             }
 
+            console.log(parsed);
+
             return parsed;
         } catch (err: unknown) {
             const message =
@@ -60,18 +63,16 @@ const waferMetadataSlice = createSlice({
     name: 'waferMetadata',
     initialState,
     reducers: {
-        clearWaferMetadata(state) {
-            state.data = initialState.data;
-            state.lastSaved = now();
+        clearWaferMetadata() {
+            return [];
         },
     },
     extraReducers: (builder) => {
         builder
             // .addCase(fetchWaferMetadata.pending, () => {})
             // .addCase(fetchWaferMetadata.rejected, () => {})
-            .addCase(fetchWaferMetadata.fulfilled, (state, action: PayloadAction<WaferMetadataState['data']>) => {
-                state.data = action.payload;
-                state.lastSaved = now();
+            .addCase(fetchWaferMetadata.fulfilled, (_, action: PayloadAction<RawWaferMetadataCollection>) => {
+                return action.payload;
             });
     },
 });
@@ -81,7 +82,7 @@ export default waferMetadataSlice.reducer;
 
 //======================================================================================================================
 
-export async function getAllWaferFolders(state: FolderGroupsState): Promise<FolderCollection> {
+export async function getAllWaferFolders(state: FolderGroupsState): Promise<DirCollection> {
     const entries = Object.entries(state).filter(([key]) => key !== 'lastModified').map(e => [e[0], e[1].map(f => f.path)]) as [DataSourceType, string[]][];
 
     const results = await Promise.all(
@@ -91,13 +92,13 @@ export async function getAllWaferFolders(state: FolderGroupsState): Promise<Fold
         })
     );
 
-    const dataSourceFolders: FolderCollection = { substrate: [], fabCp: [], cpProber: [], wlbi: [], aoi: [] };
+    const dataSourceFolders: DirCollection = { substrate: [], fabCp: [], cpProber: [], wlbi: [], aoi: [] };
     for (const [key, folderResults] of results) dataSourceFolders[key] = folderResults;
 
     return dataSourceFolders;
 }
 
-export async function readAllWaferData(folders: FolderCollection): Promise<RawWaferMetadataCollection> {
+export async function readAllWaferData(folders: DirCollection): Promise<RawWaferMetadataCollection> {
     // Execute all at the same time
     try {
         const substrate = await readSubstrateMetadata(folders.substrate);
@@ -110,6 +111,7 @@ export async function readAllWaferData(folders: FolderCollection): Promise<RawWa
         const numCached = substrate.numCached + cpProber.numCached + wlbi.numCached + aoi.numCached;
         const totMatch = substrate.totMatch + cpProber.totMatch + wlbi.totMatch + aoi.totMatch;
         const totAdded = substrate.totAdded + cpProber.totAdded + wlbi.totAdded + aoi.totAdded;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const elapsed = (substrate as any).elapsed + (cpProber as any).elapsed + (wlbi as any).elapsed + (aoi as any).elapsed;
 
         dirScanResultToast(
@@ -141,7 +143,7 @@ export async function readAllWaferData(folders: FolderCollection): Promise<RawWa
  * @returns 
  */
 import { listDirs, listFiles, match, nameFromPath, flushIndexQueues } from '@/utils/fs';
-import { scanPattern } from '@/utils/waferData';
+import { scanPattern } from '@/utils/wafer';
 import { logCacheReport } from '@/utils/console';
 import { dirScanResultToast } from '@/components/Toaster';
 export async function readSubstrateMetadata(
@@ -195,7 +197,7 @@ export async function readSubstrateMetadata(
                 const filePath = f.path
                 result.push({
                     type: ExcelType.DefectList,
-                    stage: 'substrate',
+                    stage: DataSourceType.Substrate,
                     id,
                     filePath,
                     lastModified: Number(f.info?.mtime),
@@ -223,7 +225,7 @@ export async function readSubstrateMetadata(
             if (m1) {
                 result.push({
                     type: ExcelType.Mapping,
-                    stage: 'substrate',
+                    stage: DataSourceType.Substrate,
                     filePath,
                     lastModified: Number(f.info?.mtime),
                 });
@@ -232,7 +234,7 @@ export async function readSubstrateMetadata(
                 const [, oem, date, time] = m2;
                 result.push({
                     type: ExcelType.Product,
-                    stage: 'substrate',
+                    stage: DataSourceType.Substrate,
                     oem,
                     time: parseWaferMapTimestamp(date, time).toISOString(),
                     filePath,
@@ -344,7 +346,7 @@ export async function readCpProberMetadata(
         }
 
         result.push({
-            stage: 'cpProber',
+            stage: DataSourceType.CpProber,
             productModel: ctx.productModel,
             processSubStage: Number(ctx.processSubStage),
             batch: ctx.batch,
@@ -413,7 +415,7 @@ export async function readWlbiMetadata(
         }
 
         result.push({
-            stage: 'wlbi',
+            stage: DataSourceType.Wlbi,
             productModel: ctx.productModel,
             processSubStage: Number(ctx.processSubStage),
             batch: batch2,
@@ -482,7 +484,7 @@ export async function readAoiMetadata(
         }
 
         result.push({
-            stage: 'aoi',
+            stage: DataSourceType.Aoi,
             productModel: ctx.productModel,
             batch: ctx.batch,
             waferId,
@@ -505,7 +507,7 @@ export async function readAoiMetadata(
 ////////////////////////////////////////////////////////////////////////////////
 
 function parseWaferMapTimestamp(dateStr: string, timeStr: string): Date {
-    // Example: dateStr = "20250709", timeStr = "120302"
+    // Example: dateStr = '20250709', timeStr = '120302'
     const year = parseInt(dateStr.slice(0, 4), 10);
     const month = parseInt(dateStr.slice(4, 6), 10) - 1; // JS months are 0-indexed
     const day = parseInt(dateStr.slice(6, 8), 10);

@@ -7,9 +7,9 @@ import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 // local imports
 import { baseDir, PREFERENCES_FILENAME } from '@/constants';
 import { initialPreferencesState as initialState } from '@/constants/default';
-import { OffsetConfig, PreferencesState } from '@/types/Preferences';
+import { PreferencesState } from '@/types/preferences';
 import { createDefaultPreferences, mergeDefinedKeys, prepPreferenceWriteOut } from '@/utils/helper';
-import { ConfigStepperState } from '@/types/Stepper';
+import { ConfigStepperState } from '@/types/stepper';
 import { isValidPreferences } from '@/utils/validators';
 import { RootState } from '@/store';
 
@@ -176,12 +176,6 @@ const preferencesSlice = createSlice({
             state.dataSourceConfigPath = action.payload;    // set the new value
             // no need to save because the middleware takes care of that
         },
-        setOffsets(state, action: PayloadAction<Partial<OffsetConfig>>) {
-            state.offsets = {
-                ...state.offsets,
-                ...action.payload,
-            };
-        },
         advanceStepper(state, action: PayloadAction<ConfigStepperState>) {
             const current = state.stepper;
             const target = action.payload;
@@ -211,10 +205,9 @@ const preferencesSlice = createSlice({
                 state.status = 'idle';
                 state.error = null;
 
-                const { preferenceFilePath, dataSourceConfigPath, offsets } = action.payload;
+                const { preferenceFilePath, dataSourceConfigPath } = action.payload;
                 state.preferenceFilePath = preferenceFilePath;
                 state.dataSourceConfigPath = dataSourceConfigPath;
-                state.offsets = offsets;
             })
             .addCase(initPreferences.rejected, (state, action) => {
                 state.stepper = ConfigStepperState.ConfigInfo;      // rollback
@@ -250,5 +243,5 @@ const preferencesSlice = createSlice({
     },
 });
 
-export const { setDataSourceConfigPath, setOffsets, setStepper, advanceStepper } = preferencesSlice.actions;
+export const { setDataSourceConfigPath, setStepper, advanceStepper } = preferencesSlice.actions;
 export default preferencesSlice.reducer;

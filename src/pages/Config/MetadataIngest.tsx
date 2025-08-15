@@ -23,10 +23,10 @@ import { resetSessionFileIndexCache, resetSessionFolderIndexCache } from '@/util
 // Components
 import RawWaferSummary from '@/components/RawWaferSummary';
 // Utils
-import { processNSyncExcelData, processNSyncWaferData } from '@/utils/waferData';
+import { processNSyncExcelData, processNSyncWaferData } from '@/utils/wafer';
 // Types
-import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
-import { ConfigStepperState } from '@/types/Stepper';
+import { ExcelMetadata, WaferFileMetadata } from '@/types/wafer';
+import { ConfigStepperState } from '@/types/stepper';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
 
 export default function Preview() {
@@ -34,7 +34,7 @@ export default function Preview() {
     const [mounted, setMounted] = useState<boolean>(false);
 
     const stepper = useAppSelector((state) => state.preferences.stepper);
-    const rawWaferMetadata = useAppSelector((state) => state.waferMetadata.data);
+    const rawWaferMetadata = useAppSelector((state) => state.waferMetadata);
 
     const [db, setDb] = useState<Database | null>(null);
     const [loading, setLoading] = useState(false);
@@ -78,6 +78,7 @@ export default function Preview() {
             }
 
             const data = await dispatch(fetchWaferMetadata());
+            console.log(data);
             if (!data) return;
 
             await dispatch(setStepper(ConfigStepperState.Metadata + 1));

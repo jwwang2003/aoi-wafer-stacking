@@ -1,7 +1,6 @@
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { setOffsets } from '@/slices/preferencesSlice';
-import { OffsetConfig } from '@/types/Preferences';
-import { SubstrateDefectRecord } from '@/types/Wafer';
+import { SubstrateDefectRecord } from '@/types/wafer';
 import { invokeParseSubstrateDefectXls } from '@/api/tauri/wafer';
 
 import {

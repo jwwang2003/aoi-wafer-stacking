@@ -30,8 +30,16 @@ export interface DataSourceConfigState {
     lastSaved: string;
 }
 
-export type DataSourceType =
-    'substrate' | 'fabCp' | 'cpProber' | 'wlbi' | 'aoi';
+export enum DataSourceType {
+    Substrate = 'substrate',
+    FabCp = 'fabCp',
+    CpProber = 'cpProber',
+    Wlbi = 'wlbi',
+    Aoi = 'aoi'
+}
+// export type DataSourceType = 'substrate' | 'fabCp' | 'cpProber' | 'wlbi' | 'aoi';
+
+// NOTE: For dataSourceStateSlice
 
 /**
  * Internal DS for tracking folder state
@@ -56,61 +64,3 @@ export interface Folder {
     info?: FileInfo;
     error: boolean;
 }
-
-// =============================================================================
-// NOTE: TAURI INTERFACES
-// =============================================================================
-
-/**
- * Result of querying a filesystem entry (folder or file).
- *
- * - `path` is the absolute filesystem path that was checked.
- * - `exists` indicates whether the entry existed at the time of the stat.
- * - `info` is present only when the entry exists and metadata could be read (FileInfo).
- * 
- * For FileInfo:
- *
- * ⚠️ Time fields:
- * - `mtime` and `atime` are **Numbers (epoch milliseconds)**, compatible with
- *   JavaScript’s `Date#getTime()`. They are **not** `Date` objects.
- *   Convert with `new Date(info.mtime)` if you need a `Date`.
- * - `birthtime` (if present) is an ISO 8601 string.
- *
- * Notes:
- * - `isFile` / `isDirectory` / `isSymlink` are mutually exclusive flags from the stat result.
- * - Some low-level fields are platform-dependent and may be `null`.
- * - On Windows, `fileAttributes` may be set; it’s `null` on other platforms.
- */
-export interface DirResult {
-    path: string;
-    exists: boolean;
-    info?: FileInfo
-}
-// #[derive(Debug, Serialize)]
-// pub struct FileInfo {
-//     #[allow(non_snake_case)]
-//     pub isFile: bool,
-//     #[allow(non_snake_case)]
-//     pub isDirectory: bool,
-//     #[allow(non_snake_case)]
-//     pub isSymlink: bool,
-
-//     pub size: u64,
-//     pub mtime: Option<f64>,
-//     pub atime: Option<f64>,
-//     pub birthtime: Option<String>,
-
-//     pub readonly: bool,
-//     #[allow(non_snake_case)]
-//     pub fileAttributes: Option<u32>, // Windows only, will be None
-
-//     pub dev: Option<u64>,
-//     pub ino: Option<u64>,
-//     pub mode: Option<u32>,
-//     pub nlink: Option<u64>,
-//     pub uid: Option<u32>,
-//     pub gid: Option<u32>,
-//     pub rdev: Option<u64>,
-//     pub blksize: Option<u64>,
-//     pub blocks: Option<u64>,
-// }

@@ -1,31 +1,27 @@
 import { useState, useEffect } from 'react';
-import {
-    Routes,
-    Route,
-    useLocation,
-    Link,
-} from 'react-router-dom';
-import {
-    Box,
-    Flex,
-    Button,
-    Tooltip
-} from '@mantine/core';
+import { Routes, Route, useLocation, Link } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from './store';
+
+import { Box, Flex, Button, Tooltip } from '@mantine/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ToastContainer } from 'react-toastify';
 
-import { menuItems } from '@/constants/MenuItems';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from './store';
-import { initialize } from './utils/init';
-import { initPreferences } from './slices/preferencesSlice';
-import { DataSourceConfigState, FolderGroups } from './types/DataSource';
-import { initDataSourceConfig } from './slices/dataSourceConfigSlice';
-import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
-import { initConsoleInterceptor } from './utils/log';
-import { PreferencesState } from './types/Preferences';
+// Components
 import { infoToast } from '@/components/Toaster';
-import { warmIndexCaches } from './utils/fs';
+// UTILS
+import { initialize } from '@/utils/init';
+import { initConsoleInterceptor } from '@/utils/log';
+import { warmIndexCaches } from '@/utils/fs';
+
+import { initPreferences } from '@/slices/preferencesSlice';
+import { initDataSourceConfig } from '@/slices/dataSourceConfigSlice';
+import { initDataSourceState, refreshFolderStatuses } from '@/slices/dataSourceStateSlice';
+
+import { DataSourceConfigState, FolderGroups } from '@/types/dataSource';
+import { PreferencesState } from '@/types/preferences';
+
+import { menuItems } from '@/constants/MenuItems';
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -60,16 +56,21 @@ export function AnimatedRoutes() {
 }
 
 export default function App() {
+    const [mounted, setMounted] = useState<boolean>(false);
     const [hovered, setHovered] = useState<string | null>(null);
     const location = useLocation();
     const dispatch = useDispatch<AppDispatch>();
 
     // A welcome message whenever the UI is loaded!
     useEffect(() => {
-        infoToast(
-            { title: '欢迎使用' }
-        );
-        console.log('Hello, world!');
+        if (mounted) {
+            infoToast({ title: '欢迎使用' });
+            console.log('Hello, world!');
+        }
+
+        if (!mounted) {
+            setMounted(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -135,48 +136,31 @@ export default function App() {
                 }}
             >
                 {/* Top Buttons */}
-                <SidebarButtonGroup
-                    items={menuItems.slice(0, 5)}
-                    hovered={hovered}
-                    setHovered={setHovered}
-                    currentPath={location.pathname}
-                />
-
+                <SidebarButtonGroup items={menuItems.slice(0, 5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
                 {/* Bottom Buttons */}
-                <SidebarButtonGroup
-                    items={menuItems.slice(5)}
-                    hovered={hovered}
-                    setHovered={setHovered}
-                    currentPath={location.pathname}
-                />
+                <SidebarButtonGroup items={menuItems.slice(5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
             </Box>
-
             {/* Main content */}
             <AnimatedRoutes />
             <ToastContainer />
         </div>
     );
 }
-function SidebarButtonGroup({
-    items,
-    hovered,
-    setHovered,
-    currentPath,
-}: {
+
+interface SidebarButtonGroupInterface {
     items: typeof menuItems;
     hovered: string | null;
     setHovered: (path: string | null) => void;
     currentPath: string;
-}) {
+}
+
+function SidebarButtonGroup({ items, hovered, setHovered, currentPath }: SidebarButtonGroupInterface) {
     return (
         <Flex direction="column" align="center" gap="md">
             {items.map(({ icon: Icon, label, path }) => {
                 const isHovered = hovered === path;
                 const isActive =
-                    path === '/'
-                        ? currentPath === '/'
-                        : currentPath.startsWith(path + '/') || currentPath === path;
-
+                    path === '/' ? currentPath === '/' : currentPath.startsWith(path + '/') || currentPath === path;
                 return (
                     <Tooltip key={path} label={label} position="right">
                         <Button

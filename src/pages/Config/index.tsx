@@ -20,7 +20,7 @@ import { useAppSelector } from '@/hooks';
 
 import Preferences from './Preferences';
 import DataConfig from './DataConfig';
-import SubstrateConfig from './SubstrateConfig';
+// import SubstrateConfig from './SubstrateConfig'; // 搬家了
 import MetadataIngest from './MetadataIngest';
 
 import { FlowStepper } from '@/components';
@@ -35,7 +35,7 @@ const subpageOptions = [
     { label: '通用', value: 'preferences' },
     { label: '数据源', value: 'data' },
     { label: '预览', value: 'metadata-ingest' },
-    { label: '衬底', value: 'substrate' },
+    // { label: '衬底', value: 'substrate' },
 ];
 
 export default function ConfigPage() {
@@ -136,7 +136,7 @@ export default function ConfigPage() {
                         <Route path="preferences" element={<Preferences />} />
                         <Route path="data" element={<DataConfig />} />
                         <Route path="metadata-ingest" element={<MetadataIngest />} />
-                        <Route path="substrate" element={<SubstrateConfig />} />
+                        {/* <Route path="substrate" element={<SubstrateConfig />} /> */}
                         <Route path="*" element={<ComingSoon />} />
                     </Routes>
                 </Stack>

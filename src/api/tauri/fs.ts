@@ -1,5 +1,5 @@
-import { DirResult } from "@/types/DataSource";
-import { invokeSafe } from ".";
+import { DirResult } from '@/types/ipc';
+import { invokeSafe } from '.';
 
 export interface FolderRequest { path: string };
 

@@ -3,6 +3,7 @@ import {
     Group,
     Stack,
     SegmentedControl,
+    Button,
 } from '@mantine/core';
 import {
     Routes,
@@ -18,6 +19,7 @@ import ComingSoon from '../ComingSoon';
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
     { label: '索引', value: 'search' },
+    { label: '更多', value: 'more' }
 ];
 
 export default function DatabaseIndexPage() {
@@ -38,17 +40,12 @@ export default function DatabaseIndexPage() {
         <Group grow>
             <Container fluid p="md">
                 <Stack gap="md">
-                    <SegmentedControl
-                        w={"min-content"}
-                        data={subpageOptions}
-                        value={currentValue}
-                        onChange={handleChange}
-                    />
-
+                    <SegmentedControl w={"min-content"} data={subpageOptions} value={currentValue} onChange={handleChange} />
                     <Routes>
                         <Route path="/" element={<Navigate to="browse" replace />} />
                         <Route path="browse" element={<BrowsePage />} />
                         <Route path="search" element={<ComingSoon />} />
+                        <Route path="more" element={<ComingSoon />} />
                         <Route path="*" element={<ComingSoon />} />
                     </Routes>
                 </Stack>
@@ -57,10 +54,13 @@ export default function DatabaseIndexPage() {
     );
 }
 
-
 function BrowsePage() {
     return (
-        <ProductBatchNavigator />
+        <Stack>
+            <ProductBatchNavigator />
+            <Button>Test</Button>
+        </Stack>
+
     )
 }
 

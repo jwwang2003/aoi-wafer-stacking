@@ -1,7 +1,8 @@
 import { appDataDir, resolve } from '@tauri-apps/api/path';
-import { PreferencesState } from '@/types/Preferences';
+import { PreferencesState } from '@/types/preferences';
 import { initialPreferencesState as initialState } from '@/constants/default';
 import { PREFERENCES_FILENAME, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
+import { norm } from './fs';
 
 export function mergeDefinedKeys<T extends object>(
     base: T,
@@ -33,27 +34,13 @@ export async function createDefaultPreferences(): Promise<PreferencesState> {
 }
 
 export function prepPreferenceWriteOut(pref: PreferencesState): string {
-    const { preferenceFilePath, dataSourceConfigPath, offsets } = pref;
+    const { preferenceFilePath, dataSourceConfigPath } = pref;
     return JSON.stringify(
         {
             preferenceFilePath,
             dataSourceConfigPath,
-            offsets
         },
         null,
         2
     )
-}
-
-import { DataSourceConfigState } from '@/types/DataSource';
-import { initialDataSourceConfigState } from '@/constants/default';
-import { norm } from './fs';
-
-export async function createDefaultDataSourceConfig(): Promise<DataSourceConfigState> {
-    // const dir = await appDataDir();
-    // const configFilePath = await resolve(dir, DATA_SOURCES_CONFIG_FILENAME);
-
-    return {
-        ...initialDataSourceConfigState,
-    };
 }

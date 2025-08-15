@@ -1,7 +1,6 @@
-// import { basename } from '@tauri-apps/api/path';
 import { listDirs, listFiles, join, match, nameFromPath } from './fs';
 import { logCacheReport } from './console';
-import { ExcelMetadata, ExcelType, WaferFileMetadata } from '@/types/Wafer';
+import { ExcelMetadata, ExcelType, WaferFileMetadata } from '@/types/wafer';
 import { invokeParseProductMappingXls, invokeParseProductXls } from '@/api/tauri/wafer';
 import { maintainOemMapping, upsertManyProductDefectMaps, upsertSubstrateDefect } from '@/db/spreadSheet';
 import { upsertManyWaferMaps } from '@/db/wafermaps';
@@ -88,6 +87,7 @@ export async function scanPattern<T extends Record<string, string>>(
             await walk(level + 1, nextPath, nextCtx);
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for (const d of cached as any[]) {
             const folderPath: string = typeof d === 'string' ? await join(parentPath, d) : d.folder_path;
             const folderName = await nameFromPath(folderPath);
@@ -179,7 +179,7 @@ export async function scanPattern<T extends Record<string, string>>(
  * - Emits console logs/groups for debugging.
  */
 export async function processNSyncExcelData(data: ExcelMetadata[]) {
-    const name = "Proc. N. Sync. Excel Data";
+    const name = 'Proc. N. Sync. Excel Data';
 
     const typeOrder: Record<ExcelType, number> = {
         [ExcelType.Mapping]: 0,
@@ -195,10 +195,10 @@ export async function processNSyncExcelData(data: ExcelMetadata[]) {
         return orderA - orderB;
     });
 
-    console.groupCollapsed(`%c[${name}]`, "color: lightblue;");
+    console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
 
     for (const d of data) {
-        console.groupCollapsed(`%c[${d.type}]`, "color: lightgreen;");
+        console.groupCollapsed(`%c[${d.type}]`, 'color: lightgreen;');
 
         switch (d.type) {
             case ExcelType.Mapping: {
@@ -222,7 +222,7 @@ export async function processNSyncExcelData(data: ExcelMetadata[]) {
                     results
                         .filter(r => r.productId)
                         .map(r => ({
-                            product_id: r.productId,
+                            oem_product_id: r.productId,
                             lot_id: r.batchId,
                             wafer_id: r.waferId,
                             sub_id: r.subId,
@@ -258,7 +258,7 @@ export async function processNSyncWaferData(
     records: WaferFileMetadata[]
 ) {
     const name = 'Proc. N. Sync. Wafer Data';
-    console.groupCollapsed(`%c[${name}]`, "color: lightblue;");
+    console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
     try {
         const dbResult = await upsertManyWaferMaps(
             records

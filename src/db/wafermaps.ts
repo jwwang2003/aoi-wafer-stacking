@@ -1,5 +1,5 @@
-import { getDb } from "@/db";
-import { WaferMapRow } from "./types"; // Ensure this includes `idx?: number`
+import { getDb } from '@/db';
+import { WaferMapRow } from './types'; // Ensure this includes `idx?: number`
 
 /**
  * NOTE: DB should enforce: CREATE UNIQUE INDEX IF NOT EXISTS uq_wafer_maps_file_path ON wafer_maps(file_path);
@@ -102,7 +102,7 @@ LIMIT ? OFFSET ?`,
 }
 
 /** Insert a new row (no idx). Will throw on duplicate file_path. Returns the new idx. */
-export async function insertWaferMap(row: Omit<WaferMapRow, "idx">): Promise<number> {
+export async function insertWaferMap(row: Omit<WaferMapRow, 'idx'>): Promise<number> {
     const db = await getDb();
     await db.execute(
         `INSERT INTO wafer_maps
@@ -201,13 +201,13 @@ WHERE idx = ?`,
  * Returns number of rows written (inserted or updated).
  */
 export async function upsertManyWaferMaps(
-    rows: Array<Omit<WaferMapRow, "idx"> | WaferMapRow>
+    rows: Array<Omit<WaferMapRow, 'idx'> | WaferMapRow>
 ): Promise<number> {
     if (!rows.length) return 0;
     const db = await getDb();
     let written = 0;
 
-    await db.execute("BEGIN");
+    await db.execute('BEGIN');
     try {
         for (const r of rows) {
             await db.execute(UPSERT_ON_FILE_SQL, [
@@ -222,19 +222,19 @@ export async function upsertManyWaferMaps(
             ]);
             written += 1;
         }
-        await db.execute("COMMIT");
+        await db.execute('COMMIT');
         return written;
     } catch (e) {
-        await db.execute("ROLLBACK");
+        await db.execute('ROLLBACK');
         throw e;
     }
 }
 
 /** Bulk insert (no upsert) — use for brand-new files only. */
-export async function insertManyWaferMaps(rows: Array<Omit<WaferMapRow, "idx">>): Promise<number> {
+export async function insertManyWaferMaps(rows: Array<Omit<WaferMapRow, 'idx'>>): Promise<number> {
     if (!rows.length) return 0;
     const db = await getDb();
-    await db.execute("BEGIN");
+    await db.execute('BEGIN');
     try {
         for (const r of rows) {
             await db.execute(
@@ -253,10 +253,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 ]
             );
         }
-        await db.execute("COMMIT");
+        await db.execute('COMMIT');
         return rows.length;
     } catch (e) {
-        await db.execute("ROLLBACK");
+        await db.execute('ROLLBACK');
         throw e;
     }
 }
@@ -302,7 +302,7 @@ export async function deleteManyWaferMapsByIdx(
     let total = 0;
     for (let i = 0; i < idxs.length; i += batchSize) {
         const batch = idxs.slice(i, i + batchSize);
-        const placeholders = batch.map(() => "?").join(",");
+        const placeholders = batch.map(() => '?').join(',');
         const res = await db.execute(`DELETE FROM wafer_maps WHERE idx IN (${placeholders})`, batch);
         total += (res as any)?.rowsAffected ?? 0;
     }
@@ -320,7 +320,7 @@ export async function deleteManyWaferMapsByPK(
 
     for (let i = 0; i < keys.length; i += batchSize) {
         const batch = keys.slice(i, i + batchSize);
-        const orClauses = batch.map(() => `(product_id = ? AND batch_id = ? AND wafer_id = ?)`).join(" OR ");
+        const orClauses = batch.map(() => `(product_id = ? AND batch_id = ? AND wafer_id = ?)`).join(' OR ');
         const params = batch.flatMap(k => [k.product_id, k.batch_id, k.wafer_id]);
         const res = await db.execute(`DELETE FROM wafer_maps WHERE ${orClauses}`, params);
         total += (res as any)?.rowsAffected ?? 0;

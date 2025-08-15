@@ -31,7 +31,7 @@ export type OemProductOffsetMap = Map<string, { x_offset: number; y_offset: numb
 export function applyOemOffset(
     x: number,
     y: number,
-    offset?: Pick<OemProductOffset, "x_offset" | "y_offset">
+    offset?: Pick<OemProductOffset, 'x_offset' | 'y_offset'>
 ): { x: number; y: number } {
     if (!offset) return { x, y };
     return { x: x + offset.x_offset, y: y + offset.y_offset };
@@ -39,7 +39,7 @@ export function applyOemOffset(
 
 
 export interface ProductDefectMapRow {
-    product_id: string;
+    oem_product_id: string;
     lot_id: string;
     wafer_id: string;
     sub_id: string;
@@ -52,7 +52,7 @@ export interface SubstrateDefectRow {
 }
 
 export interface WaferMapRow {
-    idx?: number;              // NEW: autoincrement PK
+    idx?: number;              // NEW: auto-increment PK
     product_id: string;
     batch_id: string;
     wafer_id: number;          // INTEGER in DB

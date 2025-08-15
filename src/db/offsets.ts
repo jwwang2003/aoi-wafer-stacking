@@ -2,7 +2,7 @@ import { getDb } from '@/db';
 import type { OemProductOffset, OemProductOffsetMap } from './types';
 
 // Adjust this if you actually created the table with a different name:
-const TABLE = "oem_product_offset";
+const TABLE = 'oem_product_offset';
 
 /*
 CREATE TABLE IF NOT EXISTS oem_product_offset (
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS oem_product_offset (
 CREATE INDEX IF NOT EXISTS idx_oem_product_offset_id ON oem_product_offset(oem_product_id);
 */
 
-const COLUMNS = "oem_product_id, x_offset, y_offset";
+const COLUMNS = 'oem_product_id, x_offset, y_offset';
 
 export async function getOemOffset(oem_product_id: string): Promise<OemProductOffset | null> {
     const db = await getDb();
@@ -30,7 +30,7 @@ export async function getOemOffsets(
 ): Promise<OemProductOffset[]> {
     if (!oem_product_ids.length) return [];
     const db = await getDb();
-    const placeholders = oem_product_ids.map(() => "?").join(",");
+    const placeholders = oem_product_ids.map(() => '?').join(',');
     return db.select<OemProductOffset[]>(
         `SELECT ${COLUMNS} FROM ${TABLE} WHERE oem_product_id IN (${placeholders})`,
         oem_product_ids
@@ -66,7 +66,7 @@ ON CONFLICT(oem_product_id) DO UPDATE SET
 export async function upsertManyOemOffsets(rows: OemProductOffset[]): Promise<number> {
     if (!rows.length) return 0;
     const db = await getDb();
-    await db.execute("BEGIN");
+    await db.execute('BEGIN');
     try {
         for (const r of rows) {
             await db.execute(
@@ -78,10 +78,10 @@ ON CONFLICT(oem_product_id) DO UPDATE SET
                 [r.oem_product_id, r.x_offset, r.y_offset]
             );
         }
-        await db.execute("COMMIT");
+        await db.execute('COMMIT');
         return rows.length;
     } catch (e) {
-        await db.execute("ROLLBACK");
+        await db.execute('ROLLBACK');
         throw e;
     }
 }
@@ -107,7 +107,7 @@ export async function deleteManyOemOffsets(
 
     for (let i = 0; i < oem_product_ids.length; i += batchSize) {
         const batch = oem_product_ids.slice(i, i + batchSize);
-        const placeholders = batch.map(() => "?").join(",");
+        const placeholders = batch.map(() => '?').join(',');
         const res = await db.execute(
             `DELETE FROM ${TABLE} WHERE oem_product_id IN (${placeholders})`,
             batch

@@ -1,6 +1,6 @@
 import { setDataSourcePaths } from '@/slices/dataSourceConfigSlice';
 import { AppDispatch, RootState } from '@/store';
-import { DataSourceType, Folder } from '@/types/DataSource';
+import { DataSourceType, Folder } from '@/types/dataSource';
 /**
  * Represents a data source section in the flow, including type, display name, 
  * path state from the Redux store, and a dispatch-based change handler.
@@ -19,34 +19,34 @@ export interface DataSourceFlowItem {
  */
 export const DataSources: DataSourceFlowItem[] = [
     {
-        type: 'substrate',
+        type: DataSourceType.Substrate,
         name: 'Substrate',
         selector: (s) => s.dataSourceState['substrate'],
-        onChange: (paths, d) => d(setDataSourcePaths({ type: 'substrate', paths })),
+        onChange: (paths, d) => d(setDataSourcePaths({ type: DataSourceType.Substrate, paths })),
     },
     {
-        type: 'fabCp',
+        type: DataSourceType.FabCp,
         name: 'FAB CP',
         selector: (s) => s.dataSourceState['fabCp'],
-        onChange: (paths, d) => d(setDataSourcePaths({ type: 'fabCp', paths })),
+        onChange: (paths, d) => d(setDataSourcePaths({ type: DataSourceType.FabCp, paths })),
     },
     {
-        type: 'cpProber',
+        type: DataSourceType.CpProber,
         name: 'CP-PROBER',
         selector: (s) => s.dataSourceState['cpProber'],
-        onChange: (paths, d) => d(setDataSourcePaths({ type: 'cpProber', paths })),
+        onChange: (paths, d) => d(setDataSourcePaths({ type: DataSourceType.CpProber, paths })),
     },
     {
-        type: 'wlbi',
+        type: DataSourceType.Wlbi,
         name: 'WLBI',
         selector: (s) => s.dataSourceState['wlbi'],
-        onChange: (paths, d) => d(setDataSourcePaths({ type: 'wlbi', paths })),
+        onChange: (paths, d) => d(setDataSourcePaths({ type: DataSourceType.Wlbi, paths })),
     },
     {
-        type: 'aoi',
+        type: DataSourceType.Aoi,
         name: 'AOI',
         selector: (s) => s.dataSourceState['aoi'],
-        onChange: (paths, d) => d(setDataSourcePaths({ type: 'aoi', paths })),
+        onChange: (paths, d) => d(setDataSourcePaths({ type: DataSourceType.Aoi, paths })),
     },
 ]
 

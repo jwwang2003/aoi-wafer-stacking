@@ -1,6 +1,6 @@
-import { getDb } from "@/db";
-import { FileIndexRow } from "./types";
-import { resetSessionFileIndexCache } from "@/utils/fs";
+import { getDb } from '@/db';
+import { FileIndexRow } from './types';
+import { resetSessionFileIndexCache } from '@/utils/fs';
 
 /**
  * Retrieves a single file index record by its path.
@@ -29,7 +29,7 @@ export async function getManyFileIndexesByPaths(paths: string[]): Promise<Map<st
     if (paths.length === 0) return map;
 
     const db = await getDb();
-    const qs = paths.map(() => "?").join(",");
+    const qs = paths.map(() => '?').join(',');
     const rows = await db.select<FileIndexRow[]>(
         `SELECT file_path, last_mtime, file_hash
     FROM file_index
@@ -85,7 +85,7 @@ export async function upsertManyFileIndexes(entries: FileIndexRow[]): Promise<vo
     if (entries.length === 0) return;
     const db = await getDb();
     try {
-        await db.execute("BEGIN");
+        await db.execute('BEGIN');
         for (const e of entries) {
             await db.execute(
                 `INSERT INTO file_index (file_path, last_mtime, file_hash)
@@ -95,10 +95,10 @@ export async function upsertManyFileIndexes(entries: FileIndexRow[]): Promise<vo
                 [e.file_path, e.last_mtime, e.file_hash ?? null]
             );
         }
-        await db.execute("COMMIT");
+        await db.execute('COMMIT');
     } catch (err) {
         console.error('Error while upserting file indexes');
-        await db.execute("ROLLBACK");
+        await db.execute('ROLLBACK');
         throw err;
     }
 }
@@ -140,7 +140,7 @@ export async function deleteFileIndexesByPaths(file_paths: string[], batchSize =
  * Deletes all records from the file_index table.
  *
  * ⚠️ Use with caution — this will clear all file tracking data,
- * forcing all files to be treated as "new" on the next scan.
+ * forcing all files to be treated as 'new' on the next scan.
  */
 export async function deleteAllFileIndexes(): Promise<void> {
     const db = await getDb();

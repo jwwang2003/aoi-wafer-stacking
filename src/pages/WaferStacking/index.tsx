@@ -47,7 +47,7 @@ import {
     BinCountEntry,
     HexMap,
     BinValue,
-} from '@/types/Wafer';
+} from '@/types/ipc';
 
 export default function WaferStacking() {
     const [showRoute, setShowRoute] = useState(false);

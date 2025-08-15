@@ -1,4 +1,4 @@
-import { ExcelMetadata, WaferFileMetadata } from '@/types/Wafer';
+import { ExcelMetadata, WaferFileMetadata } from '@/types/wafer';
 import { Card, Group, Stack, Text, Badge, Tooltip, ActionIcon, CopyButton, Kbd } from '@mantine/core';
 import { IconCopy, IconCheck, IconClock, IconFileText, IconHash, IconTag, IconDeviceFloppy, IconFolderOpen } from '@tabler/icons-react';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
@@ -25,6 +25,7 @@ function ShowInFolderButton({ path }: { path: string }) {
         try {
             await revealItemInDir(path);          // reveal in OS file manager
         } catch (err) {
+            console.error(err);
             // Fallback: try opening the path (may open file/dir, not highlight)
             try { await open(path); } catch (e2) {
                 console.warn('Failed to reveal/open path via Tauri opener:', e2);
@@ -76,7 +77,7 @@ export function ExcelMetadataCard({
                     <Muted>{data.filePath}</Muted>
                 </Stack>
 
-                <Stack gap={6} align="flex-end">
+                <Stack gap={6} align="flex-end" w="100%">
                     <Group gap={6}>
                         <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
                         <Badge color="blue" variant="light" size="xs">{String(data.type).toUpperCase()}</Badge>

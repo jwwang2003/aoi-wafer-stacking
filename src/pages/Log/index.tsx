@@ -15,7 +15,7 @@ import { RootState } from '@/store';
 import { Message } from 'console-feed/lib/definitions/Component';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
-import { Log } from '@/types/Log';
+import { Log } from '@/types/log';
 
 type Methods =
     | 'log'

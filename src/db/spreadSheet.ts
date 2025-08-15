@@ -1,29 +1,18 @@
-// Contains the SQL helper methods for adding, mutating, and deleting to tables related to excel spreadsheets.
-// This includes the mapping, product list, and substrate defect excel files.
-
 import { getDb, MAX_PARAMS } from '@/db';
 import { OemMapping, OemProductMapRow, ProductDefectMapRow, SubstrateDefectRow } from './types';
 
-/**
- * Fetch all rows from the `oem_product_map` table.
- *
- * @returns An array of all OEM → internal product mappings.
- */
+// =============================================================================
+// NOTE: OEM ↔ Internal product mapping helpers
+// =============================================================================
+
 export async function getAllOemProductMappings(): Promise<OemProductMapRow[]> {
     const db = await getDb();
-    const rows = await db.select<OemProductMapRow[]>(
+    return db.select<OemProductMapRow[]>(
         `SELECT oem_product_id, product_id
     FROM oem_product_map`
     );
-    return rows;
 }
 
-/**
- * Fetch a single `oem_product_map` row by its primary key `oem_product_id`.
- *
- * @param oem_product_id - The OEM product ID to search for.
- * @returns The row if found, otherwise null.
- */
 export async function getOemProductMappingByOemId(
     oem_product_id: string
 ): Promise<OemProductMapRow | null> {
@@ -37,12 +26,6 @@ export async function getOemProductMappingByOemId(
     return rows[0] ?? null;
 }
 
-/**
- * Fetch a single `oem_product_map` row by its unique `product_id`.
- *
- * @param product_id - The internal product ID to search for.
- * @returns The row if found, otherwise null.
- */
 export async function getOemProductMappingByProductId(
     product_id: string
 ): Promise<OemProductMapRow | null> {
@@ -56,12 +39,6 @@ export async function getOemProductMappingByProductId(
     return rows[0] ?? null;
 }
 
-/**
- * Delete a mapping by its `oem_product_id`.
- *
- * @param oem_product_id - The OEM product ID to delete.
- * @returns `true` if completed without error.
- */
 export async function deleteOemProductMappingByOemId(
     oem_product_id: string
 ): Promise<boolean> {
@@ -74,12 +51,6 @@ export async function deleteOemProductMappingByOemId(
     return true;
 }
 
-/**
- * Delete a mapping by its `product_id`.
- *
- * @param product_id - The internal product ID to delete.
- * @returns `true` if completed without error.
- */
 export async function deleteOemProductMappingByProductId(
     product_id: string
 ): Promise<boolean> {
@@ -92,186 +63,104 @@ export async function deleteOemProductMappingByProductId(
     return true;
 }
 
-/**
- * Ensures that a specific (oem_product_id, product_id) mapping exists
- * in the `oem_product_map` table.
- *
- * The function:
- * 1. Checks if the given pair already exists in the database.
- * 2. If it exists, returns `true`.
- * 3. If it does not exist, attempts to insert the mapping.
- * 4. Relies on SQL constraints to enforce uniqueness and validity.
- *
- * @param oemProductId - The OEM product ID to verify or insert.
- * @param productId - The internal product ID to verify or insert.
- * @returns `true` if the mapping already exists or is successfully inserted.
- * @throws If a database error occurs during verification or insertion.
- */
 export async function ensureOemMapping(
     oemProductId: string,
     productId: string
 ): Promise<boolean> {
-    try {
-        const db = await getDb();
-        const existing = await db.select<{ count: number }[]>(
-            `SELECT COUNT(*) as count
+    const db = await getDb();
+    const existing = await db.select<{ count: number }[]>(
+        `SELECT COUNT(*) AS count
     FROM oem_product_map
     WHERE oem_product_id = ? AND product_id = ?`,
-            [oemProductId, productId]
-        );
+        [oemProductId, productId]
+    );
+    if (existing[0]?.count > 0) return true;
 
-        if (existing[0]?.count > 0) {
-            // Mapping already exists
-            return true;
-        }
-
-        // Try to insert the mapping (will fail if product_id already mapped to another OEM ID)
-        await db.execute(
-            `INSERT INTO oem_product_map (oem_product_id, product_id)
+    await db.execute(
+        `INSERT INTO oem_product_map (oem_product_id, product_id)
     VALUES (?, ?)`,
-            [oemProductId, productId]
-        );
-
-        // db.execute doesn't return affected rows, so if no error, assume success
-        return true;
-    } catch (err) {
-        console.error('Failed to insert or verify OEM mapping');
-        throw err;
-    }
+        [oemProductId, productId]
+    );
+    return true;
 }
 
-/**
- * Inserts or updates a batch of (oem_product_id, product_id) mappings in the
- * `oem_product_map` table, and identifies mappings in the database that are
- * no longer present in the provided data.
- *
- * The function:
- * 1. Deduplicates the input array by `oem_product_id` (last occurrence wins).
- * 2. Performs batched UPSERT operations (`INSERT ... ON CONFLICT DO UPDATE`)
- *    to insert new mappings or update existing ones.
- * 3. After committing, queries the table to find OEM IDs that exist in the
- *    database but are not present in the input list, returning them as `missing`.
- * 4. Returns the total number of upserted records and the list of missing mappings.
- *
- * Relies on SQL constraints to enforce uniqueness and foreign key integrity.
- *
- * @param data - Array of OEM mappings to insert or update.
- * @returns An object containing:
- *   - `totUpserted`: The total number of inserted or updated mappings.
- *   - `missing`: An array of mappings present in the database but missing from the input.
- * @throws If any database error occurs during upsert or query.
- */
 export async function maintainOemMapping(
     data: OemMapping[]
-): Promise<{ tot: number, missing: OemMapping[] }> {
-    const name = 'Maintain OEM Mapping';
+): Promise<{ tot: number; missing: OemMapping[] }> {
     const db = await getDb();
 
-    // Dedupe by OEM (last wins); optional but avoids redundant params
+    // Dedupe by OEM id (last-wins)
     const byOem = new Map<string, string>();
-    for (const p of data)
-        if (p?.oem_product_id && p?.product_id) byOem.set(p.oem_product_id, p.product_id);
+    for (const p of data) if (p?.oem_product_id && p?.product_id) byOem.set(p.oem_product_id, p.product_id);
 
-    const pairs = Array.from(byOem.entries()).map(
-        ([oem_product_id, product_id]) => ({ oem_product_id, product_id })
-    );
-
+    const pairs = Array.from(byOem.entries()).map(([oem_product_id, product_id]) => ({ oem_product_id, product_id }));
     if (pairs.length === 0) return { tot: 0, missing: [] };
 
     const PARAMS_PER_ROW = 2;
-    const UPSERT_ROWS_PER_CHUNK = Math.max(1, Math.floor(MAX_PARAMS / PARAMS_PER_ROW)); // 499
+    const UPSERT_ROWS_PER_CHUNK = Math.max(1, Math.floor(MAX_PARAMS / PARAMS_PER_ROW));
+    const chunk = <T,>(arr: T[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size));
 
-    // Helper: chunk an array
-    const chunk = <T,>(arr: T[], size: number) => {
-        const out: T[][] = [];
-        for (let i = 0; i < arr.length; i += size)
-            out.push(arr.slice(i, i + size));
-        return out;
-    };
-
+    let tot = 0;
+    await db.execute('BEGIN;');
     try {
-        let tot: number = 0;
-        await db.execute('BEGIN');
-
         for (const c of chunk(pairs, UPSERT_ROWS_PER_CHUNK)) {
             const placeholders = c.map(() => '(?, ?)').join(', ');
             const sql = `
 INSERT INTO oem_product_map (oem_product_id, product_id)
-    VALUES ${placeholders}
-    ON CONFLICT(oem_product_id) DO UPDATE SET product_id = excluded.product_id`;
+VALUES ${placeholders}
+ON CONFLICT(oem_product_id) DO UPDATE SET product_id = excluded.product_id`;
             const bindings: string[] = [];
             for (const r of c) bindings.push(r.oem_product_id, r.product_id);
             await db.execute(sql, bindings);
             tot += c.length;
         }
-
         await db.execute('COMMIT;');
 
         const current = await db.select<OemMapping[]>('SELECT oem_product_id, product_id FROM oem_product_map');
-
         const incomingOems = new Set(pairs.map(p => p.oem_product_id));
-        const missing = current.filter(
-            row => !incomingOems.has(row.oem_product_id)    // keep full rows for return
-        );
-
+        const missing = current.filter(row => !incomingOems.has(row.oem_product_id));
         return { tot, missing };
     } catch (e: any) {
-        const msg = `[${name}] ${typeof e === 'object' ? e.msg : e}`;
-        console.error(msg);
         await db.execute('ROLLBACK;');
-        throw Error(msg);
+        throw e;
     }
 }
 
 // =============================================================================
+// NOTE: product_defect_map helpers
+// =============================================================================
 
 /**
- * Fetch all rows from the `product_defect_map` table.
- *
- * @returns An array of all product_defect_map rows in the database.
+ * Get all rows in product_defect_map.
  */
 export async function getAllProductDefectMaps(): Promise<ProductDefectMapRow[]> {
     const db = await getDb();
-    const rows = await db.select<ProductDefectMapRow[]>(
-        `SELECT product_id, lot_id, wafer_id, sub_id, file_path
+    return db.select<ProductDefectMapRow[]>(
+        `SELECT oem_product_id, lot_id, wafer_id, sub_id, file_path
     FROM product_defect_map`
     );
-    return rows;
 }
 
 /**
- * Fetch a single product_defect_map row by its composite primary key.
- *
- * @param product_id - Internal product id
- * @param lot_id - Lot/Batch id
- * @param wafer_id - Wafer id
- * @returns The row if found, otherwise null
+ * Get one row by composite PK (oem_product_id, lot_id, wafer_id).
  */
 export async function getProductDefectMap(
-    product_id: string,
+    oem_product_id: string,
     lot_id: string,
     wafer_id: string
 ): Promise<ProductDefectMapRow | null> {
     const db = await getDb();
     const rows = await db.select<ProductDefectMapRow[]>(
-        `SELECT product_id, lot_id, wafer_id, sub_id, file_path
+        `SELECT oem_product_id, lot_id, wafer_id, sub_id, file_path
     FROM product_defect_map
-    WHERE product_id = ? AND lot_id = ? AND wafer_id = ?`,
-        [product_id, lot_id, wafer_id]
+    WHERE oem_product_id = ? AND lot_id = ? AND wafer_id = ?`,
+        [oem_product_id, lot_id, wafer_id]
     );
     return rows[0] ?? null;
 }
 
-/**
- * Fetch product_defect_map rows by product_id.
- *
- * @param product_id - Internal product id.
- * @param opts.limit  - Optional LIMIT (default: no limit).
- * @param opts.offset - Optional OFFSET (default: 0).
- * @param opts.orderBy - Optional sort key (default: lot_id ASC, then wafer_id ASC).
- */
-export async function getProductDefectMapsByProductId(
-    product_id: string,
+export async function getProductDefectMapsByOemId(
+    oem_product_id: string,
     opts?: { limit?: number; offset?: number; orderBy?: 'lot_id' | 'wafer_id' | 'sub_id' }
 ): Promise<ProductDefectMapRow[]> {
     const db = await getDb();
@@ -283,16 +172,15 @@ export async function getProductDefectMapsByProductId(
             ? 'wafer_id ASC, lot_id ASC'
             : opts?.orderBy === 'sub_id'
                 ? 'sub_id ASC, lot_id ASC, wafer_id ASC'
-                : 'lot_id ASC, wafer_id ASC'; // default
+                : 'lot_id ASC, wafer_id ASC';
 
-    const bindings: (string | number)[] = [product_id];
+    const bindings: (string | number)[] = [oem_product_id];
 
     let sql = `
-SELECT product_id, lot_id, wafer_id, sub_id, file_path
-FROM product_defect_map
-WHERE product_id = ?
-ORDER BY ${orderBy}
-`;
+    SELECT oem_product_id, lot_id, wafer_id, sub_id, file_path
+    FROM product_defect_map
+    WHERE oem_product_id = ?
+    ORDER BY ${orderBy}`;
 
     if (typeof limit === 'number') {
         sql += ` LIMIT ? OFFSET ?`;
@@ -302,221 +190,153 @@ ORDER BY ${orderBy}
     return db.select<ProductDefectMapRow[]>(sql, bindings);
 }
 
-/**
- * Fetch all distinct batches (lot_id) for a given product_id.
- *
- * @param product_id - Internal product id.
- * @returns Array of { lot_id } objects sorted alphabetically/ascending.
- */
-export async function getBatchesByProductId(
-    product_id: string
+export async function getBatchesByOemId(
+    oem_product_id: string
 ): Promise<{ lot_id: string }[]> {
     const db = await getDb();
     return db.select<{ lot_id: string }[]>(
         `SELECT DISTINCT lot_id
-FROM product_defect_map
-WHERE product_id = ?
-ORDER BY lot_id ASC`,
-        [product_id]
+    FROM product_defect_map
+    WHERE oem_product_id = ?
+    ORDER BY lot_id ASC`,
+        [oem_product_id]
     );
 }
 
 /**
- * Fetch all distinct wafer_ids for a specific product_id and lot_id (batch).
- *
- * @param product_id - Internal product id.
- * @param lot_id - Lot/Batch id.
- * @returns Array of { wafer_id } objects sorted ascending.
+ * Distinct wafers for (oem_product_id, lot_id). Sorted numerically.
  */
 export async function getWafersByProductAndBatch(
-    product_id: string,
+    oem_product_id: string,
     lot_id: string
 ): Promise<{ wafer_id: string }[]> {
     const db = await getDb();
     return db.select<{ wafer_id: string }[]>(
         `SELECT DISTINCT wafer_id
-FROM product_defect_map
-WHERE product_id = ? AND lot_id = ?
-ORDER BY CAST(wafer_id AS INTEGER) ASC`,
-        [product_id, lot_id]
+    FROM product_defect_map
+    WHERE oem_product_id = ? AND lot_id = ?
+    ORDER BY CAST(wafer_id AS INTEGER) ASC`,
+        [oem_product_id, lot_id]
     );
 }
 
 /**
- * Get sub_ids (and file_path) for a (product, batch, wafer) triple.
- * - Note: `batch_id` maps to `lot_id` in `product_defect_map`.
- * - Typically this returns 0–1 row due to the PK (product_id, lot_id, wafer_id),
- *   but is typed as an array for flexibility.
- *
- * @param product_id - Internal product id
- * @param batch_id   - Batch/Lot id (stored as `lot_id`)
- * @param wafer_id   - Wafer id (string, per your schema)
- * @returns Array of { sub_id, file_path } (empty if none)
+ * Sub IDs for a (oem_product_id, lot_id, wafer_id) triple.
  */
 export async function getSubIdsByProductBatchWafer(
-    product_id: string,
-    batch_id: string,
+    oem_product_id: string,
+    batch_id: string, // equals lot_id
     wafer_id: string
 ): Promise<{ sub_id: string; file_path: string }[]> {
     const db = await getDb();
     return db.select<{ sub_id: string; file_path: string }[]>(
         `SELECT sub_id, file_path
     FROM product_defect_map
-WHERE product_id = ?
-    AND lot_id     = ?
-    AND wafer_id   = ?
-ORDER BY sub_id ASC`,
-        [product_id, batch_id, wafer_id]
+    WHERE oem_product_id = ?
+        AND lot_id = ?
+        AND wafer_id = ?
+    ORDER BY sub_id ASC`,
+        [oem_product_id, batch_id, wafer_id]
     );
 }
 
 /**
- * Insert or update a single product_defect_map row (UPSERT by PK).
- * Relies on SQL constraints (FKs, etc.) for validity.
- *
- * @param row - Complete row to upsert
- * @returns true if no error was thrown
- * @throws if the DB rejects the write (e.g., FK violation)
+ * Upsert one row (PK: oem_product_id, lot_id, wafer_id).
  */
 export async function upsertProductDefectMap(
     row: ProductDefectMapRow
 ): Promise<boolean> {
     const db = await getDb();
-    // Upsert by composite PK (product_id, lot_id, wafer_id)
     await db.execute(
         `INSERT INTO product_defect_map
-    (product_id, lot_id, wafer_id, sub_id, file_path)
+        roduct_id, lot_id, wafer_id, sub_id, file_path)
     VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(product_id, lot_id, wafer_id) DO UPDATE SET
+    ON CONFLICT(oem_product_id, lot_id, wafer_id) DO UPDATE SET
         sub_id = excluded.sub_id,
         file_path = excluded.file_path`,
-        [row.product_id, row.lot_id, row.wafer_id, row.sub_id, row.file_path]
+        [row.oem_product_id, row.lot_id, row.wafer_id, row.sub_id, row.file_path]
     );
     return true;
 }
 
 /**
- * Batch UPSERT for product_defect_map.
- * - Deduplicates by composite PK (product_id, lot_id, wafer_id), last-wins.
- * - Chunks to respect SQLite param limits.
- * - Uses UPSERT on PK; updates sub_id and file_path.
- *
- * NOTE: If you also have a UNIQUE constraint on `sub_id`, and the same `sub_id`
- * maps to multiple wafers in incoming data or DB, you may still see a UNIQUE
- * error on `sub_id`. In that case, resolve by sub_id beforehand (last-wins) or
- * run a prior reconciliation step.
+ * Batch upsert (last-wins on PK).
  */
 export async function upsertManyProductDefectMaps(
     rows: ProductDefectMapRow[]
 ): Promise<number> {
-    const name = 'Upsert Many Product Defect Maps';
     if (!rows.length) return 0;
 
     const db = await getDb();
 
-    // 1) Dedupe by PK (last occurrence wins) + log duplicates
+    // Dedupe by (oem_product_id|lot_id|wafer_id) + log duplicates
     const byPk = new Map<string, ProductDefectMapRow>();
     const duplicates: ProductDefectMapRow[] = [];
-
     for (const r of rows) {
-        if (!r.product_id || !r.lot_id || !r.wafer_id) continue;
-
-        const key = `${r.product_id}|${r.lot_id}|${r.wafer_id}`;
-        if (byPk.has(key)) {
-            duplicates.push(r); // record the later duplicate
-        }
-        byPk.set(key, r); // last occurrence wins
+        if (!r.oem_product_id || !r.lot_id || !r.wafer_id) continue;
+        const key = `${r.oem_product_id}|${r.lot_id}|${r.wafer_id}`;
+        if (byPk.has(key)) duplicates.push(r);
+        byPk.set(key, r);
     }
-
     if (duplicates.length) {
         console.warn(
-            `%c[upsertManyProductDefectMaps] Duplicate PK rows detected:`,
-            "color: orange;",
+            '%c[upsertManyProductDefectMaps] Duplicate PK rows detected:',
+            'color: orange;',
             duplicates
         );
     }
 
     const unique = Array.from(byPk.values());
-    if (unique.length === 0) return 0;
+    if (!unique.length) return 0;
 
-    // 2) Chunking
-    const PARAMS_PER_ROW = 5; // product_id, lot_id, wafer_id, sub_id, file_path
+    const PARAMS_PER_ROW = 5;
     const ROWS_PER_CHUNK = Math.max(1, Math.floor((MAX_PARAMS ?? 999) / PARAMS_PER_ROW));
-
-    const chunk = <T,>(arr: T[], size: number) => {
-        const out: T[][] = [];
-        for (let i = 0; i < arr.length; i += size)
-            out.push(arr.slice(i, i + size));
-        return out;
-    };
+    const chunk = <T,>(arr: T[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size));
 
     await db.execute('BEGIN;');
     try {
         for (const c of chunk(unique, ROWS_PER_CHUNK)) {
             const placeholders = c.map(() => '(?, ?, ?, ?, ?)').join(', ');
-            const sql =
-                `INSERT INTO product_defect_map
-    (product_id, lot_id, wafer_id, sub_id, file_path)
-VALUES ${placeholders}
-    ON CONFLICT(product_id, lot_id, wafer_id) DO UPDATE SET
-    sub_id    = excluded.sub_id,
-    file_path = excluded.file_path`;
-
+            const sql = `
+        INSERT INTO product_defect_map
+        (oem_product_id, lot_id, wafer_id, sub_id, file_path)
+        VALUES ${placeholders}
+        ON CONFLICT(oem_product_id, lot_id, wafer_id) DO UPDATE SET
+        sub_id    = excluded.sub_id,
+        file_path = excluded.file_path`;
             const bindings: string[] = [];
-            for (const r of c)
-                bindings.push(r.product_id, r.lot_id, r.wafer_id, r.sub_id, r.file_path);
+            for (const r of c) bindings.push(r.oem_product_id, r.lot_id, r.wafer_id, r.sub_id, r.file_path);
             await db.execute(sql, bindings);
         }
-
         await db.execute('COMMIT;');
         return unique.length;
-    } catch (e: any) {
-        const msg = `[${name}] ${typeof e === 'object' ? e.msg : e}`;
-        console.error(msg);
+    } catch (e) {
         await db.execute('ROLLBACK;');
-        throw Error(msg);
+        throw e;
     }
 }
 
-// NOTE: Typically, we do not have to manually delete the detect map because,
-// if the file_index gets removed then this record also gets cleared.
-
 /**
- * Delete a single product_defect_map row by its composite primary key.
- * Note: If the referenced file is deleted from file_index, this row is
- * removed automatically due to ON DELETE CASCADE on file_path.
- *
- * @param product_id - Internal product id
- * @param lot_id - Lot/Batch id
- * @param wafer_id - Wafer id
- * @returns true if completed without error (rows-affected not returned by plugin)
- * @throws if the DB rejects the write
+ * Delete by composite PK.
  */
 export async function deleteProductDefectMap(
-    product_id: string,
+    oem_product_id: string,
     lot_id: string,
     wafer_id: string
 ): Promise<boolean> {
     const db = await getDb();
     await db.execute(
         `DELETE FROM product_defect_map
-    WHERE product_id = ? AND lot_id = ? AND wafer_id = ?`,
-        [product_id, lot_id, wafer_id]
+    WHERE oem_product_id = ? AND lot_id = ? AND wafer_id = ?`,
+        [oem_product_id, lot_id, wafer_id]
     );
     return true;
 }
 
 /**
- * Convenience: delete rows by file_path (rarely needed since file_index CASCADE
- * already removes dependents). Useful if you want to remove mappings for a file
- * without touching file_index.
- *
- * @param file_path - Relative file path
- * @returns number of rows attempted (best-effort; plugin doesn't return changes)
+ * Delete by file_path (manual clean; CASCADE from file_index will also clear).
  */
-export async function deleteProductDefectMapByFilePath(
-    file_path: string
-): Promise<boolean> {
+export async function deleteProductDefectMapByFilePath(file_path: string): Promise<boolean> {
     const db = await getDb();
     await db.execute(
         `DELETE FROM product_defect_map
@@ -527,27 +347,17 @@ export async function deleteProductDefectMapByFilePath(
 }
 
 // =============================================================================
+// NOTE: substrate_defect helpers
+// =============================================================================
 
-/**
- * Fetch all rows from the `substrate_defect` table.
- *
- * @returns An array of all substrate_defect rows in the database.
- */
 export async function getAllSubstrateDefects(): Promise<SubstrateDefectRow[]> {
     const db = await getDb();
-    const rows = await db.select<SubstrateDefectRow[]>(
+    return db.select<SubstrateDefectRow[]>(
         `SELECT sub_id, file_path
     FROM substrate_defect`
     );
-    return rows;
 }
 
-/**
- * Fetch a single `substrate_defect` row by its primary key `sub_id`.
- *
- * @param sub_id - The unique substrate defect identifier.
- * @returns The row if found, otherwise null.
- */
 export async function getSubstrateDefectBySubId(sub_id: string): Promise<SubstrateDefectRow | null> {
     const db = await getDb();
     const rows = await db.select<SubstrateDefectRow[]>(
@@ -559,107 +369,58 @@ export async function getSubstrateDefectBySubId(sub_id: string): Promise<Substra
     return rows[0] ?? null;
 }
 
-/**
- * Fetch all `substrate_defect` rows that reference a given `file_path`.
- * Note: `file_path` may be shared by multiple sub_ids.
- *
- * @param file_path - Relative file path to search by.
- * @returns An array of matching rows (empty if none).
- */
 export async function getSubstrateDefectsByFilePath(file_path: string): Promise<SubstrateDefectRow[]> {
     const db = await getDb();
-    const rows = await db.select<SubstrateDefectRow[]>(
+    return db.select<SubstrateDefectRow[]>(
         `SELECT sub_id, file_path
     FROM substrate_defect
     WHERE file_path = ?`,
         [file_path]
     );
-    return rows;
 }
 
-/**
- * Insert or update a `substrate_defect` row.
- * - Performs UPSERT by `sub_id` (PRIMARY KEY).
- * - Updates `file_path` when the `sub_id` already exists.
- *
- * @param row - The row to insert or update.
- * @returns `true` if completed without error.
- * @throws If the DB rejects the write (e.g., FK violation).
- */
 export async function upsertSubstrateDefect(row: SubstrateDefectRow): Promise<boolean> {
-    const name = 'Upsert Substrate Defect';
     const db = await getDb();
-
-    try {
-        await db.execute(
-            `INSERT INTO substrate_defect (sub_id, file_path)
+    await db.execute(
+        `INSERT INTO substrate_defect (sub_id, file_path)
     VALUES (?, ?)
-ON CONFLICT(sub_id) DO UPDATE SET
-    file_path = excluded.file_path`,
-            [row.sub_id, row.file_path]
-        );
-        return true;
-    } catch (e: any) {
-        const msg = `[${name}] ${typeof e === 'object' ? e.msg : e}`;
-        console.error(msg);
-        await db.execute('ROLLBACK;');
-        throw Error(msg);
-    }
-
+    ON CONFLICT(sub_id) DO UPDATE SET
+        file_path = excluded.file_path`,
+        [row.sub_id, row.file_path]
+    );
+    return true;
 }
 
-/**
- * Batch upsert for `substrate_defect`.
- * - Deduplicates by PRIMARY KEY `sub_id` (last occurrence wins).
- * - Chunks to respect SQLite parameter limits.
- * - UPSERT updates `file_path` when `sub_id` exists.
- *
- * @param rows - Rows to insert or update
- * @returns Number of rows written (after dedupe)
- * @throws If the DB rejects the transaction
- */
 export async function upsertManySubstrateDefects(
     rows: SubstrateDefectRow[]
 ): Promise<number> {
     if (!rows?.length) return 0;
 
-    // 1) Dedupe by sub_id (last-wins)
+    // Dedupe by sub_id (last-wins)
     const byId = new Map<string, SubstrateDefectRow>();
-    for (const r of rows) {
-        if (!r?.sub_id) continue; // skip invalid
-        byId.set(r.sub_id, r);
-    }
+    for (const r of rows) if (r?.sub_id) byId.set(r.sub_id, r);
     const unique = Array.from(byId.values());
     if (!unique.length) return 0;
 
-    // 2) Chunking
-    const PARAMS_PER_ROW = 2; // (sub_id, file_path)
+    const PARAMS_PER_ROW = 2;
     const limit = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
     const ROWS_PER_CHUNK = Math.max(1, Math.floor(limit / PARAMS_PER_ROW));
-
-    const chunk = <T,>(arr: T[], size: number) => {
-        const out: T[][] = [];
-        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-        return out;
-    };
+    const chunk = <T,>(arr: T[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (_, i) => arr.slice(i * size, i * size + size));
 
     const db = await getDb();
     await db.execute('BEGIN;');
     try {
         for (const c of chunk(unique, ROWS_PER_CHUNK)) {
             const placeholders = c.map(() => '(?, ?)').join(', ');
-            const sql =
-                `INSERT INTO substrate_defect (sub_id, file_path)
-    VALUES ${placeholders}
-ON CONFLICT(sub_id) DO UPDATE SET
-    file_path = excluded.file_path`;
-
+            const sql = `
+        INSERT INTO substrate_defect (sub_id, file_path)
+        VALUES ${placeholders}
+        ON CONFLICT(sub_id) DO UPDATE SET
+        file_path = excluded.file_path`;
             const bindings: string[] = [];
             for (const r of c) bindings.push(r.sub_id, r.file_path);
-
             await db.execute(sql, bindings);
         }
-
         await db.execute('COMMIT;');
         return unique.length;
     } catch (e) {
@@ -668,12 +429,6 @@ ON CONFLICT(sub_id) DO UPDATE SET
     }
 }
 
-/**
- * Delete a single `substrate_defect` row by `sub_id`.
- *
- * @param sub_id - The unique substrate defect identifier.
- * @returns `true` if completed without error.
- */
 export async function deleteSubstrateDefectBySubId(sub_id: string): Promise<boolean> {
     const db = await getDb();
     await db.execute(
@@ -684,13 +439,6 @@ export async function deleteSubstrateDefectBySubId(sub_id: string): Promise<bool
     return true;
 }
 
-/**
- * Delete all `substrate_defect` rows that reference the given `file_path`.
- * (Useful when removing a specific file's defects without touching file_index.)
- *
- * @param file_path - Relative file path to delete by.
- * @returns `true` if completed without error.
- */
 export async function deleteSubstrateDefectsByFilePath(file_path: string): Promise<boolean> {
     const db = await getDb();
     await db.execute(

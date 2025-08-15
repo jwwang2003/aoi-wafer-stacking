@@ -8,12 +8,12 @@ import {
     triggerSave,
     updateSavedTime,
 } from '@/slices/dataSourceConfigSlice';
-import { advanceStepper, resetPreferencesToDefault, setDataSourceConfigPath, setOffsets, setStepper } from './preferencesSlice';
+import { advanceStepper, resetPreferencesToDefault, setDataSourceConfigPath, setStepper } from './preferencesSlice';
 import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, resolve } from '@tauri-apps/api/path';
 import { isDataSourceFoldersValid, isDataSourceRootValid } from '@/utils/validators';
 import { addFolder, removeFolder, removeFolderById, resetFolders } from './dataSourceStateSlice';
-import { ConfigStepperState } from '@/types/Stepper';
+import { ConfigStepperState } from '@/types/stepper';
 import { RootState } from '@/store';
 import { prepPreferenceWriteOut } from '@/utils/helper';
 
@@ -33,7 +33,6 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     const prefTypes: string[] = [
         // Preference files config types
         dataSourceConfig.type,
-        setOffsets.type,
         resetPreferencesToDefault.typePrefix,
     ];
     const dataSourceTypes: string[] = [

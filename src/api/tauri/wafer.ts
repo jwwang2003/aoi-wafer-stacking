@@ -7,7 +7,7 @@ import type {
     SubstrateDefectXlsResult,
 
     Wafer
-} from '@/types/Wafer';
+} from '@/types/ipc';
 
 import { invokeSafe } from './index';
 

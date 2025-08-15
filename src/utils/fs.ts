@@ -1,7 +1,7 @@
 import { resolve } from '@tauri-apps/api/path';
 import { stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're using that
 
-import { DirResult } from '@/types/DataSource';
+import { DirResult } from '@/types/ipc';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { deleteFolderIndexesByPaths, getAllFolderIndexes, getManyFolderIndexesByPaths, upsertManyFolderIndexes, upsertOneFolderIndex } from '@/db/folderIndex';
 import { invokeReadDir,invokeSha1 } from '@/api/tauri/fs';
@@ -308,7 +308,7 @@ export async function revalidateAllIndexes(opts: RevalidateOptions = {}): Promis
         const newer = currentMtime > r.last_mtime;
         const needsBackfill = hashMode === 'backfill' && !r.file_hash;
 
-        let file_hash: string | null | undefined = undefined; // undefined = "don't touch hash"
+        let file_hash: string | null | undefined = undefined; // undefined = 'don't touch hash'
         if (fix) {
             if (hashMode === 'lazy' && newer) {
                 file_hash = await invokeSha1(path);
@@ -402,7 +402,7 @@ export async function getSubfolders(
     for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
         const path = paths[i];
-        const mtime = Number(entry.info?.mtime) ?? null;
+        const mtime = Number(entry.info!.mtime);
 
         if (!force) {
             const rec = indexMap.get(path);
