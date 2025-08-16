@@ -18,7 +18,7 @@ import { initPreferences, revalidatePreferencesFile, resetPreferencesToDefault, 
 import { PathPicker } from '@/components';
 
 import { appDataDir, resolve } from '@tauri-apps/api/path';
-import { DATA_SOURCES_CONFIG_FILENAME, DB_FILENAME } from '@/constants';
+import { DATA_SOURCE_CONFIG_FILENAME, DB_FILENAME } from '@/constants';
 import { prepPreferenceWriteOut } from '@/utils/helper';
 import { norm } from '@/utils/fs';
 
@@ -56,7 +56,7 @@ export default function PreferencesSubpage() {
 
     const handleDataSourcePathReset = async () => {
         const dir = await appDataDir();
-        const defaultPath = await resolve(dir, DATA_SOURCES_CONFIG_FILENAME);
+        const defaultPath = await resolve(dir, DATA_SOURCE_CONFIG_FILENAME);
         await dispatch(setDataSourceConfigPath(defaultPath));
     };
 

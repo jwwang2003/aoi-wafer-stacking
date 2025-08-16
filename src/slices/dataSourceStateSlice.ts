@@ -3,8 +3,10 @@ import { resolve } from '@tauri-apps/api/path';
 
 // IPC
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
+
 // UTILS
 import { norm } from '@/utils/fs';
+
 // STATE
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { RootState } from '@/store';

@@ -1,4 +1,3 @@
-// src/store/waferSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { SubstrateDefectRow, WaferMapRow } from '@/db/types'; // adjust path as needed
 

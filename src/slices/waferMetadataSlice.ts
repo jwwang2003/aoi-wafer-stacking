@@ -1,13 +1,15 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
+import { RootState } from '@/store';
+import { advanceStepper, setStepper } from './preferencesSlice';
+
+import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 
 import type { DirResult } from '@/types/ipc';
 import { DataSourceType, FolderGroupsState } from '@/types/dataSource';
 import { ExcelMetadata, ExcelType, DirCollection, RawWaferMetadataCollection, WaferFileMetadata } from '@/types/wafer';
-import { initialWaferMetadataState as initialState } from '@/constants/default';
-import { RootState } from '@/store';
-import { advanceStepper, setStepper } from './preferencesSlice';
 import { ConfigStepperState } from '@/types/stepper';
-import { invokeReadFileStatBatch } from '@/api/tauri/fs';
+
+import { initialWaferMetadataState as initialState } from '@/constants/default';
 
 /**
  * This slice is responsible for keeping track of the data read from the data source folders.

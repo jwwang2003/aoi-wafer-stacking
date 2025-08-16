@@ -1,17 +1,18 @@
 // react-redux
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
+import { RootState } from '@/store';
 
 // Tauri API
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
-// local imports
+import { createDefaultPreferences, mergeDefinedKeys, prepPreferenceWriteOut } from '@/utils/helper';
+import { isValidPreferences } from '@/utils/validators';
+
 import { baseDir, PREFERENCES_FILENAME } from '@/constants';
 import { initialPreferencesState as initialState } from '@/constants/default';
+
 import { PreferencesState } from '@/types/preferences';
-import { createDefaultPreferences, mergeDefinedKeys, prepPreferenceWriteOut } from '@/utils/helper';
 import { ConfigStepperState } from '@/types/stepper';
-import { isValidPreferences } from '@/utils/validators';
-import { RootState } from '@/store';
 
 /**
  * The preferences init function has the responsibility of:
