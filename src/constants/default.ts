@@ -10,6 +10,12 @@ export const initialPreferencesState: PreferencesState = {
     preferenceFilePath: '',
     dataSourceConfigPath: '',
 
+    autoTriggers: {
+        subFolderDetection: false,
+        search: false,
+        ingest: false,
+    },
+
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState.Initial,
     status: 'idle',

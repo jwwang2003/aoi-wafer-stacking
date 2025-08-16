@@ -60,7 +60,7 @@ const zh = {
 };
 
 // UI spacing for the columns
-const LIST_MAH = { base: 240, sm: 320, md: 420, lg: 520 } as const;
+const LIST_MAH = { base: 300 } as const;
 
 // ---------------- Sticky 表头样式 ----------------
 const stickyHeadProps = {

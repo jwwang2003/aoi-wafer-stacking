@@ -4,6 +4,10 @@ import {
     Stack,
     SegmentedControl,
     Button,
+    Title,
+    Text,
+    Paper,
+    Divider,
 } from '@mantine/core';
 import {
     Routes,
@@ -12,9 +16,14 @@ import {
     useLocation,
     Navigate,
 } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import ProductBatchNavigator from '@/components/Navigator/ProductBatch';
 import ComingSoon from '../ComingSoon';
+
+// ⬇️ NEW: Tauri helpers for exporting the DB
+import { appDataDir, join, basename } from '@tauri-apps/api/path';
+import { readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { save } from '@tauri-apps/plugin-dialog';
 
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
@@ -40,12 +49,17 @@ export default function DatabaseIndexPage() {
         <Group grow>
             <Container fluid p="md">
                 <Stack gap="md">
-                    <SegmentedControl w={'min-content'} data={subpageOptions} value={currentValue} onChange={handleChange} />
+                    <SegmentedControl
+                        w="min-content"
+                        data={subpageOptions}
+                        value={currentValue}
+                        onChange={handleChange}
+                    />
                     <Routes>
                         <Route path="/" element={<Navigate to="browse" replace />} />
                         <Route path="browse" element={<BrowsePage />} />
                         <Route path="search" element={<ComingSoon />} />
-                        <Route path="more" element={<ComingSoon />} />
+                        <Route path="more" element={<MorePage />} />
                         <Route path="*" element={<ComingSoon />} />
                     </Routes>
                 </Stack>
@@ -60,12 +74,79 @@ function BrowsePage() {
             <ProductBatchNavigator />
             <Button>Test</Button>
         </Stack>
-
-    )
+    );
 }
 
-// function SearchPage() {
-//     return (
-//         <></>
-//     )
-// }
+/** Helpers */
+async function getDbAbsolutePath() {
+    // The Tauri SQL plugin with "sqlite:data.db" stores the DB in the app's data dir.
+    const dir = await appDataDir();
+    return join(dir, 'data.db');
+}
+
+/** “更多” subpage implementation */
+function MorePage() {
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState<string | null>(null);
+    const [err, setErr] = useState<string | null>(null);
+
+    const handleExportDb = async () => {
+        setBusy(true);
+        setMsg(null);
+        setErr(null);
+        try {
+            const src = await getDbAbsolutePath();
+            // default file name: keep the original base name, but suggest something friendly
+            const defaultName = await basename(src).catch(() => 'wafer-db.sqlite');
+            const target = await save({
+                title: '导出数据库文件',
+                filters: [{ name: 'SQLite', extensions: ['sqlite', 'db'] }],
+                defaultPath: `./${defaultName}`,
+            });
+
+            if (!target) {
+                setBusy(false);
+                return; // user cancelled
+            }
+
+            const bytes = await readFile(src);
+            await writeFile(target, bytes);
+
+            setMsg(`已导出到：${target}`);
+        } catch (e: any) {
+            setErr(`导出失败：${e?.message ?? String(e)}`);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Stack>
+            <Title order={3}>更多</Title>
+            <Paper withBorder p="md" radius="md">
+                <Stack gap="sm">
+                    <Text c="dimmed" size="sm">
+                        工具与设置
+                    </Text>
+                    <Divider />
+                    <Group>
+                        <Button loading={busy} onClick={handleExportDb}>
+                            导出整个数据库文件
+                        </Button>
+                    </Group>
+
+                    {msg && (
+                        <Text size="sm" c="teal">
+                            {msg}
+                        </Text>
+                    )}
+                    {err && (
+                        <Text size="sm" c="red">
+                            {err}
+                        </Text>
+                    )}
+                </Stack>
+            </Paper>
+        </Stack>
+    );
+}

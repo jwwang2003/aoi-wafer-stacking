@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-    Title, Stack, Button,
-    Group, Tooltip, Divider, Indicator,
-    SegmentedControl, Text, Checkbox
+    Title, Stack, Button, Group, Tooltip, Divider, Indicator, SegmentedControl,
+    Text, Checkbox, Pagination, Select
 } from '@mantine/core';
 import { IconLoader, IconReload } from '@tabler/icons-react';
 
@@ -43,6 +42,25 @@ export default function Preview() {
     const [ignoreSessionCache, setIgnoreSessionCache] = useState<boolean>(false);
     const [resetCache, setResetCache] = useState<boolean>(false);
 
+    // Pagination & filter state
+    const [page, setPage] = useState<number>(1);
+    const [pageSize, setPageSize] = useState<number>(20);
+    const [kind, setKind] = useState<'all' | 'excel' | 'wafer'>('all');
+
+    // Build filtered items once
+    const items = useMemo(() => {
+        const all = rawWaferMetadata;
+        if (kind === 'excel') return all.filter((r): r is ExcelMetadata => 'type' in r);
+        if (kind === 'wafer') return all.filter((r): r is WaferFileMetadata => 'waferId' in r);
+        return all;
+    }, [rawWaferMetadata, kind]);
+
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const start = (page - 1) * pageSize;
+    const end = Math.min(start + pageSize, total);
+    const pageItems = useMemo(() => items.slice(start, end), [items, start, end]);
+
     // =========================================================================
     // NOTE: INIT
     // =========================================================================
@@ -50,10 +68,6 @@ export default function Preview() {
         if (!mounted) {
             setMounted(true);
         }
-
-        // Init DB connection on first load
-        const connectDB = async () => setDb(await getDb());
-        connectDB();
     }, []);
 
     // =========================================================================
@@ -117,10 +131,23 @@ export default function Preview() {
     // NOTE: REACT
     // =========================================================================
     useEffect(() => {
+        if (!mounted) return;
+
+        // Init DB connection on first load
+        if (!db) {
+            const connectDB = async () => setDb(await getDb());
+            connectDB();
+        }
+
         // Triggers when mounted or db changes
-        if (mounted && stepper >= ConfigStepperState.Metadata)
+        if (stepper >= ConfigStepperState.Metadata)
             handleLoadWaferMetadata();
-    }, [mounted, db]);  
+    }, [mounted, db]);
+
+    // Reset page when deps change
+    useEffect(() => {
+        setPage(1);
+    }, [rawWaferMetadata, kind, pageSize]);
 
     return (
         <Stack>
@@ -174,7 +201,7 @@ export default function Preview() {
                 />
             </Group>
 
-            <RawWaferSummary description="新/修改过的数据"/>
+            <RawWaferSummary description="新/修改过的数据" />
 
             <Tooltip label="将未知数据添加进数据库（手动）" withArrow>
                 <Indicator
@@ -202,27 +229,58 @@ export default function Preview() {
 
             <Divider />
 
-            {rawWaferMetadata.length ?
+            {total ? (
                 <>
-                    <Title order={3}>{'新数据'}</Title>
-                    {
-                        rawWaferMetadata
-                            .filter((r): r is ExcelMetadata => 'type' in r)
-                            .map((r) =>
+                    <Group justify="space-between" align="center">
+                        <Title order={3}>新数据</Title>
+                        <Group gap="sm" align="center">
+                            <SegmentedControl
+                                value={kind}
+                                onChange={(v) => setKind(v as typeof kind)}
+                                data={[
+                                    { label: '全部', value: 'all' },
+                                    { label: '衬底', value: 'excel' },
+                                    { label: 'Wafer', value: 'wafer' },
+                                ]}
+                            />
+                            <Select
+                                w={120}
+                                value={String(pageSize)}
+                                onChange={(v) => setPageSize(Number(v ?? 20))}
+                                data={['10', '20', '50', '100']}
+                                label="每页"
+                            />
+                        </Group>
+                    </Group>
+
+                    <Group justify="space-between" align="center" mt="xs">
+                        <Text c="dimmed" size="sm">
+                            显示 {total ? start + 1 : 0}-{end} / {total}
+                        </Text>
+                        <Pagination total={totalPages} value={page} onChange={setPage} />
+                    </Group>
+
+                    {/* Page content */}
+                    <Stack mt="sm">
+                        {pageItems.map((r) =>
+                            'type' in r ? (
                                 <ExcelMetadataCard key={r.filePath} data={r} onClick={() => open(r.filePath)} />
-                            )
-                    }
-                    {
-                        rawWaferMetadata
-                            .filter((r): r is WaferFileMetadata => 'waferId' in r)
-                            .map((r) =>
+                            ) : (
                                 <WaferFileMetadataCard key={r.filePath} data={r} />
                             )
-                    }
+                        )}
+                    </Stack>
+
+                    <Group justify="space-between" align="center" mt="md">
+                        <Text c="dimmed" size="sm">
+                            显示 {total ? start + 1 : 0}-{end} / {total}
+                        </Text>
+                        <Pagination total={totalPages} value={page} onChange={setPage} />
+                    </Group>
                 </>
-                : <>
-                    <Text>{'暂无新数据'}</Text>
-                </>}
+            ) : (
+                <Text>暂无新数据</Text>
+            )}
         </Stack>
     );
 }

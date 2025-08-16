@@ -9,6 +9,7 @@ import {
     Badge,
     ScrollArea,
     Code,
+    Switch,
 } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import { exists, stat } from '@tauri-apps/plugin-fs';
@@ -21,8 +22,11 @@ import { appDataDir, resolve } from '@tauri-apps/api/path';
 import { DATA_SOURCE_CONFIG_FILENAME, DB_FILENAME } from '@/constants';
 import { prepPreferenceWriteOut } from '@/utils/helper';
 import { norm } from '@/utils/fs';
+import { useNavigate } from 'react-router-dom';
 
 export default function PreferencesSubpage() {
+    const navigate = useNavigate();
+
     const dispatch = useAppDispatch();
     const preferences = useAppSelector((s) => s.preferences);
     const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
@@ -104,10 +108,9 @@ export default function PreferencesSubpage() {
 
     return (
         <Stack gap="lg">
-            <Title order={2}>通用设置</Title>
-
+            <Title order={2}>通用</Title>
             <PathPicker
-                label="通用设置文件路径"
+                label=""
                 value={preferenceFilePath || ''}
                 disabled
                 onChange={() => { }}
@@ -115,18 +118,20 @@ export default function PreferencesSubpage() {
                 withAsterisk={false}
                 mode="file"
             />
-
-            <Group align="end" wrap="nowrap" w="100%">
-                <Button w={'100%'} onClick={() => dispatch(initPreferences())} disabled={status === 'loading'}>
+            <Group>
+                <Button variant="light" onClick={() => dispatch(initPreferences())} disabled={status === 'loading'}>
                     加载配置
                 </Button>
-                <Button w={'100%'} onClick={handlePrefReset} disabled={status === 'loading'}>
+                <Button variant="light" onClick={handlePrefReset} disabled={status === 'loading'}>
                     初始化配置
                 </Button>
             </Group>
 
+            <Divider />
+
+            <Title order={2}>数据库</Title>
             <PathPicker
-                label="数据库路径"
+                label=""
                 value={dbPath || ''}
                 disabled
                 onChange={() => { }}
@@ -134,7 +139,21 @@ export default function PreferencesSubpage() {
                 withAsterisk={false}
                 mode="file"
             />
+            <Group>
+                <Button variant="light" onClick={() => navigate('/db/data/more')} disabled={status === 'loading'}>
+                    前往更多选择
+                </Button>
+            </Group>
 
+            <Divider />
+
+            <Title order={2}>自动</Title>
+            <Group>
+                <Switch withThumbIndicator={false} label="子目录识别" size="lg" onLabel="自动" offLabel="手动" />
+                <Switch withThumbIndicator={false} label="读取元数据" size="lg" onLabel="自动" offLabel="手动" />
+                <Switch withThumbIndicator={false} label="加载与维护数据库" size="lg" onLabel="自动" offLabel="手动" />
+            </Group>
+            
             <Divider />
 
             <Title order={2}>数据源配置文件</Title>
