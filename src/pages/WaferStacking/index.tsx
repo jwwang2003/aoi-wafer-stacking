@@ -1,26 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
-import ProcessRouteStepper from '@/components/ProcessRouteStepper';
 import { infoToast } from '@/components/Toaster';
 import {
     Title,
     Group,
     Container,
     Stack,
-    Switch,
     Checkbox,
     Button,
-    Divider,
-    Box,
     ScrollArea,
     Text,
     Paper,
     Alert,
     Tooltip,
+    SimpleGrid,
+    Divider,
 } from '@mantine/core';
 import { join } from '@tauri-apps/api/path';
 
-import { inputFormats, allLayers, outputFormats, baseFileName } from './config';
+import { inputFormats, outputFormats, baseFileName } from './config';
 import { Statistics } from './types';
 import { createOutputDirectories } from './fileHandlers';
 import { calculateStats } from './overlayLogic';
@@ -45,6 +43,38 @@ import {
     isSpecialBin,
     isNumberBin,
 } from '@/types/ipc';
+import { useAppSelector } from '@/hooks';
+import { ExcelType } from '@/types/wafer';
+import { DataSourceType } from '@/types/dataSource';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import { toWaferFileMetadata } from '@/types/helpers';
+import { PathPicker } from '@/components';
+
+type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
+
+type OutputOption = {
+    id: OutputId;
+    label: string;
+    disabled?: boolean;  // <- optional on all
+};
+
+const OUTPUT_OPTIONS = [
+    { id: 'mapEx', label: 'WaferMapEx' },
+    { id: 'bin', label: 'BinMap' },
+    { id: 'HEX', label: 'HexMap' },
+    { id: 'image', label: 'Image (TODO)', disabled: true },
+] as const satisfies readonly OutputOption[];
+
+// Map your DataSourceType to a short stage label shown in the UI
+function stageLabel(stage: string | DataSourceType, subStage: string = ''): string {
+    switch (stage as DataSourceType) {
+        case DataSourceType.Wlbi: return 'WLBI';
+        case DataSourceType.CpProber: return 'CP' + subStage;
+        case DataSourceType.Aoi: return 'AOI';
+        // If you have more, extend here:
+        default: return String(stage ?? 'Unknown');
+    }
+}
 
 //数字越大优先级越高
 const LAYER_PRIORITIES = {
@@ -183,8 +213,6 @@ const mergeDiesWithPriority = (
 };
 
 export default function WaferStacking() {
-    const [showRoute, setShowRoute] = useState(false);
-    const [showDiagram, setShowDiagram] = useState(false);
     const [selectedLayers, setSelectedLayers] = useState<string[]>([]);
     const [tasks, setTasks] = useState<string[][]>([]);
     const [processing, setProcessing] = useState(false);
@@ -547,129 +575,206 @@ export default function WaferStacking() {
         // console.debug(debugInfo);
     }, [debugInfo]);
 
+    // =========================================================================
+
+    const [selectedOutputs, setSelectedOutputs] = useState<OutputId[]>(['mapEx', 'HEX', 'bin']);
+    const [outputDir, setOutputDir] = useState<string>(''); // empty = use default dirs in config
+
+    const job = useAppSelector(s => s.stackingJob);
+    const {
+        oemProductId: jobOemId,
+        productId: jobProductId,
+        batchId: jobBatchId,
+        waferId: jobWaferId,
+        subId: jobSubId,
+        waferSubstrate: jobSubstrate,
+        waferMaps: jobWaferMaps,
+    } = job;
+
+    const selectableLayers = useMemo(() => {
+        type Item = {
+            value: string;        // unique key for Checkbox value
+            label: string;        // main label
+            disabled?: boolean;   // WLBI disabled
+            tooltip?: string;     // optional tooltip
+        };
+        const items: Item[] = [];
+
+        // Substrate (if present)
+        if (jobSubstrate) {
+            const subId = jobSubstrate.sub_id || jobSubId || '—';
+            items.push({
+                value: `substrate:${subId}`,
+                label: `Substrate / ${subId}`,
+            });
+        }
+
+        // Wafer maps
+        for (const wm of jobWaferMaps) {
+            // const stage = stageLabel(wm.stage, wm.sub_stage);
+            const stage = stageLabel(wm.stage);
+            const subStage = wm.sub_stage ? ` / ${wm.sub_stage}` : '';
+            const retest = ` / Retest ${wm.retest_count ?? 0}`;
+            const id = wm.idx != null
+                ? `map:${wm.idx}`
+                : `map:${wm.product_id}|${wm.batch_id}|${wm.wafer_id}|${wm.stage}`; // fallback key
+
+            items.push({
+                value: id,
+                label: `${stage}${subStage}${retest}`
+            });
+        }
+
+        return items;
+    }, [jobSubstrate, jobSubId, jobWaferMaps]);
+
     return (
-        <Group grow>
-            <Container fluid p='md'>
-                <Stack gap='md'>
-                    <Title order={1}>晶圆叠图</Title>
+        <Container fluid p='md'>
+            <Stack gap='md'>
+                <Title order={1}>晶圆叠图</Title>
 
-                    <Group justify='space-between' align='center'>
-                        <Title order={2}>工艺路线</Title>
-                        <Switch
-                            label='显示工艺路线'
-                            checked={showRoute}
-                            onChange={(event) => setShowRoute(event.currentTarget.checked)}
-                        />
-                    </Group>
+                <Divider />
 
-                    {showRoute && <ProcessRouteStepper demoMode />}
+                {job && jobSubstrate ? <>
+                    <Title order={4}>当前Wafer数据</Title>
+                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                        {jobWaferMaps.map((r, i) => (
+                            <WaferFileMetadataCard key={`${r.idx}-${i}`} data={toWaferFileMetadata(r)} />
+                        ))}
+                        {jobSubstrate &&
+                            <ExcelMetadataCard
+                                data={{
+                                    ...jobSubstrate,
+                                    type: ExcelType.DefectList,
+                                    stage: DataSourceType.Substrate,
+                                    filePath: jobSubstrate.file_path,
+                                    lastModified: 0
+                                }} />
+                        }
+                    </SimpleGrid>
+                </> : <Text>先前往数据库选择一个有效的数据集</Text>}
 
-                    <Divider
-                        my='md'
-                        label='叠图处理区 (已忽略WLBI格式)'
-                        labelPosition='center'
-                    />
+                <Divider />
 
-                    <Group align='flex-start' grow>
-                        {/* 左侧：参数设置区 */}
-                        <Stack w='50%' gap='sm'>
-                            <Switch
-                                label='显示叠图示意图'
-                                checked={showDiagram}
-                                onChange={(event) =>
-                                    setShowDiagram(event.currentTarget.checked)
-                                }
-                            />
-                            {showDiagram && (
-                                <Paper shadow='xs' p='sm' h={200}>
-                                    <Box
-                                        bg='gray.1'
-                                        h='100%'
-                                        style={{ border: '1px dashed #ccc' }}
-                                    >
-                                        <Text ta='center' pt='xl'>
-                                            [ThreeJS 叠图 + 缺陷示意图]
-                                        </Text>
-                                    </Box>
-                                </Paper>
-                            )}
-
-                            <Checkbox.Group
-                                label='选择叠图层 (WLBI将被自动忽略)'
-                                value={selectedLayers}
-                                onChange={setSelectedLayers}
-                            >
-                                <Stack gap='xs' mt='sm'>
-                                    {allLayers.map((layer) => (
-                                        <Tooltip
-                                            key={layer}
-                                            label={`优先级: ${getLayerPriority(layer)}级`}
-                                            position='right'
-                                        >
-                                            <Checkbox value={layer} label={layer} />
-                                        </Tooltip>
-                                    ))}
-                                </Stack>
-                            </Checkbox.Group>
-
-                            <Group mt='md'>
-                                <Button
-                                    onClick={processMapping}
-                                    loading={processing}
-                                    leftSection={processing ? <IconRefresh size={16} /> : null}
-                                >
-                                    立刻处理
-                                </Button>
-                                <Button onClick={handleAddTask}>添加任务</Button>
-                            </Group>
-                        </Stack>
-
-                        {/* 右侧：任务列表区 */}
-                        <Stack w='50%' gap='sm'>
-                            <Title order={3}>待处理任务</Title>
-                            <ScrollArea h={200}>
-                                <Stack gap='xs'>
-                                    {tasks.length === 0 ? (
-                                        <Text c='dimmed'>暂无任务</Text>
-                                    ) : (
-                                        tasks.map((task, idx) => (
-                                            <Paper key={idx} shadow='xs' p='xs' radius='sm'>
-                                                <Text size='sm'>
-                                                    任务 {idx + 1}: {task.join(', ')}
-                                                </Text>
-                                            </Paper>
-                                        ))
-                                    )}
-                                </Stack>
-                            </ScrollArea>
-                            <Button
-                                onClick={handleBatchProcess}
-                                disabled={tasks.length === 0}
-                            >
-                                批量处理
-                            </Button>
-                        </Stack>
-                    </Group>
-
-                    {result !== null && (
-                        <Alert
-                            title='处理结果'
-                            withCloseButton
-                            onClose={() => setResult(null)}
+                <Group align='flex-start' grow>
+                    <Stack w='50%' gap='sm'>
+                        <Checkbox.Group
+                            label='选择叠图层 (阶段/工序/复测)'
+                            value={selectedLayers}
+                            onChange={setSelectedLayers}
                         >
+                            <Stack gap='xs' mt='sm'>
+                                {selectableLayers.length === 0 ? (
+                                    <Text c="dimmed">暂无可选图层，请先在数据库选择数据</Text>
+                                ) : (
+                                    selectableLayers.map((item) => (
+                                        <Tooltip key={item.value} label={item.tooltip} position='right' disabled={!item.tooltip}>
+                                            <Checkbox value={item.value} label={item.label} disabled={item.disabled} />
+                                        </Tooltip>
+                                    ))
+                                )}
+                            </Stack>
+                        </Checkbox.Group>
+
+                        <Group mt='md'>
                             <Button
-                                mt='md'
-                                leftSection={<IconDownload size={16} />}
-                                onClick={() =>
-                                    infoToast({ title: '提示', message: '文件已保存到输出目录' })
-                                }
+                                onClick={processMapping}
+                                loading={processing}
+                                leftSection={processing ? <IconRefresh size={16} /> : null}
                             >
-                                下载结果
+                                立刻处理
                             </Button>
-                        </Alert>
-                    )}
+                        </Group>
+                    </Stack>
+
+                    {/* 右侧：任务列表区 */}
+                    <Stack w='50%' gap='sm'>
+                        <Title order={3}>待处理任务</Title>
+                        <ScrollArea h={200}>
+                            <Stack gap='xs'>
+                                {tasks.length === 0 ? (
+                                    <Text c='dimmed'>暂无任务</Text>
+                                ) : (
+                                    tasks.map((task, idx) => (
+                                        <Paper key={idx} shadow='xs' p='xs' radius='sm'>
+                                            <Text size='sm'>
+                                                任务 {idx + 1}: {task.join(', ')}
+                                            </Text>
+                                        </Paper>
+                                    ))
+                                )}
+                            </Stack>
+                        </ScrollArea>
+                        <Button
+                            onClick={handleBatchProcess}
+                            disabled={tasks.length === 0}
+                        >
+                            批量处理
+                        </Button>
+                    </Stack>
+                </Group>
+
+                {result !== null && (
+                    <Alert
+                        title='处理结果'
+                        withCloseButton
+                        onClose={() => setResult(null)}
+                    >
+                        <Button
+                            mt='md'
+                            leftSection={<IconDownload size={16} />}
+                            onClick={() =>
+                                infoToast({ title: '提示', message: '文件已保存到输出目录' })
+                            }
+                        >
+                            下载结果
+                        </Button>
+                    </Alert>
+                )}
+
+                <Divider />
+
+                <Title order={2}>输出设置</Title>
+                <Stack>
+                    {/* Output format checkboxes */}
+                    <Checkbox.Group
+                        label="选择导出格式"
+                        value={selectedOutputs}
+                        onChange={(vals) => setSelectedOutputs(vals as OutputId[])}
+                    >
+                        <Group gap="md" mt="xs">
+                            {OUTPUT_OPTIONS.map(opt => (
+                                <Checkbox
+                                    key={opt.id}
+                                    value={opt.id}
+                                    label={opt.label}
+                                    disabled={('disabled' in opt) ? (opt as any).disabled : false}
+                                />
+                            ))}
+                        </Group>
+                    </Checkbox.Group>
+
+                    {/* Path selector */}
+                    <Group align="end" grow>
+                        <PathPicker
+                            label="输出目录"
+                            placeholder="使用默认输出目录（由配置控制）"
+                            value={outputDir}
+                            onChange={(e) => setOutputDir(e)}
+                            readOnly
+                        />
+                        <Button
+                            color="blue"
+                            leftSection={processing ? <IconRefresh size={16} /> : <IconDownload size={16} />}
+                            loading={processing}
+                            onClick={processMapping}
+                            disabled={selectedOutputs.length === 0}
+                        >
+                            导出
+                        </Button>
+                    </Group>
                 </Stack>
-            </Container>
-        </Group>
+            </Stack>
+        </Container>
     );
 }

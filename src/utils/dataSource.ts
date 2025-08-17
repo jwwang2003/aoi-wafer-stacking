@@ -30,7 +30,7 @@ export async function autoRecognizeFoldersByType(
 ): Promise<Record<DataSourceType, string[]>> {
     const folderMatches: Record<DataSourceType, string[]> = {
         substrate: [],
-        fabCp: [],
+        // fabCp: [],
         cpProber: [],
         wlbi: [],
         aoi: [],
@@ -39,7 +39,7 @@ export async function autoRecognizeFoldersByType(
     for (const [key, regexStr] of Object.entries(regexMap)) {
         if (key === 'lastModified') continue;
         try {
-            const regex = new RegExp(regexStr);
+            const regex = new RegExp(regexStr as string);
             const matchedPaths = subfolders.filter((folderPath) => {
                 const folderName = folderPath.split(/[\\/]/).pop() || '';
                 return regex.test(folderName);
@@ -69,7 +69,7 @@ export async function getAllWaferFolders(state: FolderGroupsState): Promise<DirC
         })
     );
 
-    const dataSourceFolders: DirCollection = { substrate: [], fabCp: [], cpProber: [], wlbi: [], aoi: [] };
+    const dataSourceFolders: DirCollection = { substrate: [], cpProber: [], wlbi: [], aoi: [] };
     for (const [key, folderResults] of results) dataSourceFolders[key] = folderResults;
 
     return dataSourceFolders;
@@ -243,11 +243,11 @@ export async function readSubstrateMetadata(
  * @param folders 
  * @returns 
  */
-export async function readFabCpMetadata(folders: DirResult[]): Promise<WaferFileMetadata[]> {
-    const result: WaferFileMetadata[] = [];
-    folders.filter(() => true);
-    return result;
-}
+// export async function readFabCpMetadata(folders: DirResult[]): Promise<WaferFileMetadata[]> {
+//     const result: WaferFileMetadata[] = [];
+//     folders.filter(() => true);
+//     return result;
+// }
 
 /**
  * Folder structure
