@@ -69,7 +69,7 @@ export async function getAllWaferFolders(state: FolderGroupsState): Promise<DirC
         })
     );
 
-    const dataSourceFolders: DirCollection = { substrate: [], cpProber: [], wlbi: [], aoi: [] };
+    const dataSourceFolders: DirCollection = { substrate: [], cpProber: [], fabCp: [], wlbi: [], aoi: [] };
     for (const [key, folderResults] of results) dataSourceFolders[key] = folderResults;
 
     return dataSourceFolders;
