@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Box } from '@mantine/core';
-import { SubstrateDefectRecord } from '@/types/ipc';
+import { Box, Slider, Paper, Group, Text } from '@mantine/core';
+import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult } from '@/types/ipc';
 
 interface SubstrateRendererProps {
     gridWidth?: number;
@@ -10,8 +10,9 @@ interface SubstrateRendererProps {
     overlapColor?: number;
     style?: React.CSSProperties;
     selectedSheetId: string | null;
-    sheetsData: Record<string, SubstrateDefectRecord[]>;
+    sheetsData: SubstrateDefectXlsResult;
     gridOffset?: { x: number; y: number };
+    dies: AsciiDie[] | WaferMapDie[] | null;
 }
 
 export default function SubstrateRenderer({
@@ -22,11 +23,13 @@ export default function SubstrateRenderer({
     selectedSheetId,
     sheetsData,
     gridOffset = { x: 0, y: 0 },
+    dies
 }: SubstrateRendererProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [error, setError] = useState<string | null>(null);
-    const [fileContent, setFileContent] = useState<string | null>(null);
-    const [mapCoordinates, setMapCoordinates] = useState<[number, number][]>([]);
+
+    // NEW: zoom state (orthographic camera 'zoom'), 1 = default
+    const [zoom, setZoom] = useState(1); // min 0.25, max 5 recommended
 
     const sceneRef = useRef<THREE.Scene>(new THREE.Scene());
     const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
@@ -36,7 +39,6 @@ export default function SubstrateRenderer({
     const gridObjectsRef = useRef<THREE.Object3D[]>([]);
     const { x: offsetX, y: offsetY } = gridOffset;
 
-    // 颜色映射表
     const colorMap = new Map<string, number>([
         ['Unclassified', 0xff0000],
         ['Particle', 0x000000],
@@ -55,37 +57,14 @@ export default function SubstrateRenderer({
         ['PL_BSF', 0xff92f8],
     ]);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (!file.name.endsWith('.WaferMap')) {
-            setError('请上传.WaferMap格式的文件');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const content = event.target?.result as string;
-            setFileContent(content);
-            setError(null);
-        };
-        reader.onerror = () => {
-            setError('文件读取失败，请重试');
-        };
-        reader.readAsText(file);
-    };
-
+    // Init three.js once
     useEffect(() => {
         if (!containerRef.current) return;
 
         const container = containerRef.current;
         const { width, height } = container.getBoundingClientRect();
         const camera = new THREE.OrthographicCamera(
-            width / -2,
-            width / 2,
-            height / 2,
-            height / -2,
-            0.1,
-            1000
+            width / -2, width / 2, height / 2, height / -2, 0.1, 1000
         );
         camera.position.z = 10;
         cameraRef.current = camera;
@@ -100,12 +79,19 @@ export default function SubstrateRenderer({
         controls.enableDamping = true;
         controls.dampingFactor = 0.1;
         controlsRef.current = controls;
+
+        // Disable zooming (wheel/pinch); allow only panning
         controls.enableRotate = false;
+        controls.enableZoom = false;        // <— disables wheel/pinch zoom
         controls.enablePan = true;
         controls.mouseButtons = {
             LEFT: THREE.MOUSE.PAN,
-            MIDDLE: THREE.MOUSE.DOLLY,
-            RIGHT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.PAN,         // no dolly
+            RIGHT: THREE.MOUSE.ROTATE,       // won't rotate since enableRotate=false
+        };
+        controls.touches = {
+            ONE: THREE.TOUCH.PAN,
+            TWO: THREE.TOUCH.PAN,            // disable pinch-dolly
         };
 
         const handleResize = () => {
@@ -120,68 +106,57 @@ export default function SubstrateRenderer({
         };
 
         window.addEventListener('resize', handleResize);
-        const animationFrame = () => {
+
+        let raf = 0;
+        const animate = () => {
             controls.update();
             renderer.render(sceneRef.current, camera);
-            requestAnimationFrame(animationFrame);
+            raf = requestAnimationFrame(animate);
         };
-        requestAnimationFrame(animationFrame);
+        raf = requestAnimationFrame(animate);
 
         return () => {
             window.removeEventListener('resize', handleResize);
-            container.removeChild(renderer.domElement);
-            renderer.dispose();
+            cancelAnimationFrame(raf);
+            if (renderer && container.contains(renderer.domElement)) {
+                container.removeChild(renderer.domElement);
+            }
+            renderer?.dispose();
         };
     }, []);
 
-    // 解析WaferMap文件内容
+    // Apply zoom state to camera
     useEffect(() => {
-        if (!fileContent) {
-            setMapCoordinates([]);
-            return;
-        }
+        const camera = cameraRef.current;
+        if (!camera) return;
+        camera.zoom = zoom;
+        camera.updateProjectionMatrix();
+    }, [zoom]);
 
-        try {
-            const mapStartIndex = fileContent.indexOf('[MAP]:');
-            if (mapStartIndex === -1) {
-                setError('文件中未找到[MAP]部分');
-                return;
+    // Deduce map coordinates from dies (unique (x,y))
+    const mapCoordinates = useMemo<[number, number][]>(() => {
+        if (!dies || dies.length === 0) return [];
+        const seen = new Set<string>();
+        const coords: [number, number][] = [];
+        for (const d of dies) {
+            const k = `${d.x}|${d.y}`;
+            if (!seen.has(k)) {
+                seen.add(k);
+                coords.push([d.x, d.y]);
             }
-
-            const mapContent = fileContent.slice(mapStartIndex + '[MAP]:'.length).trim();
-            const lines = mapContent.split('\n');
-            const coordinates: [number, number][] = [];
-
-            lines.forEach((line: string) => {
-                const trimmedLine = line.trim();
-                if (!trimmedLine) return;
-
-                const parts = trimmedLine.split(/\s+/).map(Number);
-                if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                    coordinates.push([parts[0], parts[1]]);
-                }
-            });
-
-            if (coordinates.length === 0) {
-                setError('未从[MAP]部分解析到有效坐标');
-                return;
-            }
-
-            setMapCoordinates(coordinates);
-            setError(null);
-        } catch (err) {
-            setError(`文件解析失败: ${err instanceof Error ? err.message : String(err)}`);
         }
-    }, [fileContent]);
+        return coords;
+    }, [dies]);
 
+    // Rebuild grid + overlay whenever inputs change
     useEffect(() => {
         defectObjectsRef.current.forEach(obj => sceneRef.current.remove(obj));
         gridObjectsRef.current.forEach(obj => sceneRef.current.remove(obj));
+        defectObjectsRef.current = [];
+        gridObjectsRef.current = [];
 
         if (mapCoordinates.length === 0) {
-            if (fileContent) {
-                setError('未解析到有效的坐标数据');
-            }
+            setError(dies && dies.length === 0 ? '没有可显示的晶圆点位' : null);
             return;
         }
 
@@ -218,9 +193,10 @@ export default function SubstrateRenderer({
         const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
         const gridObjects: THREE.Object3D[] = [];
 
-        mapCoordinates.forEach(([xCoord, yCoord]) => {
+        for (const [xCoord, yCoord] of mapCoordinates) {
             const x = xCoord * gridWidth + offsetX;
             const y = yCoord * gridHeight + offsetY;
+
             const hasOverlap = selectedSheetId && sheetsData[selectedSheetId]
                 ? sheetsData[selectedSheetId].some(d => {
                     const gridMinX = x;
@@ -257,7 +233,7 @@ export default function SubstrateRenderer({
             border.renderOrder = 1;
             sceneRef.current.add(border);
             gridObjects.push(border);
-        });
+        }
 
         gridObjectsRef.current = gridObjects;
     };
@@ -273,14 +249,14 @@ export default function SubstrateRenderer({
         let minX = Infinity, maxX = -Infinity;
         let minY = Infinity, maxY = -Infinity;
 
-        mapCoordinates.forEach(([xCoord, yCoord]) => {
+        for (const [xCoord, yCoord] of mapCoordinates) {
             const x = xCoord * gridWidth + offsetX;
             const y = yCoord * gridHeight + offsetY;
             minX = Math.min(minX, x);
             maxX = Math.max(maxX, x + gridWidth);
             minY = Math.min(minY, y);
             maxY = Math.max(maxY, y + gridHeight);
-        });
+        }
 
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
@@ -298,6 +274,9 @@ export default function SubstrateRenderer({
         camera.bottom = -height / 2 / scale;
         camera.position.x = centerX;
         camera.position.y = centerY;
+
+        // re-apply current zoom on every fit
+        camera.zoom = zoom;
         camera.updateProjectionMatrix();
 
         controls.target.set(centerX, centerY, 0);
@@ -305,45 +284,64 @@ export default function SubstrateRenderer({
     };
 
     return (
-        <>
-            <input
-                type="file"
-                accept=".WaferMap"
-                onChange={handleFileUpload}
+        <Box
+            ref={containerRef}
+            style={{
+                position: 'relative',
+                width: '100%',
+                height: 'calc(100vh - 50px)',
+                overflow: 'hidden',
+                ...style,
+            }}
+        >
+            {/* Zoom slider UI */}
+            <Paper
+                shadow="sm"
+                p="xs"
                 style={{
-                    margin: '10px 0',
-                    padding: '8px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px'
-                }}
-            />
-
-            <Box
-                ref={containerRef}
-                style={{
-                    width: '100%',
-                    height: 'calc(100vh - 50px)',
-                    overflow: 'hidden',
-                    ...style,
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    width: 220,
+                    zIndex: 200,
                 }}
             >
-                {error && (
-                    <Box
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            padding: '1rem',
-                            backgroundColor: '#ff4444',
-                            color: 'white',
-                            zIndex: 100,
-                        }}
-                    >
-                        {error}
-                    </Box>
-                )}
-            </Box>
-        </>
+                <Group justify="space-between" mb={6}>
+                    <Text size="sm" c="dimmed">缩放</Text>
+                    <Text size="sm">{zoom.toFixed(2)}×</Text>
+                </Group>
+                <Slider
+                    min={0.25}
+                    max={5}
+                    step={0.01}
+                    value={zoom}
+                    onChange={setZoom}
+                    marks={[
+                        { value: 0.5, label: '0.5×' },
+                        { value: 1, label: '1×' },
+                        { value: 2, label: '2×' },
+                        { value: 4, label: '4×' },
+                    ]}
+                />
+            </Paper>
+
+            {error && (
+                <Box
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        padding: '1rem',
+                        backgroundColor: '#ff4444',
+                        color: 'white',
+                        zIndex: 100,
+                    }}
+                >
+                    {error}
+                </Box>
+            )}
+        </Box>
     );
 }
+

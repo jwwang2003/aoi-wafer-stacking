@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Card, Group, Stack, Table, Text, ScrollArea, Loader, Title, Badge,
-    TextInput, ActionIcon, Tooltip, Alert, SimpleGrid, Button
+    TextInput, ActionIcon, Tooltip, Alert, SimpleGrid, Button,
+    Flex,
+    Box,
+    Slider,
+    Divider
 } from '@mantine/core';
 import { IconRefresh, IconSearch, IconX, IconAlertCircle } from '@tabler/icons-react';
 
@@ -15,6 +19,9 @@ import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataC
 
 import { ExcelType, type WaferFileMetadata } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
+import SubstrateRenderer from '../Wafer';
+import { invokeParseSubstrateDefectXls, invokeParseWafer, parseWaferMap, parseWaferMapEx } from '@/api/tauri/wafer';
+import { AsciiDie, AsciiMap, SubstrateDefectXlsResult, WaferMapDie } from '@/types/ipc';
 
 // ---------------- 中文 UI 文案 ----------------
 const zh = {
@@ -306,6 +313,47 @@ export default function ProductBatchNavigator({
 
     const stackingJob = useAppSelector(s => s.stackingJob);
     const { waferSubstrate, waferMaps } = stackingJob;
+
+    const [sheetsData, setSheetsData] = useState<SubstrateDefectXlsResult | null>(null);
+
+    useEffect(() => {
+        if (!waferSubstrate) return;
+
+        (async () => {
+            const data = await invokeParseSubstrateDefectXls(waferSubstrate.file_path);
+            console.log(data);
+            setSheetsData(data);
+        })();
+    }, [waferSubstrate]);
+
+    const [dieData, setDieData] = useState<AsciiDie[] | WaferMapDie[] | null>(null);
+
+    useEffect(() => {
+        if (!waferMaps.length) return;
+
+        (async () => {
+            const map = waferMaps[0];
+            let data: AsciiMap | WaferMapDie[] | null = null;
+            switch (map.stage) {
+                case DataSourceType.FabCp: {
+                    const parsed = await invokeParseWafer(map.file_path);
+                    data = parsed.map.dies! as WaferMapDie[];
+                    break;
+                }
+                case DataSourceType.Wlbi: {
+                    const parsed = await parseWaferMap(map.file_path);
+                    data = parsed.map;
+                    break;
+                }
+                case DataSourceType.CpProber, DataSourceType.Aoi: {
+                    const parsed = await parseWaferMapEx(map.file_path);
+                    data = parsed.map.dies! as WaferMapDie[];
+                    break;
+                }
+            }
+            setDieData(data);
+        })();
+    }, [waferMaps]);
 
     async function loadWaferMaps(sub_id: string) {
         setSelectedSubId(sub_id);
@@ -665,7 +713,103 @@ export default function ProductBatchNavigator({
                     !selectedSubId || waferMaps.length === 0 || !waferSubstrate
                 }
                 onClick={() => { }}
-            >设定目标</Button>
+            >
+                设定目标
+            </Button>
+
+            {sheetsData && dieData &&
+                <SubstratePane sheetsData={sheetsData} dieData={dieData} />
+            }
         </Stack>
     );
 }
+
+type Test = {
+    sheetsData: SubstrateDefectXlsResult;
+    dieData: (AsciiDie | WaferMapDie)[];
+};
+
+export function SubstratePane({ sheetsData, dieData }: Test) {
+    const [xOffset, setXOffset] = useState(0); // mm
+    const [yOffset, setYOffset] = useState(0); // mm
+
+    return (
+        <Flex
+            gap="md"
+            style={{ height: 'calc(100vh - 50px)', width: '100%' }}
+        >
+            {/* Left controls */}
+            <Box
+                w={280}
+                p="md"
+                style={{ borderRight: '1px solid var(--mantine-color-gray-3)' }}
+            >
+                <Stack gap="sm">
+                    <Title order={5}>偏移 (mm)</Title>
+
+                    <Stack gap={4}>
+                        <Group justify="space-between">
+                            <Text size="sm" c="dimmed">X 偏移</Text>
+                            <Text size="sm">{xOffset.toFixed(2)} mm</Text>
+                        </Group>
+                        <Slider
+                            min={-1}
+                            max={1}
+                            step={0.01}
+                            value={xOffset}
+                            onChange={setXOffset}
+                            marks={[
+                                { value: -1, label: '-1' },
+                                { value: 0, label: '0' },
+                                { value: 1, label: '1' },
+                            ]}
+                        />
+                    </Stack>
+
+                    <Stack gap={4}>
+                        <Group justify="space-between">
+                            <Text size="sm" c="dimmed">Y 偏移</Text>
+                            <Text size="sm">{yOffset.toFixed(2)} mm</Text>
+                        </Group>
+                        <Slider
+                            min={-1}
+                            max={1}
+                            step={0.01}
+                            value={yOffset}
+                            onChange={setYOffset}
+                            marks={[
+                                { value: -1, label: '-1' },
+                                { value: 0, label: '0' },
+                                { value: 1, label: '1' },
+                            ]}
+                        />
+                    </Stack>
+
+                    <Divider my="xs" />
+
+                    <Button
+                        variant="light"
+                        onClick={() => { setXOffset(0); setYOffset(0); }}
+                    >
+                        重置偏移
+                    </Button>
+                </Stack>
+            </Box>
+
+            {/* Right renderer */}
+            <Box style={{ flex: 1, minWidth: 0 }}>
+                {sheetsData && dieData && (
+                    <SubstrateRenderer
+                        dies={dieData}
+                        selectedSheetId="Surface defect list"
+                        sheetsData={sheetsData}
+                        gridOffset={{ x: xOffset, y: yOffset }}
+                        // keep full height on the right side
+                        style={{ height: '100%', width: '100%' }}
+                    />
+                )}
+            </Box>
+        </Flex>
+    );
+}
+

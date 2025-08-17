@@ -24,6 +24,7 @@ import ComingSoon from '../ComingSoon';
 import { appDataDir, join, basename } from '@tauri-apps/api/path';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
+import SubstrateRenderer from '@/components/Wafer';
 
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
@@ -69,10 +70,10 @@ export default function DatabaseIndexPage() {
 }
 
 function BrowsePage() {
+    
     return (
         <Stack>
             <ProductBatchNavigator />
-            <Button>Test</Button>
         </Stack>
     );
 }
