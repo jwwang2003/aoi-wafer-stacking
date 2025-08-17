@@ -30,7 +30,7 @@ export const enum DirectionAllCap {
 export enum ExcelType {
     Mapping = 'productMapping',                 // Product list (e.g., from OEM or internal record)
     Product = 'productDefectMapping',           // Product metadata
-    DefectList = 'substrateDefectList',         // Defect sheet
+    DefectList = 'defectList',         // Defect sheet
 }
 
 /**

@@ -115,6 +115,7 @@ const dataSourceStateSlice = createSlice({
         addFolder: (state, action: PayloadAction<{ type: DataSourceType; path: string }>) => {
             const { type, path } = action.payload;
             const exists = state[type].some((f) => f.path === path);
+            console.log(type, path);
             if (!exists) {
                 state[type].push({
                     id: uuidv4(),           // they also have an arbitrary ID value
@@ -124,6 +125,7 @@ const dataSourceStateSlice = createSlice({
                 });
             }
             state[type] = sortFoldersByName(state[type]);
+            console.log(state[type]);
         },
         /**
          * Removes folder by its path (string match).

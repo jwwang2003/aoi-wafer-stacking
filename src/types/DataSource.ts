@@ -8,7 +8,7 @@ export type DataSourcePaths = {
 }
 
 export interface DataSourcePathsState extends DataSourcePaths {
-    lastModified: string;
+    
 }
 
 // RegexState is stored inside of the .json file
@@ -17,7 +17,7 @@ export type DataSourceRegex = {
 }
 
 export interface DataSourceRegexState extends DataSourceRegex {
-    lastModified: string;
+
 }
 
 // Main data structure to persist data source paths config
@@ -26,8 +26,6 @@ export interface DataSourceConfigState {
     rootLastModified: string;
     paths: DataSourcePathsState;
     regex: DataSourceRegexState;
-
-    lastSaved: string;
 }
 
 export enum DataSourceType {

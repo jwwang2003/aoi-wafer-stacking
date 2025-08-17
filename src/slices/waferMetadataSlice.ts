@@ -42,8 +42,6 @@ export const fetchWaferMetadata = createAsyncThunk<
                 await thunkAPI.dispatch(setStepper(ConfigStepperState.Metadata));
             }
 
-            console.log(parsed);
-
             return parsed;
         } catch (err: unknown) {
             const message =

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Box, Group, Table, Checkbox, Button, Text } from '@mantine/core';
+import { Box, Group, Table, Checkbox, Button, Text, ActionIcon } from '@mantine/core';
 import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { addFolder, removeFolder } from '@/slices/dataSourceStateSlice';
@@ -8,9 +8,10 @@ import type { DirResult } from '@/types/ipc';
 import type { DataSourceType } from '@/types/dataSource';
 import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
 import { getRelativePath, norm } from '@/utils/fs';
-import { deleteFolderIndexByPath } from '@/db/folderIndex';
+import { deleteFolderIndexByPath, upsertOneFolderIndex } from '@/db/folderIndex';
 import { basename } from '@tauri-apps/api/path';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
+import { stat } from '@tauri-apps/plugin-fs';
 
 interface DirectorySelectListProps {
     type: DataSourceType;
@@ -40,8 +41,8 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                     const absPath = folder.path;
                     const relPath = getRelativePath(rootPath, folder.path);
                     if (paths.includes(relPath)) continue;
-                    dispatch(addDataSourcePath({ type, path: norm(relPath) }));
-                    dispatch(addFolder({ type, path: norm(absPath) }));
+                    await dispatch(addDataSourcePath({ type, path: norm(relPath) }));
+                    await dispatch(addFolder({ type, path: norm(absPath) }));
                 }
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,6 +56,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
         const name = await basename(path);
         await dispatch(removeDataSourcePath({ type, path }));
         await dispatch(removeFolder({ type, path }));
+        await deleteFolderIndexByPath(path);
         await deleteFolderIndexByPath(name);
     }
 
@@ -80,10 +82,12 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                 : newPath;
 
             if (rel === oldPath) return;
-            dispatch(removeFolder({ type, path: oldPath }));
-            dispatch(addFolder({ type, path: rel }));
+            await dispatch(removeFolder({ type, path: oldPath }));
+            const { mtime } = await stat(newPath);
+            await upsertOneFolderIndex({ folder_path: newPath, last_mtime: Number(mtime) });
+            await dispatch(addFolder({ type, path: newPath }));
             setSelected((s) => s.filter((x) => x !== oldPath));
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-a    ny
         } catch (e: any) {
             console.error('修改目录失败', e);
         }
@@ -143,22 +147,28 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
                                 <Table.Td>
                                     <Group gap={4} wrap="nowrap">
-                                        <Button size="xs" variant="light" onClick={() => handleModify(path)}>
-                                            <IconEdit size={14} />
-                                        </Button>
-                                        <Button
-                                            size="xs"
+                                        <ActionIcon
+                                            variant="light"
+                                            size="sm"             // sm, md, lg… consistent square size
+                                            onClick={() => handleModify(path)}
+                                        >
+                                            <IconEdit size={16} />
+                                        </ActionIcon>
+
+                                        <ActionIcon
                                             variant="light"
                                             color="red"
+                                            size="sm"
                                             onClick={async () => {
                                                 await deleteAction(norm(path));
                                                 setSelected((s) => s.filter((x) => x !== path));
                                             }}
                                         >
-                                            <IconTrash size={14} />
-                                        </Button>
+                                            <IconTrash size={16} />
+                                        </ActionIcon>
                                     </Group>
                                 </Table.Td>
+
 
                                 <Table.Td style={{ whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                                     <Text c={error ? 'red' : undefined}>{name}</Text>

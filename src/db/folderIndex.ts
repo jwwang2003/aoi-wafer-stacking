@@ -119,10 +119,10 @@ export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promis
  */
 export async function deleteFolderIndexByPath(file_path: string): Promise<void> {
     const db = await getDb();
-    console.info(await db.execute(
+    await db.execute(
         `DELETE FROM folder_index WHERE folder_path = ?`
         , [file_path]
-    ));
+    );
 }
 
 /**

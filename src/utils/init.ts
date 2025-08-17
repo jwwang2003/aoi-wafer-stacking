@@ -25,10 +25,10 @@ export async function initialize() {
         // Step. 1
         // Ensure AppData folder exists
         await get_folder('', { baseDir: appDataBaseDir });
-        console.info('AppData directory initialized at:', await appDataDir());
+        console.log('AppData directory initialized at:', await appDataDir());
         // Ensure LocalData folder exists
         await get_folder('', { baseDir: localDataBaseDir });
-        console.info('LocalData directory initialized at:', await localDataDir());
+        console.log('LocalData directory initialized at:', await localDataDir());
 
         // Step. 2 -- Init. all config files if not present
         await init_pref();
@@ -109,7 +109,7 @@ export async function init_data_source_config(): Promise<boolean> {
 export async function init_db(): Promise<void> {
     try {
         const db = await getDb();
-        console.info('%cInitialized database!', 'color: orange', db.path);
+        console.log('%cInitialized database!', 'color: orange', db.path);
     } catch (err) {
         console.error('Database initialization failed:', err);
         throw err;

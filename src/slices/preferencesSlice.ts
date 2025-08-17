@@ -11,7 +11,7 @@ import { isValidPreferences } from '@/utils/validators';
 import { baseDir, PREFERENCES_FILENAME } from '@/constants';
 import { initialPreferencesState as initialState } from '@/constants/default';
 
-import { PreferencesState } from '@/types/preferences';
+import { AutoTriggers, PreferencesState } from '@/types/preferences';
 import { ConfigStepperState } from '@/types/stepper';
 
 /**
@@ -182,17 +182,20 @@ const preferencesSlice = createSlice({
             const target = action.payload;
             if (current < target) {
                 state.stepper = target;
-                // } else if ((target - current) > 1) {
-                //     console.error("Config advance stepper gap is larger than 1!");
             } else if (target == current) {
+                // Do nothing if we are advancing the stepper into the same position
                 // console.warn("Config stepper unchanged", state.stepper);
             } else {
                 // Do nothing...
-                // console.warn("Config stepper: something went wrong...");
+                // We cannot advance the stepper backwards
             }
         },
         setStepper(state, action: PayloadAction<ConfigStepperState>) {
             state.stepper = action.payload;
+        },
+        setAutoTriggerState(state, action: PayloadAction<{ target: AutoTriggers, value: boolean }>) {
+            const { target, value } = action.payload;
+            state.autoTriggers[target] = value;
         }
     },
     extraReducers: (builder) => {
@@ -202,13 +205,11 @@ const preferencesSlice = createSlice({
                 state.status = 'loading';
                 state.error = null;
             })
-            .addCase(initPreferences.fulfilled, (state, action) => {
-                state.status = 'idle';
-                state.error = null;
+            .addCase(initPreferences.fulfilled, (_, action) => {
+                action.payload.status = 'idle';
+                action.payload.error = null;
 
-                const { preferenceFilePath, dataSourceConfigPath } = action.payload;
-                state.preferenceFilePath = preferenceFilePath;
-                state.dataSourceConfigPath = dataSourceConfigPath;
+                return action.payload;
             })
             .addCase(initPreferences.rejected, (state, action) => {
                 state.stepper = ConfigStepperState.ConfigInfo;      // rollback
@@ -244,5 +245,5 @@ const preferencesSlice = createSlice({
     },
 });
 
-export const { setDataSourceConfigPath, setStepper, advanceStepper } = preferencesSlice.actions;
+export const { setDataSourceConfigPath, setAutoTriggerState, setStepper, advanceStepper } = preferencesSlice.actions;
 export default preferencesSlice.reducer;

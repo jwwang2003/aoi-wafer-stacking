@@ -15,7 +15,7 @@ import { IconCheck, IconX } from '@tabler/icons-react';
 import { exists, stat } from '@tauri-apps/plugin-fs';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
-import { initPreferences, revalidatePreferencesFile, resetPreferencesToDefault, setDataSourceConfigPath } from '@/slices/preferencesSlice';
+import { initPreferences, revalidatePreferencesFile, resetPreferencesToDefault, setDataSourceConfigPath, setAutoTriggerState } from '@/slices/preferencesSlice';
 import { PathPicker } from '@/components';
 
 import { appDataDir, resolve } from '@tauri-apps/api/path';
@@ -23,6 +23,7 @@ import { DATA_SOURCE_CONFIG_FILENAME, DB_FILENAME } from '@/constants';
 import { prepPreferenceWriteOut } from '@/utils/helper';
 import { norm } from '@/utils/fs';
 import { useNavigate } from 'react-router-dom';
+import { AutoTriggers } from '@/types/preferences';
 
 export default function PreferencesSubpage() {
     const navigate = useNavigate();
@@ -37,6 +38,12 @@ export default function PreferencesSubpage() {
     const [modifiedTime, setModifiedTime] = useState<string | null>(null);
 
     const [dbPath, setDbPath] = useState<string | null>(null);
+
+    // AutoTriggers
+    const autoTriggers = useAppSelector(s => s.preferences.autoTriggers);
+    const folderDetectTrigger = autoTriggers[AutoTriggers.folderDetection];
+    const searchTrigger = autoTriggers[AutoTriggers.search];
+    const ingestTrigger = autoTriggers[AutoTriggers.ingest];
 
     // =========================================================================
     // NOTE: INIT
@@ -63,6 +70,23 @@ export default function PreferencesSubpage() {
         const defaultPath = await resolve(dir, DATA_SOURCE_CONFIG_FILENAME);
         await dispatch(setDataSourceConfigPath(defaultPath));
     };
+
+    // For the auto triggers
+    const handleToggleFolderDetect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        await dispatch(
+            setAutoTriggerState({ target: AutoTriggers.folderDetection, value: event.currentTarget.checked })
+        )
+    }
+    const handleToggleSearchDetect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        await dispatch(
+            setAutoTriggerState({ target: AutoTriggers.search, value: event.currentTarget.checked })
+        )
+    }
+    const handleToggleIngestDetect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        await dispatch(
+            setAutoTriggerState({ target: AutoTriggers.ingest, value: event.currentTarget.checked })
+        )
+    }
 
     // =========================================================================
     // NOTE: REACT
@@ -113,7 +137,7 @@ export default function PreferencesSubpage() {
                 label=""
                 value={preferenceFilePath || ''}
                 disabled
-                onChange={() => { }}
+                onChange={() => {}}
                 variant="filled"
                 withAsterisk={false}
                 mode="file"
@@ -134,7 +158,7 @@ export default function PreferencesSubpage() {
                 label=""
                 value={dbPath || ''}
                 disabled
-                onChange={() => { }}
+                onChange={() => {}}
                 variant="filled"
                 withAsterisk={false}
                 mode="file"
@@ -149,11 +173,35 @@ export default function PreferencesSubpage() {
 
             <Title order={2}>自动</Title>
             <Group>
-                <Switch withThumbIndicator={false} label="子目录识别" size="lg" onLabel="自动" offLabel="手动" />
-                <Switch withThumbIndicator={false} label="读取元数据" size="lg" onLabel="自动" offLabel="手动" />
-                <Switch withThumbIndicator={false} label="加载与维护数据库" size="lg" onLabel="自动" offLabel="手动" />
+                <Switch
+                    withThumbIndicator={false}
+                    label="子目录识别"
+                    size="lg"
+                    onLabel="自动"
+                    offLabel="手动"
+                    checked={folderDetectTrigger}
+                    onChange={handleToggleFolderDetect}
+                />
+                <Switch
+                    withThumbIndicator={false}
+                    label="读取元数据"
+                    size="lg"
+                    onLabel="自动"
+                    offLabel="手动"
+                    checked={searchTrigger}
+                    onChange={handleToggleSearchDetect}
+                />
+                <Switch
+                    withThumbIndicator={false}
+                    label="加载与维护数据库"
+                    size="lg"
+                    onLabel="自动"
+                    offLabel="手动"
+                    checked={ingestTrigger}
+                    onChange={handleToggleIngestDetect}
+                />
             </Group>
-            
+
             <Divider />
 
             <Title order={2}>数据源配置文件</Title>

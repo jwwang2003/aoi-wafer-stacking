@@ -34,13 +34,6 @@ export async function createDefaultPreferences(): Promise<PreferencesState> {
 }
 
 export function prepPreferenceWriteOut(pref: PreferencesState): string {
-    const { preferenceFilePath, dataSourceConfigPath } = pref;
-    return JSON.stringify(
-        {
-            preferenceFilePath,
-            dataSourceConfigPath,
-        },
-        null,
-        2
-    )
+    const { status, error, stepper, ...persistable } = pref;
+    return JSON.stringify(persistable, null, 2)
 }

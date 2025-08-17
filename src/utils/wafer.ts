@@ -130,8 +130,9 @@ async function getSpreadsheetApis() {
  * Process a batch of parsed Excel files (non‑synchronously) and persist their contents,
  * with **dynamic imports** for spreadsheet parsers/DB writes to keep initial bundle light.
  */
-export async function processNSyncExcelData(data: ExcelMetadata[]) {
+export async function processNSyncExcelData(data: ExcelMetadata[]): Promise<number> {
     const name = 'Proc. N. Sync. Excel Data';
+    let sum = 0;
 
     const typeOrder: Record<ExcelType, number> = {
         [ExcelType.Mapping]: 0,
@@ -167,6 +168,7 @@ export async function processNSyncExcelData(data: ExcelMetadata[]) {
                             product_id: r.productId,
                         }))
                 );
+                sum += dbResult.tot;
                 console.log({ dbResult });
                 break;
             }
@@ -184,6 +186,7 @@ export async function processNSyncExcelData(data: ExcelMetadata[]) {
                             file_path: d.filePath,
                         }))
                 );
+                sum += dbResult;
                 console.log({
                     dbResult,
                     r: [dbResult, results.length],
@@ -197,6 +200,7 @@ export async function processNSyncExcelData(data: ExcelMetadata[]) {
                     sub_id: d.id!,
                     file_path: d.filePath,
                 });
+                if (dbResult) sum += 1;
                 console.log({ dbResult });
                 break;
             }
@@ -206,13 +210,14 @@ export async function processNSyncExcelData(data: ExcelMetadata[]) {
     }
 
     console.groupEnd();
+    return sum;
 }
 
 /**
  * Batch-sync an array of WaferFileMetadata into SQLite’s `wafer_maps` table,
  * updating only when the incoming record is newer. (kept static)
  */
-export async function processNSyncWaferData(records: WaferFileMetadata[]) {
+export async function processNSyncWaferData(records: WaferFileMetadata[]): Promise<number> {
     const name = 'Proc. N. Sync. Wafer Data';
     console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
     try {
@@ -229,6 +234,7 @@ export async function processNSyncWaferData(records: WaferFileMetadata[]) {
             }))
         );
         console.log({ dbResult });
+        return dbResult;
     } catch (err) {
         const msg = `[${name}] ${err instanceof Error ? err.message : String(err)}`;
         console.error(msg);

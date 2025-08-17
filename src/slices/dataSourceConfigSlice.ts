@@ -75,7 +75,6 @@ export const initDataSourceConfig = createAsyncThunk<
 
             if (config.rootPath && await isDataSourceRootValid(config)) {
                 await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
-                await thunkAPI.dispatch(scanDataSourceFolders());
             } else {
                 await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
                 return config;
@@ -127,13 +126,7 @@ export const revalidateDataSource = createAsyncThunk<
         if (!isValidDataSourceConfig(merged))
             return { valid: false, dataSourceConfig: defaultConfig };
 
-        const parsedLastSaved = merged.lastSaved ?? 0;
-        const localLastSaved = dataSourceConfig.lastSaved ?? 0;
-
-        // Compare timestamps and decide which config to use
-        const useLocal = localLastSaved >= parsedLastSaved;
-
-        const config = useLocal ? dataSourceConfig : merged;
+        const config = dataSourceConfig;
 
         await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
 
@@ -199,8 +192,8 @@ export const scanDataSourceFolders = createAsyncThunk<
                     const inConfig = existingInConfig.has(path);
                     const inState = existingInState.has(path);
 
-                    if (!inConfig) dispatch(addDataSourcePath({ type, path }));
-                    if (!inState) dispatch(addFolder({ type, path }));
+                    if (!inConfig) await dispatch(addDataSourcePath({ type, path }));
+                    if (!inState) await dispatch(addFolder({ type, path }));
 
                     if (!inConfig && !inState) totAdded++;
                 }
@@ -255,7 +248,6 @@ const dataSourceSlice = createSlice({
             const sortedPaths = sortBySubfolderName(relativePaths);
             if (!arraysAreEqual(state.paths[type], paths)) {
                 state.paths[type] = sortedPaths;
-                state.paths.lastModified = now();
             }
         },
         addDataSourcePath(state, action: PayloadAction<{ type: DataSourceType, path: string }>) {
@@ -264,20 +256,17 @@ const dataSourceSlice = createSlice({
             if (!state.paths[type].includes(relativePath)) {
                 state.paths[type].push(relativePath);
                 state.paths[type] = sortBySubfolderName(state.paths[type]);
-                state.paths.lastModified = now();
             }
         },
         removeDataSourcePath(state, action: PayloadAction<{ type: DataSourceType, path: string }>) {
             const { type, path } = action.payload;
             const relativePath = getRelativePath(state.rootPath, path);
             state.paths[type] = state.paths[type].filter(p => p != relativePath);
-            state.paths.lastModified = now();
         },
         removeAllDataSourcePaths(state) {
             for (const type of Object.values(['substrate', 'fabCp', 'cpProber', 'wlbi', 'aoi'] as DataSourceType[])) {
                 state.paths[type] = [];
             }
-            state.paths.lastModified = now();
         },
 
         // —— Regex reducer ——
@@ -285,14 +274,7 @@ const dataSourceSlice = createSlice({
             const { type, regex } = action.payload;
             if (state.regex[type] !== regex) {
                 state.regex[type] = regex;
-                state.regex.lastModified = now();
             }
-        },
-
-        // —— Save action ——
-        triggerSave() { },   // do nothing lol
-        updateSavedTime(state) {
-            state.lastSaved = now();
         }
     },
     extraReducers: (builder) => {
@@ -323,8 +305,6 @@ export const {
     removeDataSourcePath,
     removeAllDataSourcePaths,
     setRegexPattern,
-    triggerSave,
-    updateSavedTime,
 } = dataSourceSlice.actions;
 
 export default dataSourceSlice.reducer;

@@ -9,9 +9,8 @@ export const now = () => new Date().toISOString();
 export const initialPreferencesState: PreferencesState = {
     preferenceFilePath: '',
     dataSourceConfigPath: '',
-
     autoTriggers: {
-        subFolderDetection: false,
+        folderDetection: false,
         search: false,
         ingest: false,
     },
