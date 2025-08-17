@@ -23,7 +23,6 @@ export const initialPreferencesState: PreferencesState = {
 
 export const initialDataSourceConfigState: DataSourceConfigState = {
     rootPath: '',
-    rootLastModified: now(),
     paths: {
         substrate: [],
         cpProber: [],

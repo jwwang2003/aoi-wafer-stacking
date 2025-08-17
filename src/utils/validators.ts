@@ -20,7 +20,6 @@ export function isValidDataSourceConfig(input: unknown): input is DataSourceConf
 
     return (
         typeof cfg.rootPath === 'string' &&
-        typeof cfg.rootLastModified === 'string' &&
         typeof cfg.paths === 'object' &&
         cfg.paths !== null &&
         typeof cfg.regex === 'object' &&

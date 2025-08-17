@@ -30,7 +30,7 @@ export async function autoRecognizeFoldersByType(
 ): Promise<Record<DataSourceType, string[]>> {
     const folderMatches: Record<DataSourceType, string[]> = {
         substrate: [],
-        // fabCp: [],
+        fabCp: [],
         cpProber: [],
         wlbi: [],
         aoi: [],
