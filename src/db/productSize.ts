@@ -1,4 +1,4 @@
-import { getDb } from '@/db';
+import { getDb, vacuum } from '@/db';
 
 /** Row shape for product_size */
 export type ProductSize = {
@@ -115,6 +115,14 @@ export async function deleteManyProductSizes(oem_product_ids: string[], batchSiz
         total += (res as any)?.rowsAffected ?? 0;
     }
     return total;
+}
+
+/** Delete all rows from product_size. Optionally VACUUM afterward. */
+export async function deleteAllProductSizes(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
 }
 
 /** Return a Map for quick lookups in code. */

@@ -1,4 +1,4 @@
-import { getDb } from '@/db';
+import { getDb, vacuum } from '@/db';
 import type { OemProductOffset, OemProductOffsetMap } from './types';
 
 // Adjust this if you actually created the table with a different name:
@@ -117,6 +117,13 @@ export async function deleteManyOemOffsets(
     return total;
 }
 
+/** Delete all rows from product_offsets. Optionally VACUUM afterward. */
+export async function deleteAllOemOffsets(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
+}
 /** Return a Map for quick lookups in code. */
 export async function getOemOffsetMap(): Promise<OemProductOffsetMap> {
     const rows = await getAllOemOffsets(10_000, 0);

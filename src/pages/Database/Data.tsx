@@ -23,6 +23,11 @@ import ComingSoon from '../ComingSoon';
 import { appDataDir, join, basename } from '@tauri-apps/api/path';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
+import { deleteAllFileIndexes } from '@/db/fileIndex';
+import { resetSpreadSheetData } from '@/db/spreadSheet';
+import { deleteAllFolderIndexes } from '@/db/folderIndex';
+import { deleteAllWaferMaps } from '@/db/wafermaps';
+import { warmIndexCaches } from '@/utils/fs';
 
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
@@ -88,6 +93,14 @@ function MorePage() {
     const [msg, setMsg] = useState<string | null>(null);
     const [err, setErr] = useState<string | null>(null);
 
+    const handleResetDb = async () => {
+        await resetSpreadSheetData({ vacuumAfter: true });
+        await deleteAllWaferMaps();
+        await deleteAllFileIndexes(true);        // clear sizes + VACUUM
+        await deleteAllFolderIndexes(true);
+        await warmIndexCaches();
+    }
+
     const handleExportDb = async () => {
         setBusy(true);
         setMsg(null);
@@ -130,6 +143,9 @@ function MorePage() {
                     <Group>
                         <Button loading={busy} onClick={handleExportDb}>
                             导出整个数据库文件
+                        </Button>
+                        <Button variant='outline' color='red' loading={busy} onClick={handleResetDb}>
+                            重置数据库
                         </Button>
                     </Group>
 

@@ -1,5 +1,7 @@
-import { getDb } from '@/db';
+import { getDb, vacuum } from '@/db';
 import { WaferMapRow } from './types'; // Ensure this includes "idx?: number"
+
+const TABLE = 'wafer_maps';
 
 /**
  * NOTE: DB should enforce: CREATE UNIQUE INDEX IF NOT EXISTS uq_wafer_maps_file_path ON wafer_maps(file_path);
@@ -24,7 +26,7 @@ export async function getWaferMapByIdx(idx: number): Promise<WaferMapRow | null>
     const db = await getDb();
     const rows = await db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM wafer_maps
+    FROM ${TABLE}
 WHERE idx = ?`,
         [idx]
     );
@@ -40,7 +42,7 @@ export async function getWaferMapsByTriple(
     const db = await getDb();
     return db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM wafer_maps
+    FROM ${TABLE}
 WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
 ORDER BY COALESCE(time, 0) DESC, idx DESC`,
         [product_id, batch_id, wafer_id]
@@ -56,7 +58,7 @@ export async function getLatestWaferMapByTriple(
     const db = await getDb();
     const rows = await db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM wafer_maps
+    FROM ${TABLE}
 WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
 ORDER BY COALESCE(time, 0) DESC, idx DESC
 LIMIT 1`,
@@ -73,7 +75,7 @@ export async function getWaferMapByFilePath(file_path: string): Promise<WaferMap
     const db = await getDb();
     const rows = await db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM wafer_maps
+    FROM ${TABLE}
 WHERE file_path = ?`,
         [file_path]
     );
@@ -94,7 +96,7 @@ export async function getAllWaferMaps(
     const db = await getDb();
     return db.select<WaferMapRow[]>(
         `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM wafer_maps
+    FROM ${TABLE}
 ORDER BY product_id, batch_id, wafer_id, COALESCE(time, 0) DESC, idx DESC
 LIMIT ? OFFSET ?`,
         [limit, offset]
@@ -105,7 +107,7 @@ LIMIT ? OFFSET ?`,
 export async function insertWaferMap(row: Omit<WaferMapRow, 'idx'>): Promise<number> {
     const db = await getDb();
     await db.execute(
-        `INSERT INTO wafer_maps
+        `INSERT INTO ${TABLE}
     (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -127,7 +129,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 
 /** Reusable SQL: idempotent upsert on unique file_path. */
 const UPSERT_ON_FILE_SQL = `
-INSERT INTO wafer_maps
+INSERT INTO ${TABLE}
     (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(file_path) DO UPDATE SET
@@ -151,7 +153,7 @@ export async function upsertWaferMap(row: WaferMapRow): Promise<number> {
 
     if (row.idx != null) {
         await db.execute(
-            `UPDATE wafer_maps
+            `UPDATE ${TABLE}
 SET product_id = ?,
     batch_id = ?,
     wafer_id = ?,
@@ -189,7 +191,7 @@ WHERE idx = ?`,
     ]);
 
     const got = await db.select<{ idx: number }[]>(
-        `SELECT idx FROM wafer_maps WHERE file_path = ?`,
+        `SELECT idx FROM ${TABLE} WHERE file_path = ?`,
         [row.file_path]
     );
     return got[0]?.idx ?? -1;
@@ -238,7 +240,7 @@ export async function insertManyWaferMaps(rows: Array<Omit<WaferMapRow, 'idx'>>)
     try {
         for (const r of rows) {
             await db.execute(
-                `INSERT INTO wafer_maps
+                `INSERT INTO ${TABLE}
     (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
@@ -264,7 +266,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 /** Delete one row by idx. Returns rows deleted (0/1). */
 export async function deleteWaferMapByIdx(idx: number): Promise<number> {
     const db = await getDb();
-    const res = await db.execute(`DELETE FROM wafer_maps WHERE idx = ?`, [idx]);
+    const res = await db.execute(`DELETE FROM ${TABLE} WHERE idx = ?`, [idx]);
     return (res as any)?.rowsAffected ?? 0;
 }
 
@@ -279,7 +281,7 @@ export async function deleteWaferMapsByTriple(
 ): Promise<number> {
     const db = await getDb();
     const res = await db.execute(
-        `DELETE FROM wafer_maps WHERE product_id = ? AND batch_id = ? AND wafer_id = ?`,
+        `DELETE FROM ${TABLE} WHERE product_id = ? AND batch_id = ? AND wafer_id = ?`,
         [product_id, batch_id, wafer_id]
     );
     return (res as any)?.rowsAffected ?? 0;
@@ -288,7 +290,7 @@ export async function deleteWaferMapsByTriple(
 /** Delete by file_path (unique). */
 export async function deleteWaferMapsByFilePath(file_path: string): Promise<number> {
     const db = await getDb();
-    const res = await db.execute(`DELETE FROM wafer_maps WHERE file_path = ?`, [file_path]);
+    const res = await db.execute(`DELETE FROM ${TABLE} WHERE file_path = ?`, [file_path]);
     return (res as any)?.rowsAffected ?? 0;
 }
 
@@ -303,7 +305,7 @@ export async function deleteManyWaferMapsByIdx(
     for (let i = 0; i < idxs.length; i += batchSize) {
         const batch = idxs.slice(i, i + batchSize);
         const placeholders = batch.map(() => '?').join(',');
-        const res = await db.execute(`DELETE FROM wafer_maps WHERE idx IN (${placeholders})`, batch);
+        const res = await db.execute(`DELETE FROM ${TABLE} WHERE idx IN (${placeholders})`, batch);
         total += (res as any)?.rowsAffected ?? 0;
     }
     return total;
@@ -322,8 +324,16 @@ export async function deleteManyWaferMapsByPK(
         const batch = keys.slice(i, i + batchSize);
         const orClauses = batch.map(() => `(product_id = ? AND batch_id = ? AND wafer_id = ?)`).join(' OR ');
         const params = batch.flatMap(k => [k.product_id, k.batch_id, k.wafer_id]);
-        const res = await db.execute(`DELETE FROM wafer_maps WHERE ${orClauses}`, params);
+        const res = await db.execute(`DELETE FROM ${TABLE} WHERE ${orClauses}`, params);
         total += (res as any)?.rowsAffected ?? 0;
     }
     return total;
+}
+
+/** Delete all rows from wafer_maps. Optionally VACUUM afterward. */
+export async function deleteAllWaferMaps(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
 }

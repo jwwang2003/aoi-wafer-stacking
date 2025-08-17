@@ -19,6 +19,14 @@ export async function getDb(): Promise<Database> {
     return _db;
 }
 
+/** Internal: run VACUUM safely (must not be inside an open transaction). */
+export async function vacuum(): Promise<void> {
+    const db = await getDb();
+    // Optional: shrink WAL before VACUUM (harmless if not in WAL mode)
+    try { await db.execute('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { }
+    await db.execute('VACUUM');
+}
+
 import * as fileIndex from './fileIndex';
 import * as folderIndex from './folderIndex';
 import * as dbTypes from './types';
