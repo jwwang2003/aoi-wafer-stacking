@@ -1,81 +1,84 @@
 import { getDb } from '@/db';
-import type { OemProductOffset, OemProductOffsetMap } from './types';
 
-// Adjust this if you actually created the table with a different name:
-const TABLE = 'product_offsets';
+/** Row shape for product_size */
+export type ProductSize = {
+    oem_product_id: string;
+    die_x: number;
+    die_y: number;
+};
+
+/** Quick-lookup map: id -> { die_x, die_y } */
+export type ProductSizeMap = Map<string, { die_x: number; die_y: number }>;
+
+const TABLE = 'product_size';
+const COLUMNS = 'oem_product_id, die_x, die_y';
 
 /*
-CREATE TABLE IF NOT EXISTS product_offsets (
+-- Keep for reference (should already exist):
+CREATE TABLE IF NOT EXISTS product_size (
     oem_product_id TEXT PRIMARY KEY,
-    x_offset DOUBLE NOT NULL,
-    y_offset DOUBLE NOT NULL,
+    die_x DOUBLE NOT NULL,
+    die_y DOUBLE NOT NULL,
     FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_oem_product_offset_id ON oem_product_offset(oem_product_id);
+CREATE INDEX IF NOT EXISTS idx_product_size_id ON product_size(oem_product_id);
 */
 
-const COLUMNS = 'oem_product_id, x_offset, y_offset';
-
-export async function getOemOffset(oem_product_id: string): Promise<OemProductOffset | null> {
+export async function getProductSize(oem_product_id: string): Promise<ProductSize | null> {
     const db = await getDb();
-    const rows = await db.select<OemProductOffset[]>(
+    const rows = await db.select<ProductSize[]>(
         `SELECT ${COLUMNS} FROM ${TABLE} WHERE oem_product_id = ?`,
         [oem_product_id]
     );
     return rows[0] ?? null;
 }
 
-export async function getOemOffsets(
-    oem_product_ids: string[]
-): Promise<OemProductOffset[]> {
+export async function getProductSizes(oem_product_ids: string[]): Promise<ProductSize[]> {
     if (!oem_product_ids.length) return [];
     const db = await getDb();
     const placeholders = oem_product_ids.map(() => '?').join(',');
-    return db.select<OemProductOffset[]>(
+    return db.select<ProductSize[]>(
         `SELECT ${COLUMNS} FROM ${TABLE} WHERE oem_product_id IN (${placeholders})`,
         oem_product_ids
     );
 }
 
-export async function getAllOemOffsets(
-    limit = 500,
-    offset = 0
-): Promise<OemProductOffset[]> {
+export async function getAllProductSizes(limit = 500, offset = 0): Promise<ProductSize[]> {
     const db = await getDb();
-    return db.select<OemProductOffset[]>(
+    return db.select<ProductSize[]>(
         `SELECT ${COLUMNS} FROM ${TABLE} ORDER BY oem_product_id ASC LIMIT ? OFFSET ?`,
         [limit, offset]
     );
 }
 
 /** Idempotent upsert by PK (oem_product_id). */
-export async function upsertOemOffset(row: OemProductOffset): Promise<boolean> {
+export async function upsertProductSize(row: ProductSize): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
+        `INSERT INTO ${TABLE} (oem_product_id, die_x, die_y)
     VALUES (?, ?, ?)
-ON CONFLICT(oem_product_id) DO UPDATE SET
-    x_offset = excluded.x_offset,
-    y_offset = excluded.y_offset`,
-        [row.oem_product_id, row.x_offset, row.y_offset]
+    ON CONFLICT(oem_product_id) DO UPDATE SET
+        die_x = excluded.die_x,
+        die_y = excluded.die_y`,
+        [row.oem_product_id, row.die_x, row.die_y]
     );
     return true;
 }
 
 /** Bulk upsert inside a transaction. Returns count written. */
-export async function upsertManyOemOffsets(rows: OemProductOffset[]): Promise<number> {
+export async function upsertManyProductSizes(rows: ProductSize[]): Promise<number> {
     if (!rows.length) return 0;
     const db = await getDb();
     await db.execute('BEGIN');
     try {
         for (const r of rows) {
             await db.execute(
-                `INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
-    VALUES (?, ?, ?)
-ON CONFLICT(oem_product_id) DO UPDATE SET
-    x_offset = excluded.x_offset,
-    y_offset = excluded.y_offset`,
-                [r.oem_product_id, r.x_offset, r.y_offset]
+                `INSERT INTO ${TABLE} (oem_product_id, die_x, die_y)
+        VALUES (?, ?, ?)
+        ON CONFLICT(oem_product_id) DO UPDATE SET
+            die_x = excluded.die_x,
+            die_y = excluded.die_y`,
+                [r.oem_product_id, r.die_x, r.die_y]
             );
         }
         await db.execute('COMMIT');
@@ -86,8 +89,8 @@ ON CONFLICT(oem_product_id) DO UPDATE SET
     }
 }
 
-/** Delete one offset by id. Returns rows deleted (0/1). */
-export async function deleteOemOffset(oem_product_id: string): Promise<number> {
+/** Delete one by id. Returns rows deleted (0/1). */
+export async function deleteProductSize(oem_product_id: string): Promise<number> {
     const db = await getDb();
     const res = await db.execute(
         `DELETE FROM ${TABLE} WHERE oem_product_id = ?`,
@@ -97,10 +100,7 @@ export async function deleteOemOffset(oem_product_id: string): Promise<number> {
 }
 
 /** Bulk delete by ids. Returns total rows deleted. */
-export async function deleteManyOemOffsets(
-    oem_product_ids: string[],
-    batchSize = 500
-): Promise<number> {
+export async function deleteManyProductSizes(oem_product_ids: string[], batchSize = 500): Promise<number> {
     if (!oem_product_ids.length) return 0;
     const db = await getDb();
     let total = 0;
@@ -118,7 +118,7 @@ export async function deleteManyOemOffsets(
 }
 
 /** Return a Map for quick lookups in code. */
-export async function getOemOffsetMap(): Promise<OemProductOffsetMap> {
-    const rows = await getAllOemOffsets(10_000, 0);
-    return new Map(rows.map(r => [r.oem_product_id, { x_offset: r.x_offset, y_offset: r.y_offset }]));
+export async function getProductSizeMap(): Promise<ProductSizeMap> {
+    const rows = await getAllProductSizes(10_000, 0);
+    return new Map(rows.map(r => [r.oem_product_id, { die_x: r.die_x, die_y: r.die_y }]));
 }

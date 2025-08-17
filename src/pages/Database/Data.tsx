@@ -17,14 +17,12 @@ import {
     Navigate,
 } from 'react-router-dom';
 import { useMemo, useState } from 'react';
-import ProductBatchNavigator from '@/components/Navigator/ProductBatch';
+import ProductViewer from '@/components/Navigator/ProductViewer';
 import ComingSoon from '../ComingSoon';
 
-// ⬇️ NEW: Tauri helpers for exporting the DB
 import { appDataDir, join, basename } from '@tauri-apps/api/path';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
-import SubstrateRenderer from '@/components/Wafer';
 
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
@@ -70,10 +68,9 @@ export default function DatabaseIndexPage() {
 }
 
 function BrowsePage() {
-    
     return (
         <Stack>
-            <ProductBatchNavigator />
+            <ProductViewer />
         </Stack>
     );
 }

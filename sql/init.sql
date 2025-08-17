@@ -18,6 +18,16 @@ CREATE TABLE IF NOT EXISTS product_offsets (
     FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );
 
+-- Each product has a unique die size
+CREATE TABLE IF NOT EXISTS product_size (
+    oem_product_id TEXT PRIMARY KEY,
+
+    die_x DOUBLE NOT NULL,
+    die_y DOUBLE NOT NULL,
+
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
+);
+
 -- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
     oem_product_id TEXT NOT NULL,
