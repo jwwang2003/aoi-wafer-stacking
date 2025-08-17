@@ -46,7 +46,6 @@ import {
   isNumberBin,
 } from '@/types/ipc';
 
-//数字越大优先级越高
 const LAYER_PRIORITIES = {
   CP2: 5,
   WLBI: 4,
@@ -59,38 +58,37 @@ const getLayerPriority = (layerName: string): number => {
   return LAYER_PRIORITIES[layerName as keyof typeof LAYER_PRIORITIES];
 };
 
-const extractAlignmentMarkers = (
+export const extractAlignmentMarkers = (
   dies: AsciiDie[]
 ): { x: number; y: number }[] => {
   return dies
-    .filter((die) => isSpecialBin(die.bin))
+    .filter(
+      (die) => isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special)
+    )
     .map((die) => ({ x: die.x, y: die.y }));
 };
-
-const calculateOffset = (
+export const calculateOffset = (
   baseMarkers: { x: number; y: number }[],
   targetMarkers: { x: number; y: number }[]
 ): { dx: number; dy: number } => {
-  if (baseMarkers.length === 0 || targetMarkers.length === 0) {
-    return { dx: 0, dy: 0 };
-  }
+  const baseReference = baseMarkers.length > 0 ? baseMarkers[0] : null;
+  const targetReference = targetMarkers.length > 0 ? targetMarkers[0] : null;
 
-  const sortedBase = [...baseMarkers].sort((a, b) => a.x - b.x);
-  const sortedTarget = [...targetMarkers].sort((a, b) => a.x - b.x);
-  const hasTwoPoints = sortedBase.length >= 2 && sortedTarget.length >= 2;
+  if (!baseReference || !targetReference) return { dx: 0, dy: 0 };
 
-  const dx1 = sortedBase[0].x - sortedTarget[0].x;
-  const dy1 = sortedBase[0].y - sortedTarget[0].y;
-  if (hasTwoPoints) {
-    const dx2 = sortedBase[1].x - sortedTarget[1].x;
-    const dy2 = sortedBase[1].y - sortedTarget[1].y;
+  const dx = baseReference.x - targetReference.x;
+  const dy = baseReference.y - targetReference.y;
+
+  if (baseMarkers.length >= 2 && targetMarkers.length >= 2) {
+    const dx2 = baseMarkers[1].x - targetMarkers[1].x;
+    const dy2 = baseMarkers[1].y - targetMarkers[1].y;
     return {
-      dx: Math.round((dx1 + dx2) / 2),
-      dy: Math.round((dy1 + dy2) / 2),
+      dx: Math.round((dx + dx2) / 2),
+      dy: Math.round((dy + dy2) / 2),
     };
-  } else {
-    return { dx: dx1, dy: dy1 };
   }
+
+  return { dx, dy };
 };
 
 const applyOffsetToDies = (
@@ -258,9 +256,16 @@ export default function WaferStacking() {
       raw: mapData,
       dies: mapData.flatMap((row, y) =>
         row.split('').map((char, x) => ({
-          x,
-          y,
-          bin: char === '.' ? { special: '.' } : { number: parseInt(char, 10) },
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : 0,
+          bin:
+            char === '.'
+              ? { special: '.' }
+              : {
+                  number: Number.isFinite(parseInt(char, 10))
+                    ? parseInt(char, 10)
+                    : 0,
+                },
         }))
       ),
     },
@@ -347,9 +352,16 @@ export default function WaferStacking() {
     const dies = validMapData
       .flatMap((row, y) =>
         row.split('').map((char, x) => ({
-          x,
-          y,
-          bin: char === '.' ? { special: '.' } : { number: parseInt(char, 10) },
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : 0,
+          bin:
+            char === '.'
+              ? { special: '.' }
+              : {
+                  number: Number.isFinite(parseInt(char, 10))
+                    ? parseInt(char, 10)
+                    : 0,
+                },
         }))
       )
       .filter((die) => isNumberBin(die.bin));
@@ -451,8 +463,12 @@ export default function WaferStacking() {
 
       const alignedDiesList: AsciiDie[][] = [];
 
-      const baseDies = originalDiesList[0];
-      const baseMarkers = extractAlignmentMarkers(baseDies);
+      const highestPriorityLayerIndex = 0;
+      const baseDies = originalDiesList[highestPriorityLayerIndex];
+      const baseMarkers = extractAlignmentMarkers(baseDies).sort(
+        (a, b) => a.y - b.y || a.x - b.x
+      ); 
+
       alignedDiesList.push(baseDies);
 
       for (let i = 1; i < originalDiesList.length; i++) {
@@ -464,6 +480,14 @@ export default function WaferStacking() {
         );
         const alignedDies = applyOffsetToDies(currentDies, dx, dy);
         alignedDiesList.push(alignedDies);
+        console.log(`===== 第 ${i + 1} 轮叠图  对齐后 =====`);
+        console.log(convertDiesToMap(alignedDies));
+        const currentMerged = mergeDiesWithPriority(
+          alignedDiesList.slice(0, i + 1),
+          formatNamesList.slice(0, i + 1)
+        );
+        console.log(`===== 第 ${i + 1} 轮叠图合并结果 =====`);
+        console.log(convertDiesToMap(currentMerged));
       }
 
       const mergedDies = mergeDiesWithPriority(
