@@ -2,7 +2,7 @@
 import { Hook } from 'console-feed';
 import store from '@/store';
 import { addLog } from '@/slices/logSlice';
-import { Log } from '@/types/Log';
+import { Log } from '@/types/log';
 
 let alreadyHooked = false;
 

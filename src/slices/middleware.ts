@@ -1,20 +1,28 @@
 import { Action, Middleware } from '@reduxjs/toolkit';
 import {
+    advanceStepper,
+    setAutoTriggerState,
+    resetPreferencesToDefault,
+    setDataSourceConfigPath,
+    setStepper
+} from './preferencesSlice';
+import {
     setDataSourcePaths,
     addDataSourcePath,
     removeDataSourcePath,
     setRootPath,
     setRegexPattern,
-    saveConfig,
-} from '@/slices/dataSourceConfigSlice';
-import { advanceStepper, resetPreferencesToDefault, setDataSourceConfigPath, setOffsets, setStepper } from './preferencesSlice';
+} from './dataSourceConfigSlice';
+import { addFolder, removeFolder, removeFolderById, resetFolders } from './dataSourceStateSlice';
+import { RootState } from '@/store';
+
 import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, resolve } from '@tauri-apps/api/path';
+
 import { isDataSourceFoldersValid, isDataSourceRootValid } from '@/utils/validators';
-import { addFolder, removeFolder, removeFolderById, resetFolders } from './dataSourceStateSlice';
-import { ConfigStepperState } from '@/types/Stepper';
-import { RootState } from '@/store';
 import { prepPreferenceWriteOut } from '@/utils/helper';
+
+import { ConfigStepperState } from '@/types/stepper';
 
 /**
  * Middleware to do validation & persistence whenever a state changes
@@ -32,7 +40,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     const prefTypes: string[] = [
         // Preference files config types
         dataSourceConfig.type,
-        setOffsets.type,
+        setAutoTriggerState.type,
         resetPreferencesToDefault.typePrefix,
     ];
     const dataSourceTypes: string[] = [
@@ -43,12 +51,6 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
         addDataSourcePath.type,
         removeDataSourcePath.type,
     ];
-    // const dataSourceStateTypes: string[] = [
-    //     addFolder.type,
-    //     removeFolder.type,
-    //     removeFolderById.type,
-    //     resetFolders.type,
-    // ];
 
     const acc: Action = action as Action;
     switch (acc.type) {
@@ -97,12 +99,10 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     else if (dataSourceTypes.includes(acc.type)) {
         data = JSON.stringify(dataSourceConfig, null, 2);
         path = preferences.dataSourceConfigPath;
-        storeApi.dispatch(saveConfig());
-    } else {
-        return result;
-    }
+    } else return result;
 
-    persistHelper(data!, path!)
+    if (!data || !path) return result;
+    persistHelper(data, path)
         .then(() => {
             // TODO:
         })

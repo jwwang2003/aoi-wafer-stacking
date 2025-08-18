@@ -7,7 +7,11 @@ import type {
     SubstrateDefectXlsResult,
 
     Wafer
-} from '@/types/Wafer';
+} from '@/types/ipc';
+
+import { invokeSafe } from './index';
+
+// =============================================================================
 
 export async function invokeParseProductMappingXls(path: string): Promise<ProductMappingXlsResult> {
     // Result<HashMap<String, Vec<ProductMappingRecord>>, String>

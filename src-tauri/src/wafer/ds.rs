@@ -138,6 +138,15 @@ pub enum BinValue {
     Special(char), // e.g. 'S', '*', 'A', 'B'
 }
 
+impl std::fmt::Display for BinValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinValue::Number(n) => write!(f, "{n}"),
+            BinValue::Special(c) => write!(f, "{c}"),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BinCountEntry {
     pub bin: u32,
@@ -387,16 +396,15 @@ impl MapData {
         writeln!(out, "Yield            : {:.2}%", self.yield_percent).unwrap();
 
         // --- Raw ASCII map ---
-        writeln!(out, "\n# Raw ASCII Map #").unwrap();
+        writeln!(out, "").unwrap();
         for row in &self.map.raw {
             writeln!(out, "{}", row).unwrap();
         }
 
         // --- Parsed dies ---
-        writeln!(out, "\n# Parsed Dies #").unwrap();
-        for die in &self.map.dies {
-            writeln!(out, "Die (x={}, y={}) -> {:?}", die.x, die.y, die.bin).unwrap();
-        }
+        // for die in &self.map.dies {
+        //     writeln!(out, "Die (x={}, y={}) -> {:?}", die.x, die.y, die.bin).unwrap();
+        // }
 
         out
     }
@@ -571,16 +579,18 @@ impl BinMapData {
         writeln!(out, "Index Y      : {:.3}", self.index_y).unwrap();
 
         // --- Map ---
-        writeln!(out, "\n# Wafer Map #").unwrap();
+        writeln!(out, "\n[MAP]:").unwrap();
         for die in &self.map {
-            writeln!(out, "Die (x={}, y={}) -> {:?}", die.x, die.y, die.bin).unwrap();
+            writeln!(out, "{} {} {} {}", die.x, die.y, die.bin, die.reserved).unwrap();
         }
 
         // --- Bin counts ---
-        writeln!(out, "\n# Bin Counts #").unwrap();
+        writeln!(out, "\n").unwrap();
         for entry in &self.bins {
-            writeln!(out, "Bin {:>3} {}", entry.bin, entry.count).unwrap();
+            writeln!(out, "Bin{:>2} {:>3},", entry.bin, entry.count).unwrap();
         }
+
+        writeln!(out, "\n## END ##").unwrap();
 
         out
     }
@@ -825,6 +835,8 @@ impl HexMapData {
         out
     }
 
+    // TODO: Remember to use this
+    #[allow(dead_code)]
     pub fn from_lines(lines: &[String]) -> Result<Self, String> {
         // Trim empty lines once
         let mut it = lines.iter().map(|s| s.trim()).filter(|s| !s.is_empty());

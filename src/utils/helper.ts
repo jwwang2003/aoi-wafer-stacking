@@ -1,7 +1,8 @@
 import { appDataDir, resolve } from '@tauri-apps/api/path';
-import { PreferencesState } from '@/types/Preferences';
+import { PreferencesState } from '@/types/preferences';
 import { initialPreferencesState as initialState } from '@/constants/default';
-import { PREFERENCES_FILENAME, DATA_SOURCES_CONFIG_FILENAME } from '@/constants';
+import { PREFERENCES_FILENAME, DATA_SOURCE_CONFIG_FILENAME } from '@/constants';
+import { norm } from './fs';
 
 export function mergeDefinedKeys<T extends object>(
     base: T,
@@ -22,8 +23,8 @@ export function mergeDefinedKeys<T extends object>(
 
 export async function createDefaultPreferences(): Promise<PreferencesState> {
     const dir = await appDataDir();
-    const preferenceFilePath = await resolve(dir, PREFERENCES_FILENAME);
-    const dataSourceConfigPath = await resolve(dir, DATA_SOURCES_CONFIG_FILENAME);
+    const preferenceFilePath = norm(await resolve(dir, PREFERENCES_FILENAME));
+    const dataSourceConfigPath = norm(await resolve(dir, DATA_SOURCE_CONFIG_FILENAME));
 
     return {
         ...initialState,
@@ -33,26 +34,7 @@ export async function createDefaultPreferences(): Promise<PreferencesState> {
 }
 
 export function prepPreferenceWriteOut(pref: PreferencesState): string {
-    const { preferenceFilePath, dataSourceConfigPath, offsets } = pref;
-    return JSON.stringify(
-        {
-            preferenceFilePath,
-            dataSourceConfigPath,
-            offsets
-        },
-        null,
-        2
-    )
-}
-
-import { DataSourceConfigState } from '@/types/DataSource';
-import { initialDataSourceConfigState } from '@/constants/default';
-
-export async function createDefaultDataSourceConfig(): Promise<DataSourceConfigState> {
-    // const dir = await appDataDir();
-    // const configFilePath = await resolve(dir, DATA_SOURCES_CONFIG_FILENAME);
-
-    return {
-        ...initialDataSourceConfigState,
-    };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { status, error, stepper, ...persistable } = pref;
+    return JSON.stringify(persistable, null, 2)
 }

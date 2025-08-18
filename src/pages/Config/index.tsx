@@ -20,23 +20,21 @@ import { useAppSelector } from '@/hooks';
 
 import Preferences from './Preferences';
 import DataConfig from './DataConfig';
-import SubstrateConfig from './SubstrateConfig';
-import Preview from './Preview';
+// import SubstrateConfig from "./SubstrateConfig"; // 搬家了
+import MetadataIngest from './MetadataIngest';
 
 import { FlowStepper } from '@/components';
 import { DataSourceFlowSteps } from '@/flows';
-import { ConfigStepperState } from '@/types/Stepper';
 
-import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
-import { initDataSourceConfig } from '@/slices/dataSourceConfigSlice';
+import { initDataSourceConfig, scanDataSourceFolders } from '@/slices/dataSourceConfigSlice';
 import { initPreferences } from '@/slices/preferencesSlice';
+import ComingSoon from '../ComingSoon';
 import { initDataSourceState } from '@/slices/dataSourceStateSlice';
 
 const subpageOptions = [
     { label: '通用', value: 'preferences' },
     { label: '数据源', value: 'data' },
-    { label: '预览', value: 'db-preview' },
-    { label: '衬底', value: 'substrate' },
+    { label: '预览', value: 'metadata-ingest' },
 ];
 
 export default function ConfigPage() {
@@ -45,13 +43,11 @@ export default function ConfigPage() {
     const dispatch = useDispatch<AppDispatch>();
     const [mounted, setMounted] = useState<boolean>(false);
 
-    const { rootPath } = useAppSelector((s) => s.dataSourceConfig);
     const flowStep = useAppSelector((s) => s.preferences.stepper);
 
-    // figure out which segment is active
     const currentValue =
         subpageOptions.find((opt) => location.pathname.endsWith(opt.value))
-            ?.value ?? 'data';
+            ?.value ?? 'preferences';
 
     const handleChange = (value: string) => {
         navigate(`/config/${value}`);
@@ -59,30 +55,13 @@ export default function ConfigPage() {
 
     useEffect(() => {
         if (!mounted) setMounted(true);
-    }, []);
+    }, [mounted]);
 
-    // This runs automatically when flowStep or rootPath changes
-    useEffect(() => {
-        const doAction = async () => {
-            switch (flowStep) {
-                case ConfigStepperState.Metadata:
-                    await dispatch(fetchWaferMetadata());
-                    break;
-            }
-        };
-        if (mounted && rootPath) {
-            doAction();
-        }
-    }, [mounted, flowStep, rootPath]);
-
-    // “运行全部” handler: run both thunks, then bump the refreshKey
     const handleRunAll = async () => {
         await dispatch(initPreferences());
         await dispatch(initDataSourceConfig());
+        await dispatch(scanDataSourceFolders());
         await dispatch(initDataSourceState());
-        // await dispatch(fetchWaferMetadata());
-        // force remount of every subpage component
-        // setRefreshKey((k) => k + 1);
     };
 
     return (
@@ -100,10 +79,11 @@ export default function ConfigPage() {
                     </FlowStepper>
 
                     <Button variant="outline" onClick={handleRunAll}>
-                        运行全部
+                        {'RUN (1~3)'}
                     </Button>
 
                     <SegmentedControl
+                        autoFocus
                         data={subpageOptions}
                         value={currentValue}
                         onChange={handleChange}
@@ -113,9 +93,8 @@ export default function ConfigPage() {
                         <Route path="/" element={<Navigate to="preferences" replace />} />
                         <Route path="preferences" element={<Preferences />} />
                         <Route path="data" element={<DataConfig />} />
-                        <Route path="db-preview" element={<Preview />} />
-                        <Route path="substrate" element={<SubstrateConfig />} />
-                        <Route path="*" element={<div>未找到子页面</div>} />
+                        <Route path="metadata-ingest" element={<MetadataIngest />} />
+                        <Route path="*" element={<ComingSoon />} />
                     </Routes>
                 </Stack>
             </Container>

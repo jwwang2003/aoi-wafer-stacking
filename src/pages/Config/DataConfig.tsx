@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Group, Stack, Chip, Button, Title, Divider, Tooltip } from '@mantine/core';
-import { IconRefresh, IconScanEye } from '@tabler/icons-react';
+import { Group, Stack, Chip, Button, Title, Divider } from '@mantine/core';
+import { IconScanEye } from '@tabler/icons-react';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import {
@@ -19,12 +19,13 @@ import {
 import {
     RegexInput,
     PathPicker,
-    DataSourceDirectorySelectList,
-    LastSaved
+    DataSourceDirectorySelectList
 } from '@/components';
 
-import { DataSourceRegex, DataSourceType } from '@/types/DataSource';
+import { DataSourceRegex, DataSourceType } from '@/types/dataSource';
 import { resetFolders } from '@/slices/dataSourceStateSlice';
+import { AutoTriggers } from '@/types/preferences';
+import AutoTriggerSwitch from '@/components/AutoTriggerSwitch';
 
 export function SubfolderSelectorSection({ title, type }: { title: string, type: DataSourceType }) {
     return (
@@ -36,25 +37,14 @@ export function SubfolderSelectorSection({ title, type }: { title: string, type:
 }
 
 export default function DataConfigSubpage() {
-    // React-Redux stuff
     const [mounted, setMounted] = useState<boolean>(false);
+    // React-Redux stuff
     const dispatch = useAppDispatch();
 
-    const { rootPath, rootLastModified } = useAppSelector((state) => state.dataSourceConfig);
-    const { paths } = useAppSelector((state) => state.dataSourceConfig);
-    const regexLastModified = useAppSelector((state) => state.dataSourceConfig.regex.lastModified);
-    const pathsLastModified = useAppSelector((state) => state.dataSourceConfig.paths.lastModified);
-    const lastSaved = useAppSelector((state) => state.dataSourceConfig.lastSaved);
+    const autoTrigger = useAppSelector(s => s.preferences.autoTriggers.folderDetection);
 
-    // Dirty flags
-    // Prompt the user to save the sections that are dirty before allowing them
-    // to proceed to the next stage or step.
-    const rootDirty = rootLastModified > lastSaved;
-    const regexDirty = regexLastModified > lastSaved;
-    const pathsDirty = pathsLastModified > lastSaved;
-
-    // Regex patterns from Redux
-    const regexPatterns = useAppSelector((state) => state.dataSourceConfig.regex);
+    const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
+    const { rootPath, regex: regexPatterns } = dataSourceConfig;
 
     // Redux edit handlers
     const handleRegexChange = (newPattern: string, type: keyof DataSourceRegex) => {
@@ -72,17 +62,13 @@ export default function DataConfigSubpage() {
     // NOTE: INIT
     // =========================================================================
     useEffect(() => {
-        if (!mounted) {
-            setMounted(true);
-        }
+        if (!mounted) setMounted(true);
     }, []);
 
     // =========================================================================
     // NOTE: METHODS
     // =========================================================================
-    const handleAutoFolderRecognition = async () => {
-        await dispatch(scanDataSourceFolders());
-    };
+    const handleAutoFolderRecognition = async () => await dispatch(scanDataSourceFolders());
 
     const handleRootFolderChange = async (u: string) => {
         await dispatch(removeAllDataSourcePaths());
@@ -95,110 +81,69 @@ export default function DataConfigSubpage() {
     // =========================================================================
     useEffect(() => {
         const init = async () => {
-            await dispatch(scanDataSourceFolders());
+            if (autoTrigger) {
+                await dispatch(scanDataSourceFolders());
+            }
             await dispatch(revalidateDataSource());
         }
-        if (mounted) {
-            init();
-        }
+        if (mounted) init();
     }, [mounted]);
-
-    // useEffect(() => {
-    //     const init = async () => {
-    //         await dispatch(scanDataSourceFolders());
-    //     }
-    //     if (mounted) {
-    //         init();
-    //     }
-    // }, [paths]);
 
     return (
         <>
             {/* Section: Root Directory */}
-            <Stack align='stretch' gap='md'>
+            <Stack align="stretch" gap="md">
                 <Title order={2}>根目录选择</Title>
-                <PathPicker
-                    label='根目录'
-                    value={rootPath}
-                    onChange={handleRootFolderChange}
-                />
-                <LastSaved
-                    dirty={rootDirty}
-                    lastModified={rootLastModified}
-                    lastSaved={lastSaved}
-                // onSave={persistDataSourceConfig}
-                />
+                <PathPicker label="根目录" value={rootPath} onChange={handleRootFolderChange} />
 
-                <Group justify='flex-start'>
-                    <Chip.Group multiple value={rootFolderStageOptions} onChange={setRootFolderStageOptions}>
+                <Group justify="flex-start">
+                    <Chip.Group
+                        multiple
+                        value={rootFolderStageOptions}
+                        onChange={setRootFolderStageOptions}
+                    >
                         <Group>
-                            <Chip value='displaySubFolderRegex'>显示子目录正则表达式</Chip>
-                            {/* <Chip value='auto'>自动识别子目录</Chip> */}
+                            <Chip value="displaySubFolderRegex">显示子目录正则表达式</Chip>
+                            {/* <Chip value="auto">自动识别子目录</Chip> */}
                         </Group>
                     </Chip.Group>
-                    <Divider orientation='vertical' />
-                    <Button leftSection={<IconScanEye size={18} />} onClick={handleAutoFolderRecognition}>
-                        触发自动识别
+                    <Divider orientation="vertical" />
+                    <Button
+                        leftSection={<IconScanEye size={18} />}
+                        onClick={handleAutoFolderRecognition}
+                    >
+                        触发子目录识别
                     </Button>
+                    <AutoTriggerSwitch type={AutoTriggers.folderDetection} />
                 </Group>
             </Stack>
 
             {/* Section: Regex expressions */}
             {rootFolderStageOptions.includes('displaySubFolderRegex') && (
-                <Stack align='stretch' gap='md'>
+                <Stack align="stretch" gap="md">
                     <Title order={3}>子目录自动识别配置</Title>
-                    <Stack align='stretch' gap='md'>
-                        {regexConfig.map(({ label, key }) => (
+                    <Stack align="stretch" gap="md">
+                        {regexConfig.map(({ label, key }) =>
                             <RegexInput
                                 key={key}
                                 label={label}
                                 defaultRegex={regexPatterns[key]}
                                 onValidChange={(r) => handleRegexChange(r, key)}
                             />
-                        ))}
+                        )}
                     </Stack>
-                    <LastSaved
-                        dirty={regexDirty}
-                        lastModified={regexLastModified}
-                        lastSaved={lastSaved}
-                    // onSave={persistDataSourceConfig}
-                    />
                 </Stack>
             )}
 
-            <Divider my='sm' />
+            <Divider my="sm" />
 
             {/* Section: Data source subdirectories */}
-            <Stack align='stretch' gap='md'>
+            <Stack align="stretch" gap="md">
                 <Title order={2}>子目录选择</Title>
-
-                <Tooltip label='刷新' withArrow>
-                    <Button
-                        variant='light'
-                        color='blue'
-                        leftSection={<IconRefresh size={16} />}
-                        onClick={() => { }}
-                    >
-                        刷新
-                    </Button>
-                </Tooltip>
-
-                {dataSourceFlow.map(({ type, name }) => {
-                    return (
-                        <SubfolderSelectorSection
-                            key={type}
-                            type={type}
-                            title={name}
-                        />
-                    );
-                })}
+                {dataSourceFlow.map(({ type, name }) =>
+                    <SubfolderSelectorSection key={type} type={type} title={name} />
+                )}
             </Stack>
-            <LastSaved
-                dirty={pathsDirty}
-                lastModified={pathsLastModified}
-                lastSaved={lastSaved}
-            // onSave={persistDataSourceConfig}
-            />
 
             {/* Section: Data source stats */}
             {/* NOTE: moved to another page */}

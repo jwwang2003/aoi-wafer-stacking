@@ -1,17 +1,24 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { v4 as uuidv4 } from 'uuid';
-
-import type { DataSourceType, Folder, FolderGroupsState, FolderResult } from '@/types/DataSource';
-
-import { initialDataSourceState as initialState } from '@/constants/default';
-import { invoke } from '@tauri-apps/api/core';
-import { RootState } from '@/store';
 import { resolve } from '@tauri-apps/api/path';
+
+// IPC
+import { invokeReadFileStatBatch } from '@/api/tauri/fs';
+
+// UTILS
+import { norm } from '@/utils/fs';
+
+// STATE
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { RootState } from '@/store';
+
+import type { DataSourceType, Folder, FolderGroupsState } from '@/types/dataSource';
+import type { DirResult } from '@/types/ipc';
+import { initialDataSourceState as initialState } from '@/constants/default';
 
 // DEVELOPER NOTES:
 // April 10, 2025
-// - assuming that there won't be over 1-10K number of sub folders within the root
-//      data folder, using Tauri's built-in resolve SHOULD not pose any significant
+// - assuming that there won"t be over 1-10K number of sub folders within the root
+//      data folder, using Tauri"s built-in resolve SHOULD not pose any significant
 //      performance bottlenecks
 
 // Specifically for the folder type
@@ -34,14 +41,14 @@ export const initDataSourceState = createAsyncThunk<
     const result: FolderGroupsState = { ...initialState };
 
     for (const [type] of Object.entries(paths)) {
-        // Filter out the 'lastModified' attribute that DNE in the type
+        // Filter out the "lastModified" attribute that DNE in the type
         if (type === 'lastModified') continue;
         const typed = type as DataSourceType;
 
         const relativePaths = paths[typed];
         const resolved: Folder[] = await Promise.all(
             relativePaths.map(async (relPath): Promise<Folder> => {
-                const absPath = await resolve(rootPath, relPath);
+                const absPath = norm(await resolve(rootPath, relPath));
                 return {
                     id: uuidv4(),
                     path: absPath,
@@ -72,11 +79,9 @@ export const refreshFolderStatuses = createAsyncThunk(
                 const typed = type as DataSourceType;
 
                 const folders: Folder[] = value;
-                const responses: FolderResult[] = await invoke('get_file_batch_stat', {
-                    folders: folders.map(f => ({ path: f.path })),
-                });
+                const responses: DirResult[] = await invokeReadFileStatBatch(folders.map((f) => f.path));
 
-                const pathToResult = new Map(responses.map(r => [r.path, r]));
+                const pathToResult = new Map(responses.map(r => [norm(r.path), r]));
 
                 updatedGroups[typed] = sortFoldersByName(
                     folders.map((folder) => {
@@ -90,7 +95,7 @@ export const refreshFolderStatuses = createAsyncThunk(
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
-            console.error('An error occured while refreshing data source folder status:', err);
+            console.error('An error occurred while refreshing data source folder status:', err);
         }
 
         return updatedGroups;
@@ -110,6 +115,7 @@ const dataSourceStateSlice = createSlice({
         addFolder: (state, action: PayloadAction<{ type: DataSourceType; path: string }>) => {
             const { type, path } = action.payload;
             const exists = state[type].some((f) => f.path === path);
+            console.log(type, path);
             if (!exists) {
                 state[type].push({
                     id: uuidv4(),           // they also have an arbitrary ID value
@@ -119,6 +125,7 @@ const dataSourceStateSlice = createSlice({
                 });
             }
             state[type] = sortFoldersByName(state[type]);
+            console.log(state[type]);
         },
         /**
          * Removes folder by its path (string match).

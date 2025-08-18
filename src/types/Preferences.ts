@@ -1,23 +1,19 @@
-import { ConfigStepperState } from './Stepper';
+import { ConfigStepperState } from './stepper';
 
 export interface PreferencesState {
     preferenceFilePath: string;             // path to preferences.json (read-only)
     dataSourceConfigPath: string;          // path to data_sources.json
-    offsets: OffsetConfig;
-    
+
+    autoTriggers: { [K in AutoTriggers]: boolean; }
+
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState;
     status: 'idle' | 'loading' | 'failed';
     error: string | null;
 }
 
-export interface OffsetConfig {
-    xOffset: number;
-    yOffset: number;
-    leftOffset: number;
-    rightOffset: number;
-    topOffset: number;
-    bottomOffset: number;
-    scale: number;
-    warp: number;
+export enum AutoTriggers {
+    folderDetection = 'folderDetection',
+    search = 'search',
+    ingest = 'ingest'
 }

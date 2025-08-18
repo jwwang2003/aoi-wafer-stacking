@@ -1,5 +1,5 @@
-import { DataSourceConfigState, DataSourcePaths, FolderGroupsState } from '@/types/DataSource';
-import { PreferencesState } from '@/types/Preferences';
+import { DataSourceConfigState, DataSourcePaths, FolderGroupsState } from '@/types/dataSource';
+import { PreferencesState } from '@/types/preferences';
 import { exists } from '@tauri-apps/plugin-fs';
 
 export function isValidPreferences(input: unknown): input is PreferencesState {
@@ -20,8 +20,6 @@ export function isValidDataSourceConfig(input: unknown): input is DataSourceConf
 
     return (
         typeof cfg.rootPath === 'string' &&
-        typeof cfg.rootLastModified === 'string' &&
-        typeof cfg.lastSaved === 'string' &&
         typeof cfg.paths === 'object' &&
         cfg.paths !== null &&
         typeof cfg.regex === 'object' &&

@@ -1,5 +1,4 @@
-// src/store/slices/consoleLogSlice.ts
-import { Log } from '@/types/Log';
+import { Log } from '@/types/log';
 import { initialLogState as initialState } from '@/constants/default';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 

@@ -1,29 +1,27 @@
-import { useState, useEffect } from 'react';
-import {
-    Routes,
-    Route,
-    useLocation,
-    Link,
-} from 'react-router-dom';
-import {
-    Box,
-    Flex,
-    Button,
-    Tooltip
-} from '@mantine/core';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ToastContainer, toast } from 'react-toastify';
-
-import { menuItems } from '@/constants/MenuItems';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Routes, Route, useLocation, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from './store';
-import { initialize } from './utils/init';
-import { initPreferences } from './slices/preferencesSlice';
-import { DataSourceConfigState, FolderGroups } from './types/DataSource';
-import { initDataSourceConfig } from './slices/dataSourceConfigSlice';
-import { initDataSourceState, refreshFolderStatuses } from './slices/dataSourceStateSlice';
-import { initConsoleInterceptor } from './utils/log';
-import { PreferencesState } from './types/Preferences';
+
+import { Box, Flex, Button, Tooltip } from '@mantine/core';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ToastContainer } from 'react-toastify';
+
+// Components
+import { infoToast } from '@/components/Toaster';
+// UTILS
+import { initialize } from '@/utils/init';
+import { initConsoleInterceptor } from '@/utils/log';
+import { warmIndexCaches } from '@/utils/fs';
+
+import { initPreferences } from '@/slices/preferencesSlice';
+import { initDataSourceConfig } from '@/slices/dataSourceConfigSlice';
+import { initDataSourceState, refreshFolderStatuses } from '@/slices/dataSourceStateSlice';
+
+import { DataSourceConfigState, FolderGroups } from '@/types/dataSource';
+import { PreferencesState } from '@/types/preferences';
+
+import { menuItems } from '@/constants/MenuItems';
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -58,21 +56,21 @@ export function AnimatedRoutes() {
 }
 
 export default function App() {
+    const [mounted, setMounted] = useState<boolean>(false);
     const [hovered, setHovered] = useState<string | null>(null);
     const location = useLocation();
     const dispatch = useDispatch<AppDispatch>();
 
     // A welcome message whenever the UI is loaded!
     useEffect(() => {
-        toast.info('欢迎使用！', {
-            position: 'top-right',
-            autoClose: 7500,            // wait for 7.5 seconds
-            hideProgressBar: true,
-            closeOnClick: true,
-            pauseOnHover: false,
-            draggable: false,
-        });
-        console.log('Hello, world!');
+        if (mounted) {
+            infoToast({ title: '欢迎使用' });
+            console.log('Hello, world!');
+        }
+
+        if (!mounted) {
+            setMounted(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -80,22 +78,25 @@ export default function App() {
             try {
                 await initConsoleInterceptor();
 
-                console.info('Initializing...');
+                console.log('Initializing...');
                 console.time('initialize');
                 // Initializes the configuration folder structure & initializes the database
                 await initialize();
                 const preferences: PreferencesState = await dispatch(initPreferences()).unwrap();
-                console.info('%cInitialized preferences!', 'color: orange', preferences);
+                console.log('%cInitialized preferences!', 'color: orange', preferences);
                 const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig()).unwrap();
-                console.info('%cInitialized dataSourceConfig!', 'color: orange', dataSourceConfig);
+                console.log('%cInitialized dataSourceConfig!', 'color: orange', dataSourceConfig);
                 const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
-                console.info('%cInitialized dataSourceState!', 'color: orange', dataSourceState);
+                console.log('%cInitialized dataSourceState!', 'color: orange', dataSourceState);
 
                 console.debug('%cLoaded preferences:', 'color: lime; background: black', JSON.stringify(preferences, null, 2));
                 console.debug('%cLoaded dataSourceConfig:', 'color: lime; background: black', JSON.stringify(dataSourceConfig, null, 2));
 
-                console.info('%cInitialization complete!', 'color: blue');
+                console.log('%cInitialization complete!', 'color: blue');
                 console.timeEnd('initialize');
+
+                // Warm-up the index caches for folders and files
+                await warmIndexCaches();
 
                 // Constantly check for a change in the folder status of the root folder
                 // TODO: Change this pooling method into a event based method!
@@ -124,6 +125,7 @@ export default function App() {
         <div style={{ position: 'relative', height: '100vh', display: 'flex', overflow: 'hidden' }}>
             {/* Sidebar */}
             <Box
+                tabIndex={-1}
                 p="md"
                 style={{
                     width: 60,
@@ -135,47 +137,95 @@ export default function App() {
                 }}
             >
                 {/* Top Buttons */}
-                <SidebarButtonGroup
-                    items={menuItems.slice(0, 5)}
-                    hovered={hovered}
-                    setHovered={setHovered}
-                    currentPath={location.pathname}
-                />
-
+                <SidebarButtonGroup items={menuItems.slice(0, 5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
                 {/* Bottom Buttons */}
-                <SidebarButtonGroup
-                    items={menuItems.slice(5)}
-                    hovered={hovered}
-                    setHovered={setHovered}
-                    currentPath={location.pathname}
-                />
+                <SidebarButtonGroup items={menuItems.slice(5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
             </Box>
-
             {/* Main content */}
             <AnimatedRoutes />
             <ToastContainer />
         </div>
     );
 }
-function SidebarButtonGroup({
-    items,
-    hovered,
-    setHovered,
-    currentPath,
-}: {
-    items: typeof menuItems;
+
+type Item = { icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; label: string; path: string };
+
+interface SidebarButtonGroupInterface {
+    items: Item[];
     hovered: string | null;
     setHovered: (path: string | null) => void;
     currentPath: string;
-}) {
+}
+
+function SidebarButtonGroup({ items, hovered, setHovered, currentPath }: SidebarButtonGroupInterface) {
+    // index that is currently tabbable
+    const activeIndexFromRoute = useMemo(() => {
+        const idx = items.findIndex(({ path }) =>
+            path === '/'
+                ? currentPath === '/'
+                : currentPath === path || currentPath.startsWith(path + '/')
+        );
+        return idx >= 0 ? idx : 0;
+    }, [items, currentPath]);
+
+    const [focusIndex, setFocusIndex] = useState<number>(activeIndexFromRoute);
+
+    // keep roving focus in sync with route changes
+    useEffect(() => setFocusIndex(activeIndexFromRoute), [activeIndexFromRoute]);
+
+    // refs to focus the underlying buttons/anchors
+    const refs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
+    refs.current = items.map((_, i) => refs.current[i] ?? null);
+
+    const moveFocus = (next: number) => {
+        const clamped = Math.max(0, Math.min(items.length - 1, next));
+        setFocusIndex(clamped);
+        const el = refs.current[clamped];
+        if (el) el.focus();
+    };
+
+    const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        // ignore when modifier keys held
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+        switch (e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                moveFocus(focusIndex - 1);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                moveFocus(focusIndex + 1);
+                break;
+            case 'Home':
+                e.preventDefault();
+                moveFocus(0);
+                break;
+            case 'End':
+                e.preventDefault();
+                moveFocus(items.length - 1);
+                break;
+            default:
+                break;
+        }
+    };
+
     return (
-        <Flex direction="column" align="center" gap="md">
-            {items.map(({ icon: Icon, label, path }) => {
+        <Flex
+            direction="column"
+            align="center"
+            gap="md"
+            role="toolbar"
+            aria-label="Sidebar navigation"
+            aria-orientation="vertical"
+            onKeyDown={onKeyDown}
+        >
+            {items.map(({ icon: Icon, label, path }, i) => {
                 const isHovered = hovered === path;
                 const isActive =
                     path === '/'
                         ? currentPath === '/'
-                        : currentPath.startsWith(path + '/') || currentPath === path;
+                        : currentPath === path || currentPath.startsWith(path + '/');
 
                 return (
                     <Tooltip key={path} label={label} position="right">
@@ -183,6 +233,13 @@ function SidebarButtonGroup({
                             component={Link}
                             to={path}
                             aria-label={label}
+                            // announce current page to ATs when applicable
+                            aria-current={isActive ? 'page' : undefined}
+                            // roving tabindex: only one is 0, others -1
+                            tabIndex={i === focusIndex ? 0 : -1}
+                            // update roving index if the user clicks or tabs into an item
+                            onFocus={() => setFocusIndex(i)}
+                            ref={(el) => { refs.current[i] = el; }}
                             variant={isActive ? 'filled' : 'outline'}
                             onMouseEnter={() => setHovered(path)}
                             onMouseLeave={() => setHovered(null)}

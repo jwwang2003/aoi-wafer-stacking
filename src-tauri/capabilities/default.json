@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "fs:default",
     "fs:read-all",
@@ -14,13 +16,13 @@
     "fs:read-dirs",
     {
       "identifier": "fs:scope",
-      "allow": ["**/*"]
+      "allow": [
+        "**/*"
+      ]
     },
-
     "core:default",
     "opener:default",
     "dialog:default",
-    
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",

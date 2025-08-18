@@ -15,7 +15,7 @@ import { RootState } from '@/store';
 import { Message } from 'console-feed/lib/definitions/Component';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
-import { Log } from '@/types/Log';
+import { Log } from '@/types/log';
 
 type Methods =
     | 'log'
@@ -77,9 +77,9 @@ export default function LoggingPage() {
 
             if (destPath) {
                 await writeTextFile(destPath, content);
-                console.info('Log file saved to:', destPath);
+                console.log('Log file saved to:', destPath);
             } else {
-                console.info('Save cancelled by user');
+                console.log('Save cancelled by user');
             }
         } catch (err) {
             console.error('Error saving log file:', err);
@@ -93,7 +93,7 @@ export default function LoggingPage() {
 
             <Group mb="xs" justify="space-between" wrap="nowrap">
                 {/* Left: Filters + Label */}
-                <Group align='center'>
+                <Group align="center">
                     <Text size="xs" c="dimmed" fw={500}>
                         筛选条件
                     </Text>
