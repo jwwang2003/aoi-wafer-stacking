@@ -51,39 +51,15 @@ export async function getAllOemOffsets(
 /** Idempotent upsert by PK (oem_product_id). */
 export async function upsertOemOffset(row: OemProductOffset): Promise<boolean> {
     const db = await getDb();
-    await db.execute(
-        `INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
-    VALUES (?, ?, ?)
+    await db.execute(`
+INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
+VALUES (?, ?, ?)
 ON CONFLICT(oem_product_id) DO UPDATE SET
     x_offset = excluded.x_offset,
     y_offset = excluded.y_offset`,
         [row.oem_product_id, row.x_offset, row.y_offset]
     );
     return true;
-}
-
-/** Bulk upsert inside a transaction. Returns count written. */
-export async function upsertManyOemOffsets(rows: OemProductOffset[]): Promise<number> {
-    if (!rows.length) return 0;
-    const db = await getDb();
-    await db.execute('BEGIN');
-    try {
-        for (const r of rows) {
-            await db.execute(
-                `INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
-    VALUES (?, ?, ?)
-ON CONFLICT(oem_product_id) DO UPDATE SET
-    x_offset = excluded.x_offset,
-    y_offset = excluded.y_offset`,
-                [r.oem_product_id, r.x_offset, r.y_offset]
-            );
-        }
-        await db.execute('COMMIT');
-        return rows.length;
-    } catch (e) {
-        await db.execute('ROLLBACK');
-        throw e;
-    }
 }
 
 /** Delete one offset by id. Returns rows deleted (0/1). */

@@ -1,12 +1,10 @@
-import { getDb, vacuum } from '@/db';
+import { getDb, MAX_PARAMS, vacuum, withRetry } from '@/db';
 import { WaferMapRow } from './types'; // Ensure this includes "idx?: number"
 
 const TABLE = 'wafer_maps';
 
 /**
  * NOTE: DB should enforce: CREATE UNIQUE INDEX IF NOT EXISTS uq_wafer_maps_file_path ON wafer_maps(file_path);
- *
- * Recommended WaferMapRow shape in ./types:
  *
  * export interface WaferMapRow {
  *   idx?: number;              // autoincrement PK
@@ -24,9 +22,9 @@ const TABLE = 'wafer_maps';
 /** Get one row by idx (PK). */
 export async function getWaferMapByIdx(idx: number): Promise<WaferMapRow | null> {
     const db = await getDb();
-    const rows = await db.select<WaferMapRow[]>(
-        `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM ${TABLE}
+    const rows = await db.select<WaferMapRow[]>(`
+SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
+FROM ${TABLE}
 WHERE idx = ?`,
         [idx]
     );
@@ -40,9 +38,9 @@ export async function getWaferMapsByTriple(
     wafer_id: number
 ): Promise<WaferMapRow[]> {
     const db = await getDb();
-    return db.select<WaferMapRow[]>(
-        `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM ${TABLE}
+    return db.select<WaferMapRow[]>(`
+SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
+FROM ${TABLE}
 WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
 ORDER BY COALESCE(time, 0) DESC, idx DESC`,
         [product_id, batch_id, wafer_id]
@@ -56,9 +54,9 @@ export async function getLatestWaferMapByTriple(
     wafer_id: number
 ): Promise<WaferMapRow | null> {
     const db = await getDb();
-    const rows = await db.select<WaferMapRow[]>(
-        `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM ${TABLE}
+    const rows = await db.select<WaferMapRow[]>(`
+SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
+FROM ${TABLE}
 WHERE product_id = ? AND batch_id = ? AND wafer_id = ?
 ORDER BY COALESCE(time, 0) DESC, idx DESC
 LIMIT 1`,
@@ -73,9 +71,9 @@ export const getWaferMap = getLatestWaferMapByTriple;
 /** Get exactly one row by its unique file_path. */
 export async function getWaferMapByFilePath(file_path: string): Promise<WaferMapRow | null> {
     const db = await getDb();
-    const rows = await db.select<WaferMapRow[]>(
-        `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM ${TABLE}
+    const rows = await db.select<WaferMapRow[]>(`
+SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
+FROM ${TABLE}
 WHERE file_path = ?`,
         [file_path]
     );
@@ -94,9 +92,9 @@ export async function getAllWaferMaps(
     offset = 0
 ): Promise<WaferMapRow[]> {
     const db = await getDb();
-    return db.select<WaferMapRow[]>(
-        `SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
-    FROM ${TABLE}
+    return db.select<WaferMapRow[]>(`
+SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
+FROM ${TABLE}
 ORDER BY product_id, batch_id, wafer_id, COALESCE(time, 0) DESC, idx DESC
 LIMIT ? OFFSET ?`,
         [limit, offset]
@@ -106,8 +104,8 @@ LIMIT ? OFFSET ?`,
 /** Insert a new row (no idx). Will throw on duplicate file_path. Returns the new idx. */
 export async function insertWaferMap(row: Omit<WaferMapRow, 'idx'>): Promise<number> {
     const db = await getDb();
-    await db.execute(
-        `INSERT INTO ${TABLE}
+    await db.execute(`
+INSERT INTO ${TABLE}
     (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -152,8 +150,8 @@ export async function upsertWaferMap(row: WaferMapRow): Promise<number> {
     const db = await getDb();
 
     if (row.idx != null) {
-        await db.execute(
-            `UPDATE ${TABLE}
+        await db.execute(`
+UPDATE ${TABLE}
 SET product_id = ?,
     batch_id = ?,
     wafer_id = ?,
@@ -205,14 +203,43 @@ WHERE idx = ?`,
 export async function upsertManyWaferMaps(
     rows: Array<Omit<WaferMapRow, 'idx'> | WaferMapRow>
 ): Promise<number> {
-    if (!rows.length) return 0;
+    if (!rows?.length) return 0;
     const db = await getDb();
-    let written = 0;
 
-    await db.execute('BEGIN');
-    try {
-        for (const r of rows) {
-            await db.execute(UPSERT_ON_FILE_SQL, [
+    // Last-wins de-dupe by file_path (UPSERT key)
+    const byFile = new Map<string, Omit<WaferMapRow, 'idx'> | WaferMapRow>();
+    for (const r of rows) if (r?.file_path) byFile.set(r.file_path, r);
+    const unique = Array.from(byFile.values());
+    if (!unique.length) return 0;
+
+    // params per row:
+    // (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
+    const PARAMS_PER_ROW = 8;
+    const LIMIT = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
+    const ROWS_PER_CHUNK = Math.max(1, Math.floor(LIMIT / PARAMS_PER_ROW));
+
+    let written = 0;
+    for (let i = 0; i < unique.length; i += ROWS_PER_CHUNK) {
+        const batch = unique.slice(i, i + ROWS_PER_CHUNK);
+
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const sql = `
+INSERT INTO ${TABLE}
+    (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
+VALUES ${placeholders}
+ON CONFLICT(file_path) DO UPDATE SET
+    product_id   = excluded.product_id,
+    batch_id     = excluded.batch_id,
+    wafer_id     = excluded.wafer_id,
+    stage        = excluded.stage,
+    sub_stage    = excluded.sub_stage,
+    retest_count = excluded.retest_count,
+    time         = excluded.time
+    `;
+
+        const params: Array<string | number | null> = [];
+        for (const r of batch) {
+            params.push(
                 r.product_id,
                 r.batch_id,
                 r.wafer_id,
@@ -220,47 +247,63 @@ export async function upsertManyWaferMaps(
                 r.sub_stage ?? null,
                 r.retest_count ?? 0,
                 r.time ?? null,
-                r.file_path,
-            ]);
-            written += 1;
+                r.file_path
+            );
         }
-        await db.execute('COMMIT');
-        return written;
-    } catch (e) {
-        await db.execute('ROLLBACK');
-        throw e;
+
+        // No explicit BEGIN/COMMIT — each execute is a short implicit transaction
+        await withRetry(() => db.execute(sql, params));
+        written += batch.length;
     }
+
+    return written;
 }
 
 /** Bulk insert (no upsert) — use for brand-new files only. */
-export async function insertManyWaferMaps(rows: Array<Omit<WaferMapRow, 'idx'>>): Promise<number> {
-    if (!rows.length) return 0;
+export async function insertManyWaferMaps(
+    rows: Array<Omit<WaferMapRow, 'idx'>>
+): Promise<number> {
+    if (!rows?.length) return 0;
+
     const db = await getDb();
-    await db.execute('BEGIN');
-    try {
-        for (const r of rows) {
-            await db.execute(
-                `INSERT INTO ${TABLE}
+
+    // 8 params per row
+    const PARAMS_PER_ROW = 8;
+    const LIMIT = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
+    const ROWS_PER_CHUNK = Math.max(1, Math.floor(LIMIT / PARAMS_PER_ROW));
+
+    let inserted = 0;
+
+    for (let i = 0; i < rows.length; i += ROWS_PER_CHUNK) {
+        const batch = rows.slice(i, i + ROWS_PER_CHUNK);
+
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const sql = `
+INSERT INTO ${TABLE}
     (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    r.product_id,
-                    r.batch_id,
-                    r.wafer_id,
-                    r.stage,
-                    r.sub_stage ?? null,
-                    r.retest_count ?? 0,
-                    r.time ?? null,
-                    r.file_path,
-                ]
+VALUES ${placeholders}
+    `;
+
+        const params: Array<string | number | null> = [];
+        for (const r of batch) {
+            params.push(
+                r.product_id,
+                r.batch_id,
+                r.wafer_id,
+                r.stage,
+                r.sub_stage ?? null,
+                r.retest_count ?? 0,
+                r.time ?? null,
+                r.file_path
             );
         }
-        await db.execute('COMMIT');
-        return rows.length;
-    } catch (e) {
-        await db.execute('ROLLBACK');
-        throw e;
+
+        // No explicit BEGIN/COMMIT — each execute is a short implicit transaction
+        await withRetry(() => db.execute(sql, params));
+        inserted += batch.length;
     }
+
+    return inserted;
 }
 
 /** Delete one row by idx. Returns rows deleted (0/1). */
@@ -333,7 +376,7 @@ export async function deleteManyWaferMapsByPK(
 /** Delete all rows from wafer_maps. Optionally VACUUM afterward. */
 export async function deleteAllWaferMaps(vacuumAfter = false): Promise<number> {
     const db = await getDb();
-    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    const res = await db.execute(`DELETE FROM ${TABLE};`);
     if (vacuumAfter) await vacuum();
     return (res as any)?.rowsAffected ?? 0;
 }

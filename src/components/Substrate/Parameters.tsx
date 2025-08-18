@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
@@ -11,12 +11,12 @@ import {
     Tooltip,
     Loader,
     NumberInput,
-} from "@mantine/core";
-import { IconDatabase, IconDeviceFloppy, IconEraser, IconTrash } from "@tabler/icons-react";
-import { errorToast } from "@/components/Toaster";
+} from '@mantine/core';
+import { IconDatabase, IconDeviceFloppy, IconEraser, IconTrash } from '@tabler/icons-react';
+import { errorToast } from '@/components/Toaster';
 
 // Offsets (existing)
-import { getOemOffset, upsertOemOffset, deleteOemOffset } from "@/db/offsets";
+import { getOemOffset, upsertOemOffset, deleteOemOffset } from '@/db/offsets';
 
 // Die sizes (new)
 import {
@@ -24,7 +24,7 @@ import {
     upsertProductSize,
     deleteProductSize,
     type ProductSize,
-} from "@/db/productSize";
+} from '@/db/productSize';
 
 type ParametersProps = {
     oemProductId: string;
@@ -92,7 +92,7 @@ export default function Parameters({
                     setDbHasOffset(false);
                 }
             } catch (e) {
-                errorToast({ title: "读取失败", message: `加载偏移失败: ${String(e)}` });
+                errorToast({ title: '读取失败', message: `加载偏移失败: ${String(e)}` });
             } finally {
                 if (!cancelled) setLoadingOffset(false);
             }
@@ -121,7 +121,7 @@ export default function Parameters({
             lastSavedOffsetRef.current = { x: cx, y: cy };
             setDbHasOffset(true);
         } catch (e) {
-            errorToast({ title: "保存失败", message: `写入偏移失败: ${String(e)}` });
+            errorToast({ title: '保存失败', message: `写入偏移失败: ${String(e)}` });
         } finally {
             setSavingOffset(false);
         }
@@ -142,7 +142,7 @@ export default function Parameters({
             setYOffset(0);
             lastSavedOffsetRef.current = { x: 0, y: 0 };
         } catch (e) {
-            errorToast({ title: "删除失败", message: `删除偏移记录失败: ${String(e)}` });
+            errorToast({ title: '删除失败', message: `删除偏移记录失败: ${String(e)}` });
         } finally {
             setSavingOffset(false);
         }
@@ -155,11 +155,11 @@ export default function Parameters({
 
     // Offset inputs
     const onXOffInputChange = (val: string | number) => {
-        const n = typeof val === "number" ? val : parseFloat(val);
+        const n = typeof val === 'number' ? val : parseFloat(val);
         if (Number.isFinite(n)) setXOffset(n);
     };
     const onYOffInputChange = (val: string | number) => {
-        const n = typeof val === "number" ? val : parseFloat(val);
+        const n = typeof val === 'number' ? val : parseFloat(val);
         if (Number.isFinite(n)) setYOffset(n);
     };
     const onXOffBlur = () => {
@@ -173,10 +173,10 @@ export default function Parameters({
         persistOffsets(xOffset, ny);
     };
     const onXOffKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-        if (e.key === "Enter") onXOffBlur();
+        if (e.key === 'Enter') onXOffBlur();
     };
     const onYOffKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-        if (e.key === "Enter") onYOffBlur();
+        if (e.key === 'Enter') onYOffBlur();
     };
 
     // --------------------------
@@ -214,7 +214,7 @@ export default function Parameters({
                     setDbHasSize(false);
                 }
             } catch (e) {
-                errorToast({ title: "读取失败", message: `加载晶粒尺寸失败: ${String(e)}` });
+                errorToast({ title: '读取失败', message: `加载晶粒尺寸失败: ${String(e)}` });
             } finally {
                 if (!cancelled) setLoadingSize(false);
             }
@@ -243,7 +243,7 @@ export default function Parameters({
             lastSavedSizeRef.current = { dieX: cx, dieY: cy };
             setDbHasSize(true);
         } catch (e) {
-            errorToast({ title: "保存失败", message: `写入晶粒尺寸失败: ${String(e)}` });
+            errorToast({ title: '保存失败', message: `写入晶粒尺寸失败: ${String(e)}` });
         } finally {
             setSavingSize(false);
         }
@@ -264,7 +264,7 @@ export default function Parameters({
             setDieY(0);
             lastSavedSizeRef.current = { dieX: 0, dieY: 0 };
         } catch (e) {
-            errorToast({ title: "删除失败", message: `删除晶粒尺寸记录失败: ${String(e)}` });
+            errorToast({ title: '删除失败', message: `删除晶粒尺寸记录失败: ${String(e)}` });
         } finally {
             setSavingSize(false);
         }
@@ -274,11 +274,11 @@ export default function Parameters({
 
     // Size inputs
     const onDieXChange = (val: string | number) => {
-        const n = typeof val === "number" ? val : parseFloat(val);
+        const n = typeof val === 'number' ? val : parseFloat(val);
         if (Number.isFinite(n)) setDieX(n);
     };
     const onDieYChange = (val: string | number) => {
-        const n = typeof val === "number" ? val : parseFloat(val);
+        const n = typeof val === 'number' ? val : parseFloat(val);
         if (Number.isFinite(n)) setDieY(n);
     };
     const onDieXBlur = () => {
@@ -292,14 +292,14 @@ export default function Parameters({
         persistSize(dieX, ny);
     };
     const onDieXKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-        if (e.key === "Enter") onDieXBlur();
+        if (e.key === 'Enter') onDieXBlur();
     };
     const onDieYKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-        if (e.key === "Enter") onDieYBlur();
+        if (e.key === 'Enter') onDieYBlur();
     };
 
     return (
-        <Box w={320} p="md" style={{ borderRight: "1px solid var(--mantine-color-gray-3)" }}>
+        <Box w={320} p="md" style={{ borderRight: '1px solid var(--mantine-color-gray-3)' }}>
             <Stack gap="xl">
                 {/* ---------------------- Die size ---------------------- */}
                 <Group justify="space-between" align="center">
@@ -312,8 +312,8 @@ export default function Parameters({
                     ) : (
                         <Group gap={6}>
                             <IconDatabase size={16} />
-                            <Text size="xs" c={dbHasSize ? "teal" : "dimmed"}>
-                                {dbHasSize ? "已有记录" : "未保存"}
+                            <Text size="xs" c={dbHasSize ? 'teal' : 'dimmed'}>
+                                {dbHasSize ? '已有记录' : '未保存'}
                             </Text>
                         </Group>
                     )}
@@ -402,7 +402,7 @@ export default function Parameters({
                             保存
                         </Button>
                     </Tooltip>
-                    <Tooltip label={dbHasSize ? "删除该产品的尺寸记录" : "没有可删除的记录"} withArrow>
+                    <Tooltip label={dbHasSize ? '删除该产品的尺寸记录' : '没有可删除的记录'} withArrow>
                         <Button variant="light" color="red" onClick={handleDeleteSize} disabled={sizeControlsDisabled || !dbHasSize} leftSection={<IconTrash size={16} />}>
                             删除
                         </Button>
@@ -422,8 +422,8 @@ export default function Parameters({
                     ) : (
                         <Group gap={6}>
                             <IconDatabase size={16} />
-                            <Text size="xs" c={dbHasOffset ? "teal" : "dimmed"}>
-                                {dbHasOffset ? "已有记录" : "未保存"}
+                            <Text size="xs" c={dbHasOffset ? 'teal' : 'dimmed'}>
+                                {dbHasOffset ? '已有记录' : '未保存'}
                             </Text>
                         </Group>
                     )}
@@ -459,7 +459,7 @@ export default function Parameters({
                         onChangeEnd={(val) => persistOffsets(val, yOffset)}
                         marks={[
                             { value: minOff, label: String(minOff) },
-                            { value: 0, label: "0" },
+                            { value: 0, label: '0' },
                             { value: maxOff, label: String(maxOff) },
                         ]}
                     />
@@ -495,7 +495,7 @@ export default function Parameters({
                         onChangeEnd={(val) => persistOffsets(xOffset, val)}
                         marks={[
                             { value: minOff, label: String(minOff) },
-                            { value: 0, label: "0" },
+                            { value: 0, label: '0' },
                             { value: maxOff, label: String(maxOff) },
                         ]}
                     />
@@ -512,7 +512,7 @@ export default function Parameters({
                             保存
                         </Button>
                     </Tooltip>
-                    <Tooltip label={dbHasOffset ? "删除该产品的偏移记录" : "没有可删除的记录"} withArrow>
+                    <Tooltip label={dbHasOffset ? '删除该产品的偏移记录' : '没有可删除的记录'} withArrow>
                         <Button variant="light" color="red" onClick={handleDeleteOffset} disabled={offsetControlsDisabled || !dbHasOffset} leftSection={<IconTrash size={16} />}>
                             删除
                         </Button>

@@ -1,20 +1,10 @@
 import { getDb, vacuum } from '@/db';
-
-/** Row shape for product_size */
-export type ProductSize = {
-    oem_product_id: string;
-    die_x: number;
-    die_y: number;
-};
-
-/** Quick-lookup map: id -> { die_x, die_y } */
-export type ProductSizeMap = Map<string, { die_x: number; die_y: number }>;
+import { ProductSize, ProductSizeMap } from './types';
 
 const TABLE = 'product_size';
 const COLUMNS = 'oem_product_id, die_x, die_y';
 
 /*
--- Keep for reference (should already exist):
 CREATE TABLE IF NOT EXISTS product_size (
     oem_product_id TEXT PRIMARY KEY,
     die_x DOUBLE NOT NULL,
@@ -54,39 +44,15 @@ export async function getAllProductSizes(limit = 500, offset = 0): Promise<Produ
 /** Idempotent upsert by PK (oem_product_id). */
 export async function upsertProductSize(row: ProductSize): Promise<boolean> {
     const db = await getDb();
-    await db.execute(
-        `INSERT INTO ${TABLE} (oem_product_id, die_x, die_y)
-    VALUES (?, ?, ?)
-    ON CONFLICT(oem_product_id) DO UPDATE SET
-        die_x = excluded.die_x,
-        die_y = excluded.die_y`,
+    await db.execute(`
+INSERT INTO ${TABLE} (oem_product_id, die_x, die_y)
+VALUES (?, ?, ?)
+ON CONFLICT(oem_product_id) DO UPDATE SET
+    die_x = excluded.die_x,
+    die_y = excluded.die_y`,
         [row.oem_product_id, row.die_x, row.die_y]
     );
     return true;
-}
-
-/** Bulk upsert inside a transaction. Returns count written. */
-export async function upsertManyProductSizes(rows: ProductSize[]): Promise<number> {
-    if (!rows.length) return 0;
-    const db = await getDb();
-    await db.execute('BEGIN');
-    try {
-        for (const r of rows) {
-            await db.execute(
-                `INSERT INTO ${TABLE} (oem_product_id, die_x, die_y)
-        VALUES (?, ?, ?)
-        ON CONFLICT(oem_product_id) DO UPDATE SET
-            die_x = excluded.die_x,
-            die_y = excluded.die_y`,
-                [r.oem_product_id, r.die_x, r.die_y]
-            );
-        }
-        await db.execute('COMMIT');
-        return rows.length;
-    } catch (e) {
-        await db.execute('ROLLBACK');
-        throw e;
-    }
 }
 
 /** Delete one by id. Returns rows deleted (0/1). */

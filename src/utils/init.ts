@@ -4,7 +4,7 @@ import {
 } from '@/constants';
 import { exists, ExistsOptions, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, localDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
-import { initialDataSourceState, initialPreferencesState } from '@/constants/default';
+import { initialDataSourceState } from '@/constants/default';
 import { getDb } from '@/db';
 import { createDefaultPreferences } from './helper';
 

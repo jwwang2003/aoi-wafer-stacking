@@ -123,16 +123,16 @@ export default function Preview() {
 
             if (sum === 0) {
                 infoToast({
-                    title: "数据摄取结果",
-                    message: "没有新增或更新的记录",
+                    title: '数据摄取结果',
+                    message: '没有新增或更新的记录',
                 });
             } else {
                 infoToast({
-                    title: "数据摄取结果",
+                    title: '数据摄取结果',
                     message: `数据库已更新，共写入 ${sum} 条记录`,
                     lines: [
-                        { label: "Excel", value: excelRecords.length },
-                        { label: "Wafer", value: waferRecords.length },
+                        { label: 'Excel', value: excelRecords.length },
+                        { label: 'Wafer', value: waferRecords.length },
                     ],
                 });
             }

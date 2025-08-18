@@ -94,10 +94,10 @@ function MorePage() {
     const [err, setErr] = useState<string | null>(null);
 
     const handleResetDb = async () => {
-        await resetSpreadSheetData({ vacuumAfter: true });
         await deleteAllWaferMaps();
-        await deleteAllFileIndexes(true);        // clear sizes + VACUUM
-        await deleteAllFolderIndexes(true);
+        await resetSpreadSheetData();
+        await deleteAllFileIndexes();
+        await deleteAllFolderIndexes();
         await warmIndexCaches();
     }
 
@@ -133,18 +133,17 @@ function MorePage() {
 
     return (
         <Stack>
-            <Title order={3}>更多</Title>
             <Paper withBorder p="md" radius="md">
                 <Stack gap="sm">
-                    <Text c="dimmed" size="sm">
+                    {/* <Text c="dimmed" size="sm">
                         工具与设置
                     </Text>
-                    <Divider />
+                    <Divider /> */}
                     <Group>
                         <Button loading={busy} onClick={handleExportDb}>
                             导出整个数据库文件
                         </Button>
-                        <Button variant='outline' color='red' loading={busy} onClick={handleResetDb}>
+                        <Button variant='outline' color='red' onClick={handleResetDb}>
                             重置数据库
                         </Button>
                     </Group>

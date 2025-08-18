@@ -4,9 +4,8 @@ import { stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're
 import { DirResult } from '@/types/ipc';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { deleteFolderIndexesByPaths, getAllFolderIndexes, getManyFolderIndexesByPaths, upsertManyFolderIndexes, upsertOneFolderIndex } from '@/db/folderIndex';
-import { invokeReadDir,invokeSha1 } from '@/api/tauri/fs';
+import { invokeReadDir, invokeSha1 } from '@/api/tauri/fs';
 import { deleteFileIndexesByPaths, getAllFileIndexes, getManyFileIndexesByPaths, upsertManyFileIndexes } from '@/db/fileIndex';
-import { getDb } from '@/db';
 
 // ---------- Globals ----------
 const file_idx = new Map<string, FileIndexRow>();
@@ -22,11 +21,6 @@ const folder_deletes: string[] = [];
 // Seen sets for a scan session (to detect deletions)
 let seenFiles: Set<string> | null = null;
 let seenFolders: Set<string> | null = null;
-
-// Flush controls
-const FLUSH_BATCH = 1000;
-let flushing = false;
-let flushInFlight: Promise<void> | null = null;     // single-flight guard
 
 export function resetSessionFileIndexCache() {
     file_idx.clear();
@@ -45,22 +39,17 @@ export function resetSessionFolderIndexCache() {
 /** Load *all* index rows once into memory (fast path for ~100k). */
 export async function warmIndexCaches(): Promise<void> {
     // Files
-    const db = await getDb();
-    const fileRows = await db.select<FileIndexRow[]>(
-        'SELECT file_path, last_mtime, file_hash FROM file_index'
-    );
+    const fileRows = await getAllFileIndexes();
     file_idx.clear();
-    for (const r of fileRows) {
+    for (const [, r] of fileRows) {
         const k = norm(r.file_path);
         file_idx.set(k, r);
     }
 
     // Folders
-    const folderRows = await db.select<FolderIndexRow[]>(
-        'SELECT folder_path, last_mtime FROM folder_index'
-    );
+    const folderRows = await getAllFolderIndexes();
     folder_idx.clear();
-    for (const r of folderRows) {
+    for (const [, r] of folderRows) {
         const k = norm(r.folder_path);
         folder_idx.set(k, r);
     }
@@ -138,214 +127,64 @@ function dedupeFolderUpserts(rows: FolderIndexRow[]): FolderIndexRow[] {
 //==============================================================================
 
 /** Drain queues in one go. Safe to call multiple times concurrently. */
-export function flushIndexQueues(): Promise<void> {
-    // Coalesce concurrent calls
-    if (flushing && flushInFlight) return flushInFlight;
+export async function flushIndexQueues(): Promise<void> {
+    // 1) Snapshot queues (new work will go to fresh arrays)
+    const fileUp = file_upserts.splice(0, file_upserts.length);
+    const folderUp = folder_upserts.splice(0, folder_upserts.length);
+    const fileDel = file_deletes.splice(0, file_deletes.length);
+    const folderDel = folder_deletes.splice(0, folder_deletes.length);
 
-    flushing = true;
-    flushInFlight = (async () => {
-        // 1) Snapshot queues (new work will go to fresh arrays)
-        const fileUp = file_upserts.splice(0, file_upserts.length);
-        const folderUp = folder_upserts.splice(0, folder_upserts.length);
-        const fileDel = file_deletes.splice(0, file_deletes.length);
-        const folderDel = folder_deletes.splice(0, folder_deletes.length);
+    const uniqFileUp = dedupeFileUpserts(fileUp);
+    const uniqFolderUp = dedupeFolderUpserts(folderUp);
 
-        const uniqFileUp = dedupeFileUpserts(fileUp);
-        const uniqFolderUp = dedupeFolderUpserts(folderUp);
+    // 2) Single transaction for everything (atomic)
 
-        // 2) Single transaction for everything (atomic)
-        const db = await getDb();
-
-        // NOTE: Another optimization would be to make this whole section chunked
-        try {
-            // Upserts (folders then files)
-            if (uniqFolderUp.length) {
+    // NOTE: Another optimization would be to make this whole section chunked
+    try {
+        // Upserts (folders then files)
+        if (uniqFolderUp.length) {
+            try {
                 await upsertManyFolderIndexes(uniqFolderUp);
+            } catch (e) {
+                console.error(1, e);
             }
-            if (uniqFileUp.length) {
+        }
+        if (uniqFileUp.length) {
+            try {
                 await upsertManyFileIndexes(uniqFileUp);
+            } catch (e) {
+                console.error(2, e);
             }
 
-            // Deletes (chunked)
-            const CHUNK = 900;
-            if (folderDel.length) {
+        }
+
+        // Deletes (chunked)
+        const CHUNK = 900;
+        if (folderDel.length) {
+            try {
                 await deleteFolderIndexesByPaths(folderDel, CHUNK);
+            } catch (e) {
+                console.error(3, e);
             }
-            if (fileDel.length) {
+        }
+        if (fileDel.length) {
+            try {
                 await deleteFileIndexesByPaths(fileDel, CHUNK);
-            }
-
-            // 3) Mirror to hot caches after success
-            for (const r of uniqFolderUp) folder_idx.set(norm(r.folder_path), r);
-            for (const r of uniqFileUp) file_idx.set(norm(r.file_path), r);
-            for (const p of folderDel) folder_idx.delete(norm(p));
-            for (const p of fileDel) file_idx.delete(norm(p));
-        } catch (e) {
-            console.error('Error while flushing indexes');
-            await db.execute('ROLLBACK');
-            throw e;
-        }
-    })().finally(() => {
-        flushing = false;
-        flushInFlight = null;
-    });
-
-    return flushInFlight;
-}
-
-/** Optional: auto-flush if queues get big. Call this after staging. */
-function maybeAutoFlush(): void {
-    const queued =
-        file_upserts.length + folder_upserts.length +
-        file_deletes.length + folder_deletes.length;
-
-    if (queued >= FLUSH_BATCH) void flushIndexQueues();
-}
-
-// Revalidate everything already in file_index + folder_index against the filesystem.
-export interface RevalidateOptions {
-    /** If true (default), queue DB fixes (upserts/deletes) and flush at the end. If false, just report. */
-    fix?: boolean;
-    /** Hash policy for files: 'none' | 'lazy' | 'backfill' (default: 'lazy'). */
-    hashMode?: 'none' | 'lazy' | 'backfill';
-    /** Call on progress (optional). */
-    onProgress?: (stats: RevalidateReport) => void;
-    /** Yield every N items to keep UI responsive (default: 500). */
-    yieldEvery?: number;
-}
-
-export interface RevalidateReport {
-    filesChecked: number;
-    foldersChecked: number;
-    filesMissing: number;
-    foldersMissing: number;
-    filesUpdated: number;         // upserted due to newer mtime or hash backfill
-    foldersUpdated: number;       // upserted due to newer mtime
-    filesHashBackfilled: number;  // subset of filesUpdated when only hash was filled
-}
-
-export async function revalidateAllIndexes(opts: RevalidateOptions = {}): Promise<RevalidateReport> {
-    const {
-        fix = true,
-        hashMode = 'lazy',
-        onProgress,
-        yieldEvery = 500,
-    } = opts;
-
-    // Load current DB views
-
-    const fileRows = await getAllFileIndexes();
-    const folderRows = await getAllFolderIndexes();
-
-    const report: RevalidateReport = {
-        filesChecked: 0,
-        foldersChecked: 0,
-        filesMissing: 0,
-        foldersMissing: 0,
-        filesUpdated: 0,
-        foldersUpdated: 0,
-        filesHashBackfilled: 0,
-    };
-
-    // ---- folders ----
-    let i = 0;
-    for (const r of folderRows.values()) {
-        const path = norm(r.folder_path);
-        report.foldersChecked++;
-
-        let currentMtime: number | null = null;
-        try {
-            currentMtime = await mtime(path);  // stat() under the hood
-        } catch {
-            currentMtime = null; // missing or inaccessible
-        }
-
-        if (currentMtime == null || currentMtime < 0) {
-            // Folder missing → delete index row
-            report.foldersMissing++;
-            if (fix) {
-                folder_deletes.push(path);
-                maybeAutoFlush();
-            }
-        } else if (currentMtime > r.last_mtime) {
-            // Folder is newer → upsert new mtime
-            report.foldersUpdated++;
-            if (fix) {
-                folder_upserts.push({ folder_path: path, last_mtime: currentMtime });
-                maybeAutoFlush();
+            } catch (e) {
+                console.error(4, e);
             }
         }
 
-        if (onProgress && (i % yieldEvery === 0)) onProgress(report);
-        if (i % yieldEvery === 0) await Promise.resolve(); // yield
-        ++i;
+        // 3) Mirror to hot caches after success
+        for (const r of uniqFolderUp) folder_idx.set(norm(r.folder_path), r);
+        for (const r of uniqFileUp) file_idx.set(norm(r.file_path), r);
+        for (const p of folderDel) folder_idx.delete(norm(p));
+        for (const p of fileDel) file_idx.delete(norm(p));
+    } catch (e) {
+        console.error('Error while flushing indexes', e);
+        throw e;
     }
-
-    // ---- files ----
-    i = 0;
-    for (const r of fileRows.values()) {
-        const path = norm(r.file_path);
-        report.filesChecked++;
-
-        let currentMtime: number | null = null;
-        try {
-            currentMtime = await mtime(path);
-        } catch {
-            currentMtime = null;
-        }
-
-        if (currentMtime == null || currentMtime < 0) {
-            // File missing → delete index row
-            report.filesMissing++;
-            if (fix) {
-                file_deletes.push(path);
-                maybeAutoFlush();
-            }
-            continue;
-        }
-
-        // Decide whether to hash
-        const newer = currentMtime > r.last_mtime;
-        const needsBackfill = hashMode === 'backfill' && !r.file_hash;
-
-        let file_hash: string | null | undefined = undefined; // undefined = 'don't touch hash'
-        if (fix) {
-            if (hashMode === 'lazy' && newer) {
-                file_hash = await invokeSha1(path);
-            } else if (hashMode === 'backfill' && (newer || needsBackfill)) {
-                file_hash = await invokeSha1(path);
-                if (!newer && needsBackfill) report.filesHashBackfilled++;
-            } else if (hashMode === 'none') {
-                file_hash = newer ? null : undefined; // keep existing unless newer (we'll upsert mtime only)
-            }
-        }
-
-        // Queue upsert if something changed (mtime newer or we decided to backfill hash)
-        if (newer || (fix && file_hash !== undefined)) {
-            report.filesUpdated++;
-            if (fix) {
-                file_upserts.push({
-                    file_path: path,
-                    last_mtime: currentMtime,
-                    file_hash: file_hash === undefined ? r.file_hash ?? null : file_hash,
-                });
-                maybeAutoFlush();
-            }
-        }
-
-        if (onProgress && (i % yieldEvery === 0)) onProgress(report);
-        if (i % yieldEvery === 0) await Promise.resolve(); // yield
-        ++i;
-    }
-
-    if (fix) {
-        // Make all staged changes durable & mirror caches
-        await flushIndexQueues();
-    }
-
-    return report;
 }
-
 
 //==============================================================================
 
@@ -549,7 +388,7 @@ export async function listDirs(
     const names = re ? paths.map(nameFromPath) : undefined;
 
     // 3) Bulk-fetch cache rows for these paths (skip if forcing)
-    const indexMap: Map<string, FolderIndexRow> = await getFolderIndexesWithLocalCache(paths, cache);    
+    const indexMap: Map<string, FolderIndexRow> = await getFolderIndexesWithLocalCache(paths, cache);
 
     const dirs: DirResult[] = [];
     const cached: FolderIndexRow[] = [];

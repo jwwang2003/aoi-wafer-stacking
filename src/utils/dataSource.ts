@@ -141,15 +141,11 @@ export async function readSubstrateMetadata(
 
         const {
             dirs: dlFolders,
-            cached: dlFoldersCached,
+            // cached: dlFoldersCached,
             totDir: totDirFolder,
             numRead: numReadFolders,
             numCached: numCachedFolders,
         } = await listDirs({ root: folder.path, name: defectListFolder });
-
-        console.debug({
-            dlFolders, dlFoldersCached
-        })
 
         totDir += totDirFolder;
         numRead += numReadFolders;

@@ -13,6 +13,16 @@ export type FolderIndexRow = {
     last_mtime: number;    // epoch millis
 };
 
+/** Row shape for product_size */
+export type ProductSize = {
+    oem_product_id: string;
+    die_x: number;
+    die_y: number;
+};
+
+/** Quick-lookup map: id -> { die_x, die_y } */
+export type ProductSizeMap = Map<string, { die_x: number; die_y: number }>;
+
 export type OemMapping = { oem_product_id: string; product_id: string };
 
 export interface OemProductMapRow {

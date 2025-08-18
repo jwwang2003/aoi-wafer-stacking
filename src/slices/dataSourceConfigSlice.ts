@@ -28,7 +28,7 @@ import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig 
 import { mergeDefinedKeys } from '@/utils/helper';
 
 import { baseDir, DATA_SOURCE_CONFIG_FILENAME } from '@/constants';
-import { initialDataSourceConfigState, initialDataSourceConfigState as initialState, now } from '@/constants/default';
+import { initialDataSourceConfigState, initialDataSourceConfigState as initialState } from '@/constants/default';
 import { dirScanResultToast } from '@/components/Toaster';
 import { init_data_source_config } from '@/utils/init';
 

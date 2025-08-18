@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
-import { Box, Flex } from "@mantine/core";
+import { useEffect, useState } from 'react';
+import { Box, Flex } from '@mantine/core';
 
-import SubstrateRenderer from "./Wafer";
-import Parameters from "./Parameters";
+import SubstrateRenderer from './Wafer';
+import Parameters from './Parameters';
 
-import type { SubstrateDefectXlsResult, AsciiDie, WaferMapDie, AsciiMap } from "@/types/ipc";
-import type { SubstrateDefectRow, WaferMapRow } from "@/db/types";
-import { DataSourceType } from "@/types/dataSource"; // adjust path if needed
+import type { SubstrateDefectXlsResult, AsciiDie, WaferMapDie, AsciiMap } from '@/types/ipc';
+import type { SubstrateDefectRow, WaferMapRow } from '@/db/types';
+import { DataSourceType } from '@/types/dataSource'; // adjust path if needed
 
 // parsing/invoke helpers (adjust import paths to your project)
-import { invokeParseSubstrateDefectXls, invokeParseWafer } from "@/api/tauri/wafer";
-import { parseWaferMap, parseWaferMapEx } from "@/api/tauri/wafer";
+import { invokeParseSubstrateDefectXls, invokeParseWafer } from '@/api/tauri/wafer';
+import { parseWaferMap, parseWaferMapEx } from '@/api/tauri/wafer';
 
 type SubstratePaneProps = {
     oemProductId: string;
@@ -47,7 +47,7 @@ export default function SubstratePane({
                 const data = await invokeParseSubstrateDefectXls(waferSubstrate.file_path);
                 if (!cancelled) setSheetsData(data);
             } catch (err) {
-                console.error("[SubstratePane] parse substrate xls failed:", err);
+                console.error('[SubstratePane] parse substrate xls failed:', err);
                 if (!cancelled) setSheetsData(null);
             }
         })();
@@ -86,14 +86,14 @@ export default function SubstratePane({
                         break;
                     }
                     default: {
-                        console.warn("[SubstratePane] Unknown stage:", map.stage);
+                        console.warn('[SubstratePane] Unknown stage:', map.stage);
                         data = null;
                     }
                 }
 
                 if (!cancelled) setDieData(data as any);
             } catch (err) {
-                console.error("[SubstratePane] parse wafer map failed:", err);
+                console.error('[SubstratePane] parse wafer map failed:', err);
                 if (!cancelled) setDieData(null);
             }
         })();
@@ -103,7 +103,7 @@ export default function SubstratePane({
     }, [waferMaps]);
 
     return (
-        <Flex gap="md" style={{ height: "calc(100vh - 50px)", width: "100%" }}>
+        <Flex gap="md" style={{ height: 'calc(100vh - 50px)', width: '100%' }}>
             {showParameters && (
                 <Parameters
                     oemProductId={oemProductId}
@@ -131,7 +131,7 @@ export default function SubstratePane({
                         selectedSheetId="Surface defect list"
                         sheetsData={sheetsData}
                         gridOffset={{ x: xOffset, y: yOffset }}
-                        style={{ height: "100%", width: "100%" }}
+                        style={{ height: '100%', width: '100%' }}
                     />
                 )}
             </Box>

@@ -1,4 +1,4 @@
-import { WaferFileMetadata } from "@/types/wafer";
+import { WaferFileMetadata } from '@/types/wafer';
 
 export function toWaferFileMetadata(r: any): WaferFileMetadata {
     return {

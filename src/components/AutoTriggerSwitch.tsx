@@ -1,7 +1,7 @@
-import { useAppDispatch, useAppSelector } from "@/hooks";
-import { setAutoTriggerState } from "@/slices/preferencesSlice";
-import { AutoTriggers } from "@/types/preferences";
-import { Switch } from "@mantine/core";
+import { useAppDispatch, useAppSelector } from '@/hooks';
+import { setAutoTriggerState } from '@/slices/preferencesSlice';
+import { AutoTriggers } from '@/types/preferences';
+import { Switch } from '@mantine/core';
 
 const names: { [K in AutoTriggers]: string } = {
     'folderDetection': '子目录识别',
