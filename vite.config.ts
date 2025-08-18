@@ -1,39 +1,44 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { visualizer } from "rollup-plugin-visualizer";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+// @ts-expect-error process is a nodejs global
+const ANALYZE = process.env.ANALYZE === 'true';
 
-// https://vitejs.dev/config/
-export default defineConfig(async () => ({
-  plugins: [react()],
+export default defineConfig(async ({ command, mode }) => ({
+  plugins: [
+    react(),
+    // show how much each lib/module contributes to final chunks
+    ANALYZE && visualizer({
+      filename: 'bundle-stats.html',   // output file in project root (or 'dist/stats.html')
+      template: 'treemap',             // 'treemap' | 'sunburst' | 'network'
+      gzipSize: true,
+      brotliSize: true,
+      sourcemap: true,
+      open: true,                      // auto-open after build
+    }),
+  ].filter(Boolean),
 
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-    },
+    alias: { "@": path.resolve(__dirname, "src") },
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent vite from obscuring rust errors
   clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 8001,
     strictPort: true,
     host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 8002,
-        }
-      : undefined,
-    watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
-    },
+    hmr: host ? { protocol: "ws", host, port: 8002 } : undefined,
+    watch: { ignored: ["**/src-tauri/**"] },
+  },
+
+  // helpful when analyzing
+  build: {
+    sourcemap: true,
+    reportCompressedSize: true,
+    chunkSizeWarningLimit: 1500,
   },
 }));

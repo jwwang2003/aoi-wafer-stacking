@@ -1,12 +1,12 @@
 import {
-    baseDir,
     PREFERENCES_FILENAME,
-    DATA_SOURCES_CONFIG_FILENAME,
-    DB_FILENAME
+    DATA_SOURCE_CONFIG_FILENAME,
 } from '@/constants';
 import { exists, ExistsOptions, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, localDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
-import Database from '@tauri-apps/plugin-sql';
+import { initialDataSourceState } from '@/constants/default';
+import { getDb } from '@/db';
+import { createDefaultPreferences } from './helper';
 
 /**
  * Developer notes:
@@ -21,17 +21,19 @@ import Database from '@tauri-apps/plugin-sql';
 export async function initialize() {
     const appDataBaseDir = BaseDirectory.AppData;
     const localDataBaseDir = BaseDirectory.LocalData;
-
     try {
+        // Step. 1
         // Ensure AppData folder exists
         await get_folder('', { baseDir: appDataBaseDir });
-        console.info('AppData directory initialized at:', await appDataDir());
+        console.log('AppData directory initialized at:', await appDataDir());
         // Ensure LocalData folder exists
         await get_folder('', { baseDir: localDataBaseDir });
-        console.info('LocalData directory initialized at:', await localDataDir());
+        console.log('LocalData directory initialized at:', await localDataDir());
 
+        // Step. 2 -- Init. all config files if not present
         await init_pref();
-        await init_data_source();
+        await init_data_source_config();
+        // Step. 3 -- Connect to SQLite
         await init_db();
     } catch (e) {
         console.error('Initialization error:', e);
@@ -47,7 +49,6 @@ export async function initialize() {
  */
 export async function init_pref(): Promise<boolean> {
     const appDataDirPath = await appDataDir();
-    // Resolve full file path
     const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
 
     try {
@@ -55,25 +56,18 @@ export async function init_pref(): Promise<boolean> {
         if (!fileExists) {
             await writeTextFile(
                 PREFERENCES_FILENAME,
-                JSON.stringify({}, null, 2),
+                JSON.stringify(
+                    await createDefaultPreferences(),        // the default preferences state
+                    null, 
+                    2
+                ),
                 { baseDir: BaseDirectory.AppData }
             );
         }
-        // Lock the file using Tauri backend command
-        // TODO: Implement locks?
-        // await invoke("lock_file", { path: fullPath });
         return true;
     } catch (err) {
         console.error(`Failed to initialize preferences file in ${fullPath}:`, err);
         return false;
-    } finally {
-        // Always try to unlock even if an error occurs
-        // try {
-        //     const fullPath = await resolve(appDataDirPath, PREFERENCES_FILENAME);
-        //     await invoke("unlock_file", { path: fullPath });
-        // } catch (unlockErr) {
-        //     console.warn("Failed to unlock preferences file:", unlockErr);
-        // }
     }
 }
 
@@ -83,33 +77,28 @@ export async function init_pref(): Promise<boolean> {
  * Locks the file at the start and unlocks at the end.
  * Base: BaseDirectory.AppData, appDataDir()
  */
-export async function init_data_source(): Promise<boolean> {
+export async function init_data_source_config(): Promise<boolean> {
     // Resolve full file path
     // const appDataDirPath = await appDataDir();
     // const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
 
     try {
-        const fileExists = await exists(DATA_SOURCES_CONFIG_FILENAME, { baseDir: BaseDirectory.AppData });
+        const fileExists = await exists(DATA_SOURCE_CONFIG_FILENAME, { baseDir: BaseDirectory.AppData });
         if (!fileExists) {
             await writeTextFile(
-                DATA_SOURCES_CONFIG_FILENAME,
-                JSON.stringify({}, null, 2),
+                DATA_SOURCE_CONFIG_FILENAME,
+                JSON.stringify(
+                    initialDataSourceState,         // the default data source config state
+                    null, 
+                    2
+                ),
                 { baseDir: BaseDirectory.AppData }
             );
         }
-        // TODO: Implement locks?
-        // await invoke("lock_file", { path: fullPath });
         return true;
     } catch (err) {
         console.error('Failed to initialize data sources file:', err);
         return false;
-    } finally {
-        // try {
-        //     const fullPath = await resolve(appDataDirPath, DATA_SOURCES_CONFIG_FILENAME);
-        //     await invoke("unlock_file", { path: fullPath });
-        // } catch (unlockErr) {
-        //     console.warn("Failed to unlock data sources file:", unlockErr);
-        // }
     }
 }
 
@@ -119,18 +108,8 @@ export async function init_data_source(): Promise<boolean> {
  */
 export async function init_db(): Promise<void> {
     try {
-        const dir = await appDataDir();
-        const dbPath = await resolve(dir, DB_FILENAME);
-
-        const dbExists = await exists(DB_FILENAME, { baseDir });
-
-        // Load the SQLite database from appDataDir
-        const db = await Database.load(`sqlite:${dbPath}`);
-
-        if (dbExists && db) {
-            console.log('%cInitialized database!', 'color: orange', dbPath);
-            await db.close();
-        }
+        const db = await getDb();
+        console.log('%cInitialized database!', 'color: orange', db.path);
     } catch (err) {
         console.error('Database initialization failed:', err);
         throw err;

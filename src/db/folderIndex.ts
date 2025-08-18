@@ -1,8 +1,9 @@
 import { resetSessionFolderIndexCache } from '@/utils/fs';
-import { getDb } from './index';
+import { getDb, MAX_PARAMS, vacuum, withRetry } from './index';
 import { FolderIndexRow } from './types';
 
-// Current:
+const TABLE = 'folder_index';
+
 // CREATE TABLE IF NOT EXISTS folder_index (
 //     folder_path TEXT PRIMARY KEY,
 //     last_mtime INTEGER
@@ -17,7 +18,7 @@ import { FolderIndexRow } from './types';
 export async function getFolderIndexByPath(folder_path: string): Promise<FolderIndexRow | null> {
     const db = await getDb();
     const rows = await db.select<FolderIndexRow[]>(
-        `SELECT folder_path, last_mtime FROM folder_index WHERE folder_path = ?`,
+        `SELECT folder_path, last_mtime FROM ${TABLE} WHERE folder_path = ?`,
         [folder_path]
     );
     return rows[0] ?? null;
@@ -36,12 +37,10 @@ export async function getManyFolderIndexesByPaths(paths: string[]): Promise<Map<
 
     const db = await getDb();
     const qs = paths.map(() => '?').join(',');
-    const rows = await db.select<FolderIndexRow[]>(
-        `SELECT folder_path, last_mtime
-    FROM folder_index
-    WHERE folder_path IN (${qs})`,
-        paths
-    );
+    const rows = await db.select<FolderIndexRow[]>(`
+SELECT folder_path, last_mtime
+FROM ${TABLE}
+WHERE folder_path IN (${qs})`, paths);
     for (const r of rows) map.set(r.folder_path, r);
     return map;
 }
@@ -55,15 +54,12 @@ export async function getAllFolderIndexes(): Promise<Map<string, FolderIndexRow>
     const map = new Map<string, FolderIndexRow>();
     const db = await getDb();
 
-    const rows = await db.select<FolderIndexRow[]>(
-        `SELECT folder_path, last_mtime
-    FROM folder_index
-    ORDER BY folder_path ASC`
-    );
+    const rows = await db.select<FolderIndexRow[]>(`
+SELECT folder_path, last_mtime
+FROM ${TABLE}
+ORDER BY folder_path ASC;`);
 
-    for (const r of rows) {
-        map.set(r.folder_path, r);
-    }
+    for (const r of rows) map.set(r.folder_path, r);
     return map;
 }
 
@@ -75,40 +71,55 @@ export async function getAllFolderIndexes(): Promise<Map<string, FolderIndexRow>
  */
 export async function upsertOneFolderIndex(entry: FolderIndexRow): Promise<void> {
     const db = await getDb();
-    await db.execute(
-        `INSERT INTO folder_index (folder_path, last_mtime)
-    VALUES (?, ?)
-    ON CONFLICT(folder_path)
-    DO UPDATE SET last_mtime=excluded.last_mtime`,
+    await db.execute(`
+INSERT INTO ${TABLE} (folder_path, last_mtime)
+VALUES ($1, $2)
+ON CONFLICT(folder_path) DO UPDATE SET 
+    last_mtime=excluded.last_mtime`,
         [entry.folder_path, entry.last_mtime]
     );
 }
 
 /**
- * Inserts or updates multiple folder index records in a single transaction.
+ * Inserts or updates multiple folder index records.
  * If any insert fails, the transaction is rolled back.
+ * 
+ * NOTE: This is non-transacted, TBD: implement a transacted version on the rust side.
  *
  * @param entries - An array of folder index rows to insert or update.
  */
 export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promise<void> {
-    if (entries.length === 0) return;
+    if (!entries?.length) return;
+
+    // Optional: last-wins de-dup by path
+    const byPath = new Map<string, FolderIndexRow>();
+    for (const e of entries) if (e?.folder_path) byPath.set(e.folder_path, e);
+    const unique = Array.from(byPath.values());
+    if (!unique.length) return;
+
     const db = await getDb();
-    try {
-        await db.execute('BEGIN');
-        for (const e of entries) {
-            await db.execute(
-                `INSERT INTO folder_index (folder_path, last_mtime)
-    VALUES (?, ?)
-    ON CONFLICT(folder_path)
-    DO UPDATE SET last_mtime=excluded.last_mtime`,
-                [e.folder_path, e.last_mtime]
-            );
-        }
-        await db.execute('COMMIT');
-    } catch (err) {
-        console.error('Error while upserting folder indexes');
-        await db.execute('ROLLBACK');
-        throw err;
+
+    // 2 params per row: (folder_path, last_mtime)
+    const PARAMS_PER_ROW = 2;
+    const MAX = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
+    const ROWS_PER_CHUNK = Math.max(1, Math.floor(MAX / PARAMS_PER_ROW));
+
+    for (let i = 0; i < unique.length; i += ROWS_PER_CHUNK) {
+        const batch = unique.slice(i, i + ROWS_PER_CHUNK);
+
+        const placeholders = batch.map(() => '(?, ?)').join(', ');
+        const sql = `
+INSERT INTO ${TABLE} (folder_path, last_mtime)
+VALUES ${placeholders}
+ON CONFLICT(folder_path) DO UPDATE SET
+    last_mtime = excluded.last_mtime
+    `;
+
+        const params: Array<string | number> = [];
+        for (const e of batch) params.push(e.folder_path, e.last_mtime);
+
+        // No BEGIN/COMMIT — each execute is its own short implicit tx
+        await withRetry(() => db.execute(sql, params));
     }
 }
 
@@ -119,10 +130,7 @@ export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promis
  */
 export async function deleteFolderIndexByPath(file_path: string): Promise<void> {
     const db = await getDb();
-    console.info(await db.execute(
-        `DELETE FROM folder_index WHERE folder_path = ?`
-        , [file_path]
-    ));
+    await db.execute(`DELETE FROM ${TABLE} WHERE folder_path = ?`, [file_path]);
 }
 
 /**
@@ -144,13 +152,9 @@ export async function deleteFolderIndexesByPaths(
     for (let i = 0; i < folder_paths.length; i += CHUNK) {
         const batch = folder_paths.slice(i, i + CHUNK);
         const placeholders = batch.map(() => '?').join(',');
-        await db.execute(
-            `DELETE FROM folder_index WHERE folder_path IN (${placeholders})`,
-            batch
-        );
+        await db.execute(`DELETE FROM ${TABLE} WHERE folder_path IN (${placeholders})`, batch);
     }
 }
-
 
 /**
  * Deletes all records from the folder_index table.
@@ -158,8 +162,10 @@ export async function deleteFolderIndexesByPaths(
  * ⚠️ Use with caution — this will remove all folder tracking information
  * and force the application to treat every folder as "new" on the next scan.
  */
-export async function deleteAllFolderIndexes(): Promise<void> {
+export async function deleteAllFolderIndexes(vacuumAfter = false): Promise<number> {
     const db = await getDb();
-    resetSessionFolderIndexCache();
-    await db.execute(`DELETE FROM folder_index`);
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    await resetSessionFolderIndexCache();
+    return (res as any)?.rowsAffected ?? 0;
 }

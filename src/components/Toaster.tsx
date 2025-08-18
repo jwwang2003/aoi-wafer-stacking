@@ -103,6 +103,78 @@ export function infoToast(payload: InfoToastPayload, options?: ToastOptions) {
     });
 }
 
+/** Error toast payload, same shape as info toast */
+export interface ErrorToastPayload {
+    title?: string;                 // e.g. "错误"
+    message?: string | React.ReactNode;
+    lines?: InfoLine[];
+    theme?: 'light' | 'dark';
+    width?: number;
+}
+
+/** Error content renderer (reuse InfoRow for optional details) */
+function ErrorToastContent({ payload }: { payload: ErrorToastPayload }) {
+    const { title, message, lines } = payload;
+    const useGrid = Array.isArray(lines) && lines.length > 1;
+
+    return (
+        <div style={{ lineHeight: 1.2, width: '100%' }}>
+            {title && (
+                <div
+                    style={{
+                        ...titleStyle,
+                        borderLeftColor: '#e03131',
+                        color: '#e03131',
+                    }}
+                >
+                    {title}
+                </div>
+            )}
+            {message && (
+                <div style={{ marginBottom: lines?.length ? 8 : 0 }}>{message}</div>
+            )}
+            {Array.isArray(lines) && lines.length > 0 && (
+                <div
+                    style={{
+                        display: useGrid ? 'grid' : 'block',
+                        gridTemplateColumns: useGrid ? '1fr 1fr' : undefined,
+                        gap: 8,
+                    }}
+                >
+                    {lines.map((ln, i) => (
+                        <InfoRow key={i} {...ln} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Show an error toast (red styling, stronger border).
+ *
+ * Usage:
+ *   errorToast({ title: "错误", message: "保存失败，请重试" });
+ */
+export function errorToast(payload: ErrorToastPayload, options?: ToastOptions) {
+    const width =
+        payload.width ??
+        (payload.lines && payload.lines.length > 1 ? 300 : 'default');
+
+    toast(<ErrorToastContent payload={payload} />, {
+        theme: payload.theme ?? 'light',
+        ...defaultOptions,
+        style: {
+            ...globalStyles,
+            border: '1px solid #e03131',
+            boxShadow: '0 8px 22px rgba(224,49,49,0.28)',
+            width,
+            borderRadius: 8,
+        },
+        ...options,
+    });
+}
+
 export type DirScanResultStats = {
     totDirs: number;
     numRead: number;

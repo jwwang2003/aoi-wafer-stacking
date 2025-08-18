@@ -18,6 +18,16 @@ CREATE TABLE IF NOT EXISTS product_offsets (
     FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );
 
+-- Each product has a unique die size
+CREATE TABLE IF NOT EXISTS product_size (
+    oem_product_id TEXT PRIMARY KEY,
+
+    die_x DOUBLE NOT NULL,
+    die_y DOUBLE NOT NULL,
+
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
+);
+
 -- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
     oem_product_id TEXT NOT NULL,
@@ -28,9 +38,8 @@ CREATE TABLE IF NOT EXISTS product_defect_map (
     file_path TEXT NOT NULL,
 
     PRIMARY KEY (oem_product_id, lot_id, wafer_id),
-    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id),
-    
-    -- product defect map will get removed when file_index gets removed
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE,
+
     FOREIGN KEY (file_path) REFERENCES file_index(file_path) ON DELETE CASCADE
 );
 
@@ -47,17 +56,17 @@ CREATE TABLE IF NOT EXISTS substrate_defect (
 
 -- Wafer Map Files (FAB CP, CP-Prober, WLBI, AOI)
 CREATE TABLE IF NOT EXISTS wafer_maps (
-    idx INTEGER PRIMARY KEY AUTOINCREMENT,     -- NEW: increasing primary key
+    idx INTEGER PRIMARY KEY AUTOINCREMENT,
 
     product_id TEXT NOT NULL,
     batch_id TEXT NOT NULL,
     wafer_id INTEGER NOT NULL,
 
-    stage TEXT NOT NULL,                    -- e.g. CP = 0, WLBI , AOI
-    sub_stage TEXT,                            -- optional: e.g. substage 2
+    stage TEXT NOT NULL,                        -- e.g. CP = 0, WLBI , AOI
+    sub_stage TEXT,                             -- optional: e.g. substage 2
 
     retest_count INTEGER DEFAULT 0,
-    time INTEGER,                              -- epoch ms (nullable OK)
+    time INTEGER,                               -- epoch ms (nullable OK)
 
     file_path TEXT NOT NULL UNIQUE,
 

@@ -77,9 +77,9 @@ export default function LoggingPage() {
 
             if (destPath) {
                 await writeTextFile(destPath, content);
-                console.info('Log file saved to:', destPath);
+                console.log('Log file saved to:', destPath);
             } else {
-                console.info('Save cancelled by user');
+                console.log('Save cancelled by user');
             }
         } catch (err) {
             console.error('Error saving log file:', err);

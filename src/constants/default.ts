@@ -9,6 +9,11 @@ export const now = () => new Date().toISOString();
 export const initialPreferencesState: PreferencesState = {
     preferenceFilePath: '',
     dataSourceConfigPath: '',
+    autoTriggers: {
+        folderDetection: false,
+        search: false,
+        ingest: false,
+    },
 
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState.Initial,
@@ -18,14 +23,12 @@ export const initialPreferencesState: PreferencesState = {
 
 export const initialDataSourceConfigState: DataSourceConfigState = {
     rootPath: '',
-    rootLastModified: now(),
     paths: {
         substrate: [],
         cpProber: [],
         fabCp: [],
         wlbi: [],
         aoi: [],
-        lastModified: now(),
     },
     regex: {
         substrate: 'Substrate',
@@ -33,9 +36,7 @@ export const initialDataSourceConfigState: DataSourceConfigState = {
         fabCp: 'FAB CP',
         wlbi: 'WLBI-[A-Za-z0-9]+',
         aoi: 'AOI-[A-Za-z0-9]+',
-        lastModified: now(),
     },
-    lastSaved: now(),
 };
 
 /**

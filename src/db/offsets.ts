@@ -1,11 +1,11 @@
-import { getDb } from '@/db';
+import { getDb, vacuum } from '@/db';
 import type { OemProductOffset, OemProductOffsetMap } from './types';
 
 // Adjust this if you actually created the table with a different name:
-const TABLE = 'oem_product_offset';
+const TABLE = 'product_offsets';
 
 /*
-CREATE TABLE IF NOT EXISTS oem_product_offset (
+CREATE TABLE IF NOT EXISTS product_offsets (
     oem_product_id TEXT PRIMARY KEY,
     x_offset DOUBLE NOT NULL,
     y_offset DOUBLE NOT NULL,
@@ -51,39 +51,15 @@ export async function getAllOemOffsets(
 /** Idempotent upsert by PK (oem_product_id). */
 export async function upsertOemOffset(row: OemProductOffset): Promise<boolean> {
     const db = await getDb();
-    await db.execute(
-        `INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
-    VALUES (?, ?, ?)
+    await db.execute(`
+INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
+VALUES (?, ?, ?)
 ON CONFLICT(oem_product_id) DO UPDATE SET
     x_offset = excluded.x_offset,
     y_offset = excluded.y_offset`,
         [row.oem_product_id, row.x_offset, row.y_offset]
     );
     return true;
-}
-
-/** Bulk upsert inside a transaction. Returns count written. */
-export async function upsertManyOemOffsets(rows: OemProductOffset[]): Promise<number> {
-    if (!rows.length) return 0;
-    const db = await getDb();
-    await db.execute('BEGIN');
-    try {
-        for (const r of rows) {
-            await db.execute(
-                `INSERT INTO ${TABLE} (oem_product_id, x_offset, y_offset)
-    VALUES (?, ?, ?)
-ON CONFLICT(oem_product_id) DO UPDATE SET
-    x_offset = excluded.x_offset,
-    y_offset = excluded.y_offset`,
-                [r.oem_product_id, r.x_offset, r.y_offset]
-            );
-        }
-        await db.execute('COMMIT');
-        return rows.length;
-    } catch (e) {
-        await db.execute('ROLLBACK');
-        throw e;
-    }
 }
 
 /** Delete one offset by id. Returns rows deleted (0/1). */
@@ -117,6 +93,13 @@ export async function deleteManyOemOffsets(
     return total;
 }
 
+/** Delete all rows from product_offsets. Optionally VACUUM afterward. */
+export async function deleteAllOemOffsets(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
+}
 /** Return a Map for quick lookups in code. */
 export async function getOemOffsetMap(): Promise<OemProductOffsetMap> {
     const rows = await getAllOemOffsets(10_000, 0);

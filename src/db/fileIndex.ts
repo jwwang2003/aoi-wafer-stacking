@@ -1,6 +1,8 @@
-import { getDb } from '@/db';
+import { getDb, MAX_PARAMS, vacuum, withRetry } from '@/db';
 import { FileIndexRow } from './types';
 import { resetSessionFileIndexCache } from '@/utils/fs';
+
+const TABLE = 'file_index';
 
 /**
  * Retrieves a single file index record by its path.
@@ -11,7 +13,7 @@ import { resetSessionFileIndexCache } from '@/utils/fs';
 export async function getFileIndexByPath(file_path: string): Promise<FileIndexRow | null> {
     const db = await getDb();
     const rows = await db.select<FileIndexRow[]>(
-        `SELECT file_path, last_mtime, file_hash FROM file_index WHERE file_path = ?`,
+        `SELECT file_path, last_mtime, file_hash FROM ${TABLE} WHERE file_path = ?`,
         [file_path]
     );
     return rows[0] ?? null;
@@ -32,7 +34,7 @@ export async function getManyFileIndexesByPaths(paths: string[]): Promise<Map<st
     const qs = paths.map(() => '?').join(',');
     const rows = await db.select<FileIndexRow[]>(
         `SELECT file_path, last_mtime, file_hash
-    FROM file_index
+    FROM ${TABLE}
     WHERE file_path IN (${qs})`,
         paths
     );
@@ -51,8 +53,8 @@ export async function getAllFileIndexes(): Promise<Map<string, FileIndexRow>> {
 
     const rows = await db.select<FileIndexRow[]>(
         `SELECT file_path, last_mtime, file_hash
-    FROM file_index
-    ORDER BY file_path ASC`
+    FROM ${TABLE}
+    ORDER BY file_path ASC;`
     );
     for (const r of rows) map.set(r.file_path, r);
     return map;
@@ -67,7 +69,7 @@ export async function getAllFileIndexes(): Promise<Map<string, FileIndexRow>> {
 export async function upsertOneFileIndex(entry: FileIndexRow): Promise<void> {
     const db = await getDb();
     await db.execute(
-        `INSERT INTO file_index (file_path, last_mtime, file_hash)
+        `INSERT INTO ${TABLE} (file_path, last_mtime, file_hash)
     VALUES (?, ?, ?)
     ON CONFLICT(file_path)
     DO UPDATE SET last_mtime=excluded.last_mtime, file_hash=excluded.file_hash`,
@@ -82,24 +84,31 @@ export async function upsertOneFileIndex(entry: FileIndexRow): Promise<void> {
  * @param entries - An array of file index rows to insert or update.
  */
 export async function upsertManyFileIndexes(entries: FileIndexRow[]): Promise<void> {
-    if (entries.length === 0) return;
+    if (!entries?.length) return;
     const db = await getDb();
-    try {
-        await db.execute('BEGIN');
-        for (const e of entries) {
-            await db.execute(
-                `INSERT INTO file_index (file_path, last_mtime, file_hash)
-    VALUES (?, ?, ?)
-    ON CONFLICT(file_path)
-    DO UPDATE SET last_mtime=excluded.last_mtime, file_hash=excluded.file_hash`,
-                [e.file_path, e.last_mtime, e.file_hash ?? null]
-            );
-        }
-        await db.execute('COMMIT');
-    } catch (err) {
-        console.error('Error while upserting file indexes');
-        await db.execute('ROLLBACK');
-        throw err;
+
+    // 3 params per row: (file_path, last_mtime, file_hash)
+    const PARAMS_PER_ROW = 3;
+    const MAX = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
+    const ROWS_PER_CHUNK = Math.max(1, Math.floor(MAX / PARAMS_PER_ROW));
+
+    for (let i = 0; i < entries.length; i += ROWS_PER_CHUNK) {
+        const batch = entries.slice(i, i + ROWS_PER_CHUNK);
+
+        const placeholders = batch.map(() => '(?, ?, ?)').join(', ');
+        const sql = `
+INSERT INTO ${TABLE} (file_path, last_mtime, file_hash)
+VALUES ${placeholders}
+ON CONFLICT(file_path) DO UPDATE SET
+    last_mtime = excluded.last_mtime,
+    file_hash  = excluded.file_hash
+    `;
+
+        const params: Array<string | number | null> = [];
+        for (const e of batch) params.push(e.file_path, e.last_mtime, e.file_hash ?? null);
+
+        // No explicit BEGIN/COMMIT: each execute is its own (short) implicit tx
+        await withRetry(() => db.execute(sql, params));
     }
 }
 
@@ -111,7 +120,7 @@ export async function upsertManyFileIndexes(entries: FileIndexRow[]): Promise<vo
 export async function deleteFileIndexByPath(file_path: string): Promise<void> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM file_index WHERE file_path = ?`,
+        `DELETE FROM ${TABLE} WHERE file_path = ?`,
         [file_path]
     );
 }
@@ -123,14 +132,12 @@ export async function deleteFileIndexByPath(file_path: string): Promise<void> {
  */
 export async function deleteFileIndexesByPaths(file_paths: string[], batchSize = 500): Promise<void> {
     if (!file_paths.length) return;
-
     const db = await getDb();
-
     for (let i = 0; i < file_paths.length; i += batchSize) {
         const batch = file_paths.slice(i, i + batchSize);
         const placeholders = batch.map(() => '?').join(',');
         await db.execute(
-            `DELETE FROM file_index WHERE file_path IN (${placeholders})`,
+            `DELETE FROM ${TABLE} WHERE file_path IN (${placeholders})`,
             batch
         );
     }
@@ -142,8 +149,10 @@ export async function deleteFileIndexesByPaths(file_paths: string[], batchSize =
  * ⚠️ Use with caution — this will clear all file tracking data,
  * forcing all files to be treated as "new" on the next scan.
  */
-export async function deleteAllFileIndexes(): Promise<void> {
+export async function deleteAllFileIndexes(vacuumAfter = false): Promise<number> {
     const db = await getDb();
-    resetSessionFileIndexCache();
-    await db.execute(`DELETE FROM file_index`);
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    await resetSessionFileIndexCache();
+    return (res as any)?.rowsAffected ?? 0;
 }
