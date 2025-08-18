@@ -23,8 +23,9 @@ import {
     getProductSize,
     upsertProductSize,
     deleteProductSize,
-    type ProductSize,
 } from '@/db/productSize';
+
+import type { ProductSize } from '@/db/types';
 
 type ParametersProps = {
     oemProductId: string;

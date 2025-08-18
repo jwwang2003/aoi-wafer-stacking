@@ -12,7 +12,7 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/store';
 import { useAppSelector } from '@/hooks';
 import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
-import { advanceStepper, setStepper } from '@/slices/preferencesSlice';
+import { advanceStepper } from '@/slices/preferencesSlice';
 // DB
 import { getDb } from '@/db';
 import { deleteAllFileIndexes } from '@/db/fileIndex';

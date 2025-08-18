@@ -14,10 +14,8 @@ import type { OemProductMapRow, WaferMapRow } from '@/db/types';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
 import SubstratePane from '@/components/Substrate';
 
-import { ExcelType, type WaferFileMetadata } from '@/types/wafer';
+import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
-import { invokeParseSubstrateDefectXls, invokeParseWafer, parseWaferMap, parseWaferMapEx } from '@/api/tauri/wafer';
-import { AsciiDie, AsciiMap, SubstrateDefectXlsResult, WaferMapDie } from '@/types/ipc';
 import { toWaferFileMetadata } from '@/types/helpers';
 
 // ---------------- 中文 UI 文案 ----------------

@@ -27,7 +27,6 @@
     "sql:allow-load",
     "sql:allow-execute",
     "sql:allow-select",
-    "sql:allow-close",
-    "opener:default"
+    "sql:allow-close"
   ]
 }

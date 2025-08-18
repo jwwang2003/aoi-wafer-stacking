@@ -4,10 +4,8 @@ import {
     Stack,
     SegmentedControl,
     Button,
-    Title,
     Text,
     Paper,
-    Divider,
 } from '@mantine/core';
 import {
     Routes,

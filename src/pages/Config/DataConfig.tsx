@@ -44,7 +44,7 @@ export default function DataConfigSubpage() {
     const autoTrigger = useAppSelector(s => s.preferences.autoTriggers.folderDetection);
 
     const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
-    const { rootPath, rootLastModified, regex: regexPatterns } = dataSourceConfig;
+    const { rootPath, regex: regexPatterns } = dataSourceConfig;
 
     // Redux edit handlers
     const handleRegexChange = (newPattern: string, type: keyof DataSourceRegex) => {

@@ -92,7 +92,6 @@ export default function WaferStacking() {
     const [tasks, setTasks] = useState<string[][]>([]);
     const [processing, setProcessing] = useState(false);
     const [result, setResult] = useState<string | null>(null);
-    const [debugInfo, setDebugInfo] = useState<string | null>(null);
     const [combinedHeaders, setCombinedHeaders] = useState<
         Record<string, string>
     >({});
@@ -161,7 +160,6 @@ export default function WaferStacking() {
     const processMapping = async () => {
         setProcessing(true);
         setResult(null);
-        setDebugInfo(null);
         try {
             const selectedLayerInfo = selectedLayers
                 .map((layerValue) => {
@@ -365,7 +363,7 @@ export default function WaferStacking() {
             );
 
             const finalOffset = { dx: 0, dy: 0 };
-            const { offsetMap, offsetDies } = applyOffsetToAsciiMap(
+            const { offsetMap } = applyOffsetToAsciiMap(
                 mergedDies,
                 finalOffset.dx,
                 finalOffset.dy
@@ -424,13 +422,6 @@ export default function WaferStacking() {
         } finally {
             setProcessing(false);
         }
-    };
-
-    /**
-     * 添加任务到批量处理列表
-     */
-    const handleAddTask = () => {
-        setTasks((prev) => [...prev]);
     };
 
     /**
