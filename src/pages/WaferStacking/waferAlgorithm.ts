@@ -12,7 +12,6 @@ import {
 } from '@/types/ipc';
 import { Statistics } from './types';
 import { PRIORITY_RULES, LayerMeta } from './priority';
-import { DataSourceType } from '@/types/dataSource';
 
 
 export const getLayerPriority = (meta: LayerMeta): number => {
