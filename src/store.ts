@@ -4,7 +4,7 @@ import preferencesReducer from './slices/preferencesSlice';
 import dataSourceConfigReducer from './slices/dataSourceConfigSlice';
 import dataSourceStateReducer from './slices/dataSourceStateSlice';
 import waferMetadataReducer from './slices/waferMetadataSlice';
-import stackingJobReducer from './slices/stackingJob';
+import stackingJobReducer from './slices/job';
 import loggingReducer from './slices/logSlice';
 
 import { validationPersistenceMiddleware } from './slices/middleware';

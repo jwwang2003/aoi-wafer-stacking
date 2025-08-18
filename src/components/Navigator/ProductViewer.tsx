@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Card, Group, Stack, Table, Text, ScrollArea, Loader, Title, Badge,
-    TextInput, ActionIcon, Tooltip, Alert, SimpleGrid, Button
+    TextInput, ActionIcon, Tooltip, Alert, SimpleGrid
 } from '@mantine/core';
 import { IconRefresh, IconSearch, IconX, IconAlertCircle } from '@tabler/icons-react';
 
 import { useDispatch } from 'react-redux';
 import { useAppSelector } from '@/hooks';
 import { AppDispatch } from '@/store';
-import { clearJob, setJob } from '@/slices/stackingJob';
+import { clearJob, setJob } from '@/slices/job';
 import type { OemProductMapRow, WaferMapRow } from '@/db/types';
 
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import SubstratePane from '@/components/Substrate';
 
 import { ExcelType, type WaferFileMetadata } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
+import { invokeParseSubstrateDefectXls, invokeParseWafer, parseWaferMap, parseWaferMapEx } from '@/api/tauri/wafer';
+import { AsciiDie, AsciiMap, SubstrateDefectXlsResult, WaferMapDie } from '@/types/ipc';
+import { toWaferFileMetadata } from '@/types/helpers';
 
 // ---------------- 中文 UI 文案 ----------------
 const zh = {
@@ -301,11 +305,18 @@ export default function ProductBatchNavigator({
     }, [subsState.data, subIdFilter, pathFilter]);
 
     // 5) 叠图面板（点击子编号后加载）
-    const [mapsLoading, setMapsLoading] = useState(false);
     const [mapsError, setMapsError] = useState<string | null>(null);
 
-    const stackingJob = useAppSelector(s => s.stackingJob);
-    const { waferSubstrate, waferMaps } = stackingJob;
+    const job = useAppSelector(s => s.stackingJob);
+    const {
+        oemProductId: jobOemId,
+        productId: jobProductId,
+        batchId: jobBatchId,
+        waferId: jobWaferId,
+        subId: jobSubId,
+        waferSubstrate: jobSubstrate,
+        waferMaps: jobWaferMaps,
+    } = job;
 
     async function loadWaferMaps(sub_id: string) {
         setSelectedSubId(sub_id);
@@ -320,38 +331,29 @@ export default function ProductBatchNavigator({
             return;
         }
 
-        setMapsLoading(true);
         try {
             const { getSubstrateDefectBySubId } = await import('@/db/spreadSheet');
             const substrate = await getSubstrateDefectBySubId(sub_id);
             const maps = await getWaferMapsByTriple(selectedProductId, selectedLotId, waferNum);
-            await dispatch(setJob({ substrate, maps }))
+            await dispatch(
+                setJob({
+                    oemProductId: selectedOemId!,
+                    productId: selectedProductId!,
+                    batchId: selectedLotId!,
+                    waferId: waferNum!,
+                    subId: selectedSubId!,
+                    substrate, maps
+                })
+            );
 
         } catch (e: any) {
             setMapsError(e?.message ?? '加载叠图失败');
-        } finally {
-            setMapsLoading(false);
         }
     }
 
     function pickOemProduct(row: OemProductMapRow) {
         setSelectedOemId(row.oem_product_id);
         setSelectedProductId(row.product_id);
-    }
-
-    // wafer_maps → 卡片数据
-    function toWaferFileMetadata(r: any): WaferFileMetadata {
-        return {
-            filePath: r.file_path,
-            productModel: r.product_id,
-            batch: r.batch_id,
-            waferId: String(r.wafer_id),
-            processSubStage: typeof r.sub_stage === 'number' ? r.sub_stage : undefined,
-            retestCount: typeof r.retest_count === 'number' ? r.retest_count : undefined,
-            time: r.time ?? undefined,
-            stage: r.stage ?? undefined,
-            lastModified: 0,
-        };
     }
 
     return (
@@ -623,49 +625,55 @@ export default function ProductBatchNavigator({
             {/* 晶圆叠图面板 */}
             <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column' }}>
                 <Group justify="space-between" mb="xs">
-                    <Title order={4}>{zh.waferMaps}</Title>
+                    <Title order={4}>{zh.waferMaps + ' (active)'}</Title>
                     <Stack gap={0} align="end">
                         <Text size="xs" c="dimmed">{zh.selected}</Text>
                         <Text size="sm" fw={600}>
-                            {selectedProductId ? `${selectedOemId} (${selectedProductId})` : '—'} / {selectedLotId ?? '—'} / {selectedWaferId ?? '—'} {selectedSubId ? ` / ${selectedSubId}` : ''}
+                            {/* OEM/Product */}
+                            {jobProductId
+                                ? `${jobOemId || '—'} (${jobProductId})`
+                                : (jobOemId || '—')}
+                            {' / '}
+                            {/* Batch */}
+                            {jobBatchId || '—'}
+                            {' / '}
+                            {/* Wafer */}
+                            {jobWaferId ?? '—'}
+                            {/* Optional sub_id */}
+                            {jobSubId ? ` / ${jobSubId}` : ''}
                         </Text>
                     </Stack>
                 </Group>
 
                 {mapsError && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{mapsError}</Alert>}
 
-                {mapsLoading ? (
-                    <Group justify="center" p="md"><Loader size="sm" /></Group>
-                ) : !selectedProductId || !selectedLotId || !selectedWaferId || !selectedSubId ? (
-                    <Text c="dimmed" ta="center">{zh.selectSubTip}</Text>
-                ) : waferMaps.length === 0 ? (
-                    <Text c="dimmed" ta="center">{zh.noMaps}</Text>
-                ) : (
+                {job && jobSubstrate && <>
                     <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-                        {waferMaps.map((r, i) => (
+
+                        {jobWaferMaps.map((r, i) => (
                             <WaferFileMetadataCard key={`${r.idx}-${i}`} data={toWaferFileMetadata(r)} />
                         ))}
-                        {waferSubstrate &&
+                        {jobSubstrate &&
                             <ExcelMetadataCard
                                 data={{
-                                    ...waferSubstrate,
+                                    ...jobSubstrate,
                                     type: ExcelType.DefectList,
                                     stage: DataSourceType.Substrate,
-                                    filePath: waferSubstrate.file_path,
+                                    filePath: jobSubstrate.file_path,
                                     lastModified: 0
                                 }} />
                         }
                     </SimpleGrid>
-                )}
+                </>}
             </Card>
 
-            <Button
-                disabled={
-                    !selectedProductId || !selectedLotId || !selectedWaferId ||
-                    !selectedSubId || waferMaps.length === 0 || !waferSubstrate
-                }
-                onClick={() => { }}
-            >设定目标</Button>
+            {job &&
+                <SubstratePane
+                    showParameters
+                    oemProductId={jobOemId}
+                    waferSubstrate={jobSubstrate}
+                    waferMaps={jobWaferMaps}
+                />}
         </Stack>
     );
 }

@@ -1,6 +1,8 @@
 import { resetSessionFolderIndexCache } from '@/utils/fs';
-import { getDb } from './index';
+import { getDb, vacuum } from './index';
 import { FolderIndexRow } from './types';
+
+const TABLE = 'folder_index';
 
 // Current:
 // CREATE TABLE IF NOT EXISTS folder_index (
@@ -17,7 +19,7 @@ import { FolderIndexRow } from './types';
 export async function getFolderIndexByPath(folder_path: string): Promise<FolderIndexRow | null> {
     const db = await getDb();
     const rows = await db.select<FolderIndexRow[]>(
-        `SELECT folder_path, last_mtime FROM folder_index WHERE folder_path = ?`,
+        `SELECT folder_path, last_mtime FROM ${TABLE} WHERE folder_path = ?`,
         [folder_path]
     );
     return rows[0] ?? null;
@@ -38,7 +40,7 @@ export async function getManyFolderIndexesByPaths(paths: string[]): Promise<Map<
     const qs = paths.map(() => '?').join(',');
     const rows = await db.select<FolderIndexRow[]>(
         `SELECT folder_path, last_mtime
-    FROM folder_index
+    FROM ${TABLE}
     WHERE folder_path IN (${qs})`,
         paths
     );
@@ -57,7 +59,7 @@ export async function getAllFolderIndexes(): Promise<Map<string, FolderIndexRow>
 
     const rows = await db.select<FolderIndexRow[]>(
         `SELECT folder_path, last_mtime
-    FROM folder_index
+    FROM ${TABLE}
     ORDER BY folder_path ASC`
     );
 
@@ -76,7 +78,7 @@ export async function getAllFolderIndexes(): Promise<Map<string, FolderIndexRow>
 export async function upsertOneFolderIndex(entry: FolderIndexRow): Promise<void> {
     const db = await getDb();
     await db.execute(
-        `INSERT INTO folder_index (folder_path, last_mtime)
+        `INSERT INTO ${TABLE} (folder_path, last_mtime)
     VALUES (?, ?)
     ON CONFLICT(folder_path)
     DO UPDATE SET last_mtime=excluded.last_mtime`,
@@ -97,7 +99,7 @@ export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promis
         await db.execute('BEGIN');
         for (const e of entries) {
             await db.execute(
-                `INSERT INTO folder_index (folder_path, last_mtime)
+                `INSERT INTO ${TABLE} (folder_path, last_mtime)
     VALUES (?, ?)
     ON CONFLICT(folder_path)
     DO UPDATE SET last_mtime=excluded.last_mtime`,
@@ -106,7 +108,6 @@ export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promis
         }
         await db.execute('COMMIT');
     } catch (err) {
-        console.error('Error while upserting folder indexes');
         await db.execute('ROLLBACK');
         throw err;
     }
@@ -120,7 +121,7 @@ export async function upsertManyFolderIndexes(entries: FolderIndexRow[]): Promis
 export async function deleteFolderIndexByPath(file_path: string): Promise<void> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM folder_index WHERE folder_path = ?`
+        `DELETE FROM ${TABLE} WHERE folder_path = ?`
         , [file_path]
     );
 }
@@ -145,12 +146,11 @@ export async function deleteFolderIndexesByPaths(
         const batch = folder_paths.slice(i, i + CHUNK);
         const placeholders = batch.map(() => '?').join(',');
         await db.execute(
-            `DELETE FROM folder_index WHERE folder_path IN (${placeholders})`,
+            `DELETE FROM ${TABLE} WHERE folder_path IN (${placeholders})`,
             batch
         );
     }
 }
-
 
 /**
  * Deletes all records from the folder_index table.
@@ -158,8 +158,10 @@ export async function deleteFolderIndexesByPaths(
  * ⚠️ Use with caution — this will remove all folder tracking information
  * and force the application to treat every folder as "new" on the next scan.
  */
-export async function deleteAllFolderIndexes(): Promise<void> {
+export async function deleteAllFolderIndexes(vacuumAfter = false): Promise<number> {
     const db = await getDb();
-    resetSessionFolderIndexCache();
-    await db.execute(`DELETE FROM folder_index`);
+    const res = await db.execute(`DELETE FROM ${TABLE}`);
+    if (vacuumAfter) await vacuum();
+    await resetSessionFolderIndexCache();
+    return (res as any)?.rowsAffected ?? 0;
 }

@@ -123,6 +123,7 @@ export const revalidateDataSource = createAsyncThunk<
             return { valid: false, dataSourceConfig: defaultConfig };
 
         const merged = mergeDefinedKeys(defaultConfig, parsed);
+        console.log(merged);
         if (!isValidDataSourceConfig(merged))
             return { valid: false, dataSourceConfig: defaultConfig };
 
@@ -237,7 +238,6 @@ const dataSourceSlice = createSlice({
         // —— Root path reducer ——
         setRootPath(state, action: PayloadAction<string>) {
             state.rootPath = action.payload;
-            state.rootLastModified = now();
         },
 
         // —— Data source paths reducers ——

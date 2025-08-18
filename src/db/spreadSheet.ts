@@ -1,5 +1,7 @@
-import { getDb, MAX_PARAMS } from '@/db';
+import { getDb, MAX_PARAMS, vacuum } from '@/db';
 import { OemMapping, OemProductMapRow, ProductDefectMapRow, SubstrateDefectRow } from './types';
+
+const OEM_MAP_TABLE = 'oem_product_map';
 
 // =============================================================================
 // NOTE: OEM ↔ Internal product mapping helpers
@@ -9,7 +11,7 @@ export async function getAllOemProductMappings(): Promise<OemProductMapRow[]> {
     const db = await getDb();
     return db.select<OemProductMapRow[]>(
         `SELECT oem_product_id, product_id
-    FROM oem_product_map`
+    FROM ${OEM_MAP_TABLE}`
     );
 }
 
@@ -19,7 +21,7 @@ export async function getOemProductMappingByOemId(
     const db = await getDb();
     const rows = await db.select<OemProductMapRow[]>(
         `SELECT oem_product_id, product_id
-    FROM oem_product_map
+    FROM ${OEM_MAP_TABLE}
     WHERE oem_product_id = ?`,
         [oem_product_id]
     );
@@ -32,7 +34,7 @@ export async function getOemProductMappingByProductId(
     const db = await getDb();
     const rows = await db.select<OemProductMapRow[]>(
         `SELECT oem_product_id, product_id
-    FROM oem_product_map
+    FROM ${OEM_MAP_TABLE}
     WHERE product_id = ?`,
         [product_id]
     );
@@ -44,7 +46,7 @@ export async function deleteOemProductMappingByOemId(
 ): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM oem_product_map
+        `DELETE FROM ${OEM_MAP_TABLE}
     WHERE oem_product_id = ?`,
         [oem_product_id]
     );
@@ -56,7 +58,7 @@ export async function deleteOemProductMappingByProductId(
 ): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM oem_product_map
+        `DELETE FROM ${OEM_MAP_TABLE}
     WHERE product_id = ?`,
         [product_id]
     );
@@ -70,14 +72,14 @@ export async function ensureOemMapping(
     const db = await getDb();
     const existing = await db.select<{ count: number }[]>(
         `SELECT COUNT(*) AS count
-    FROM oem_product_map
+    FROM ${OEM_MAP_TABLE}
     WHERE oem_product_id = ? AND product_id = ?`,
         [oemProductId, productId]
     );
     if (existing[0]?.count > 0) return true;
 
     await db.execute(
-        `INSERT INTO oem_product_map (oem_product_id, product_id)
+        `INSERT INTO ${OEM_MAP_TABLE} (oem_product_id, product_id)
     VALUES (?, ?)`,
         [oemProductId, productId]
     );
@@ -106,7 +108,7 @@ export async function maintainOemMapping(
         for (const c of chunk(pairs, UPSERT_ROWS_PER_CHUNK)) {
             const placeholders = c.map(() => '(?, ?)').join(', ');
             const sql = `
-INSERT INTO oem_product_map (oem_product_id, product_id)
+INSERT INTO ${OEM_MAP_TABLE} (oem_product_id, product_id)
 VALUES ${placeholders}
 ON CONFLICT(oem_product_id) DO UPDATE SET product_id = excluded.product_id`;
             const bindings: string[] = [];
@@ -116,7 +118,7 @@ ON CONFLICT(oem_product_id) DO UPDATE SET product_id = excluded.product_id`;
         }
         await db.execute('COMMIT;');
 
-        const current = await db.select<OemMapping[]>('SELECT oem_product_id, product_id FROM oem_product_map');
+        const current = await db.select<OemMapping[]>(`SELECT oem_product_id, product_id FROM ${OEM_MAP_TABLE}`);
         const incomingOems = new Set(pairs.map(p => p.oem_product_id));
         const missing = current.filter(row => !incomingOems.has(row.oem_product_id));
         return { tot, missing };
@@ -126,9 +128,19 @@ ON CONFLICT(oem_product_id) DO UPDATE SET product_id = excluded.product_id`;
     }
 }
 
+/** Delete all rows from oem_product_map. Optionally VACUUM afterward. */
+export async function deleteAllOemProductMappings(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${OEM_MAP_TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
+}
+
 // =============================================================================
 // NOTE: product_defect_map helpers
 // =============================================================================
+
+const PRODUCT_DEFECT_TABLE = 'product_defect_map';
 
 /**
  * Get all rows in product_defect_map.
@@ -137,7 +149,7 @@ export async function getAllProductDefectMaps(): Promise<ProductDefectMapRow[]> 
     const db = await getDb();
     return db.select<ProductDefectMapRow[]>(
         `SELECT oem_product_id, lot_id, wafer_id, sub_id, file_path
-    FROM product_defect_map`
+    FROM ${PRODUCT_DEFECT_TABLE}`
     );
 }
 
@@ -152,7 +164,7 @@ export async function getProductDefectMap(
     const db = await getDb();
     const rows = await db.select<ProductDefectMapRow[]>(
         `SELECT oem_product_id, lot_id, wafer_id, sub_id, file_path
-    FROM product_defect_map
+    FROM ${PRODUCT_DEFECT_TABLE}
     WHERE oem_product_id = ? AND lot_id = ? AND wafer_id = ?`,
         [oem_product_id, lot_id, wafer_id]
     );
@@ -178,7 +190,7 @@ export async function getProductDefectMapsByOemId(
 
     let sql = `
     SELECT oem_product_id, lot_id, wafer_id, sub_id, file_path
-    FROM product_defect_map
+    FROM ${PRODUCT_DEFECT_TABLE}
     WHERE oem_product_id = ?
     ORDER BY ${orderBy}`;
 
@@ -196,7 +208,7 @@ export async function getBatchesByOemId(
     const db = await getDb();
     return db.select<{ lot_id: string }[]>(
         `SELECT DISTINCT lot_id
-    FROM product_defect_map
+    FROM ${PRODUCT_DEFECT_TABLE}
     WHERE oem_product_id = ?
     ORDER BY lot_id ASC`,
         [oem_product_id]
@@ -213,7 +225,7 @@ export async function getWafersByProductAndBatch(
     const db = await getDb();
     return db.select<{ wafer_id: string }[]>(
         `SELECT DISTINCT wafer_id
-    FROM product_defect_map
+    FROM ${PRODUCT_DEFECT_TABLE}
     WHERE oem_product_id = ? AND lot_id = ?
     ORDER BY CAST(wafer_id AS INTEGER) ASC`,
         [oem_product_id, lot_id]
@@ -231,7 +243,7 @@ export async function getSubIdsByProductBatchWafer(
     const db = await getDb();
     return db.select<{ sub_id: string; file_path: string }[]>(
         `SELECT sub_id, file_path
-    FROM product_defect_map
+    FROM ${PRODUCT_DEFECT_TABLE}
     WHERE oem_product_id = ?
         AND lot_id = ?
         AND wafer_id = ?
@@ -248,8 +260,8 @@ export async function upsertProductDefectMap(
 ): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `INSERT INTO product_defect_map
-        roduct_id, lot_id, wafer_id, sub_id, file_path)
+        `INSERT INTO ${PRODUCT_DEFECT_TABLE}
+        oem_product_id, lot_id, wafer_id, sub_id, file_path)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(oem_product_id, lot_id, wafer_id) DO UPDATE SET
         sub_id = excluded.sub_id,
@@ -298,7 +310,7 @@ export async function upsertManyProductDefectMaps(
         for (const c of chunk(unique, ROWS_PER_CHUNK)) {
             const placeholders = c.map(() => '(?, ?, ?, ?, ?)').join(', ');
             const sql = `
-        INSERT INTO product_defect_map
+        INSERT INTO ${PRODUCT_DEFECT_TABLE}
         (oem_product_id, lot_id, wafer_id, sub_id, file_path)
         VALUES ${placeholders}
         ON CONFLICT(oem_product_id, lot_id, wafer_id) DO UPDATE SET
@@ -326,7 +338,7 @@ export async function deleteProductDefectMap(
 ): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM product_defect_map
+        `DELETE FROM ${PRODUCT_DEFECT_TABLE}
     WHERE oem_product_id = ? AND lot_id = ? AND wafer_id = ?`,
         [oem_product_id, lot_id, wafer_id]
     );
@@ -339,22 +351,32 @@ export async function deleteProductDefectMap(
 export async function deleteProductDefectMapByFilePath(file_path: string): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM product_defect_map
+        `DELETE FROM ${PRODUCT_DEFECT_TABLE}
     WHERE file_path = ?`,
         [file_path]
     );
     return true;
 }
 
+/** Delete all rows from product_defect_map. Optionally VACUUM afterward. */
+export async function deleteAllProductDefectMaps(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${PRODUCT_DEFECT_TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
+}
+
 // =============================================================================
 // NOTE: substrate_defect helpers
 // =============================================================================
+
+const SUBSTRATE_TABLE = 'substrate_defect';
 
 export async function getAllSubstrateDefects(): Promise<SubstrateDefectRow[]> {
     const db = await getDb();
     return db.select<SubstrateDefectRow[]>(
         `SELECT sub_id, file_path
-    FROM substrate_defect`
+    FROM ${SUBSTRATE_TABLE}`
     );
 }
 
@@ -362,7 +384,7 @@ export async function getSubstrateDefectBySubId(sub_id: string): Promise<Substra
     const db = await getDb();
     const rows = await db.select<SubstrateDefectRow[]>(
         `SELECT sub_id, file_path
-    FROM substrate_defect
+    FROM ${SUBSTRATE_TABLE}
     WHERE sub_id = ?`,
         [sub_id]
     );
@@ -373,7 +395,7 @@ export async function getSubstrateDefectsByFilePath(file_path: string): Promise<
     const db = await getDb();
     return db.select<SubstrateDefectRow[]>(
         `SELECT sub_id, file_path
-    FROM substrate_defect
+    FROM ${SUBSTRATE_TABLE}
     WHERE file_path = ?`,
         [file_path]
     );
@@ -382,7 +404,7 @@ export async function getSubstrateDefectsByFilePath(file_path: string): Promise<
 export async function upsertSubstrateDefect(row: SubstrateDefectRow): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `INSERT INTO substrate_defect (sub_id, file_path)
+        `INSERT INTO ${SUBSTRATE_TABLE} (sub_id, file_path)
     VALUES (?, ?)
     ON CONFLICT(sub_id) DO UPDATE SET
         file_path = excluded.file_path`,
@@ -413,7 +435,7 @@ export async function upsertManySubstrateDefects(
         for (const c of chunk(unique, ROWS_PER_CHUNK)) {
             const placeholders = c.map(() => '(?, ?)').join(', ');
             const sql = `
-        INSERT INTO substrate_defect (sub_id, file_path)
+        INSERT INTO ${SUBSTRATE_TABLE} (sub_id, file_path)
         VALUES ${placeholders}
         ON CONFLICT(sub_id) DO UPDATE SET
         file_path = excluded.file_path`;
@@ -432,7 +454,7 @@ export async function upsertManySubstrateDefects(
 export async function deleteSubstrateDefectBySubId(sub_id: string): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM substrate_defect
+        `DELETE FROM ${SUBSTRATE_TABLE}
     WHERE sub_id = ?`,
         [sub_id]
     );
@@ -442,9 +464,62 @@ export async function deleteSubstrateDefectBySubId(sub_id: string): Promise<bool
 export async function deleteSubstrateDefectsByFilePath(file_path: string): Promise<boolean> {
     const db = await getDb();
     await db.execute(
-        `DELETE FROM substrate_defect
+        `DELETE FROM ${SUBSTRATE_TABLE}
     WHERE file_path = ?`,
         [file_path]
     );
     return true;
+}
+
+/** Delete all rows from substrate_defect. Optionally VACUUM afterward. */
+export async function deleteAllSubstrateDefects(vacuumAfter = false): Promise<number> {
+    const db = await getDb();
+    const res = await db.execute(`DELETE FROM ${SUBSTRATE_TABLE}`);
+    if (vacuumAfter) await vacuum();
+    return (res as any)?.rowsAffected ?? 0;
+}
+
+// =============================================================================
+/**
+ * Wipe wafer_maps, substrate_defect, product_defect_map, and oem_product_map
+ * in that order (children → parent), then VACUUM once (default true).
+ */
+export async function resetSpreadSheetData(options: { vacuumAfter?: boolean } = {}): Promise<{
+    deletedWaferMaps: number;
+    deletedSubstrateDefects: number;
+    deletedProductDefects: number;
+    deletedOemMappings: number;
+}> {
+    const { vacuumAfter = true } = options;
+    const db = await getDb();
+
+    let deletedWaferMaps = 0;
+    let deletedSubstrateDefects = 0;
+    let deletedProductDefects = 0;
+    let deletedOemMappings = 0;
+
+    await db.execute('BEGIN');
+    try {
+        const r1 = await db.execute(`DELETE FROM ${SUBSTRATE_TABLE}`);
+        const r2 = await db.execute(`DELETE FROM ${PRODUCT_DEFECT_TABLE}`);
+        const r3 = await db.execute(`DELETE FROM ${OEM_MAP_TABLE}`);
+
+        deletedSubstrateDefects = (r1 as any)?.rowsAffected ?? 0;
+        deletedProductDefects = (r2 as any)?.rowsAffected ?? 0;
+        deletedOemMappings = (r3 as any)?.rowsAffected ?? 0;
+
+        await db.execute('COMMIT');
+    } catch (e) {
+        await db.execute('ROLLBACK');
+        throw e;
+    }
+
+    if (vacuumAfter) await vacuum();
+
+    return {
+        deletedWaferMaps,
+        deletedSubstrateDefects,
+        deletedProductDefects,
+        deletedOemMappings,
+    };
 }

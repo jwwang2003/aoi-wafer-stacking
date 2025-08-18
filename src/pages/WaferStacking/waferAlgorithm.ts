@@ -1,4 +1,3 @@
-import { Statistics } from './types';
 import {
     MapData,
     BinMapData,
@@ -9,112 +8,236 @@ import {
     HexMap,
     Wafer,
     isSpecialBin,
-    isNumberBin
+    isNumberBin,
 } from '@/types/ipc';
+import { Statistics } from './types';
+import { PRIORITY_RULES, LayerMeta } from './priority';
+import { DataSourceType } from '@/types/dataSource';
 
-const LAYER_PRIORITIES = {
-    CP2: 5,
-    WLBI: 4,
-    CP1: 3,
-    CP3: 2,
-    AOI: 1,
+
+export const getLayerPriority = (meta: LayerMeta): number => {
+    const matchedRule = PRIORITY_RULES.find((rule) => rule.when(meta));
+    return matchedRule ? matchedRule.score : 0;
+};
+/**
+ * 提取对齐标记
+ */
+export const extractAlignmentMarkers = (
+    dies: AsciiDie[]
+): { x: number; y: number }[] => {
+    return dies
+        .filter(
+            (die) => isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special)
+        )
+        .map((die) => ({ x: die.x, y: die.y }));
 };
 
-export const getLayerPriority = (layerName: string): number => {
-    return LAYER_PRIORITIES[layerName as keyof typeof LAYER_PRIORITIES];
-};
-
-export const extractAlignmentMarkers = (dies: AsciiDie[]): { x: number; y: number }[] => {
-    return dies.filter((die) => isSpecialBin(die.bin)).map((die) => ({ x: die.x, y: die.y }));
-};
 
 export const calculateOffset = (
     baseMarkers: { x: number; y: number }[],
     targetMarkers: { x: number; y: number }[]
 ): { dx: number; dy: number } => {
-    if (baseMarkers.length === 0 || targetMarkers.length === 0) return { dx: 0, dy: 0 };
+    const baseReference = baseMarkers.length > 0 ? baseMarkers[0] : null;
+    const targetReference = targetMarkers.length > 0 ? targetMarkers[0] : null;
 
-    const sortedBase = [...baseMarkers].sort((a, b) => a.x - b.x);
-    const sortedTarget = [...targetMarkers].sort((a, b) => a.x - b.x);
-    const hasTwoPoints = sortedBase.length >= 2 && sortedTarget.length >= 2;
+    if (!baseReference || !targetReference) return { dx: 0, dy: 0 };
 
-    const dx1 = sortedBase[0].x - sortedTarget[0].x;
-    const dy1 = sortedBase[0].y - sortedTarget[0].y;
+    const dx = baseReference.x - targetReference.x;
+    const dy = baseReference.y - targetReference.y;
 
-    return hasTwoPoints
-        ? {
-            dx: Math.round((dx1 + (sortedBase[1].x - sortedTarget[1].x)) / 2),
-            dy: Math.round((dy1 + (sortedBase[1].y - sortedTarget[1].y)) / 2),
-        }
-        : { dx: dx1, dy: dy1 };
+    if (baseMarkers.length >= 2 && targetMarkers.length >= 2) {
+        const dx2 = baseMarkers[1].x - targetMarkers[1].x;
+        const dy2 = baseMarkers[1].y - targetMarkers[1].y;
+        return {
+            dx: Math.round((dx + dx2) / 2),
+            dy: Math.round((dy + dy2) / 2),
+        };
+    }
+    return { dx, dy };
 };
 
-export const applyOffsetToDies = (dies: AsciiDie[], dx: number, dy: number): AsciiDie[] => {
-    return dies.map((die) => ({ ...die, x: die.x + dx, y: die.y + dy }));
-};
 
-export const convertDiesToMap = (dies: AsciiDie[]): string[] => {
-    if (dies.length === 0) return [];
-
-    const xs = dies.map((die) => die.x);
-    const ys = dies.map((die) => die.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    const rows: string[][] = Array.from({ length: maxY - minY + 1 }, () =>
+export const createEmptyAsciiMap = (
+    allAlignedDies: AsciiDie[][]
+): { map: string[][]; minX: number; minY: number } => {
+    const allX = allAlignedDies.flatMap((dies) => dies.map((die) => die.x));
+    const allY = allAlignedDies.flatMap((dies) => dies.map((die) => die.y));
+    const minX = Math.min(...allX);
+    const maxX = Math.max(...allX);
+    const minY = Math.min(...allY);
+    const maxY = Math.max(...allY);
+    const map = Array.from({ length: maxY - minY + 1 }, () =>
         Array(maxX - minX + 1).fill('.')
     );
+    return { map, minX, minY };
+};
 
+export const fillLayerToAsciiMap = (
+    map: string[][],
+    dies: AsciiDie[],
+    layerPriority: number,
+    minX: number,
+    minY: number,
+    existingPriorities: number[][]
+) => {
     dies.forEach((die) => {
+        if (isSpecialBin(die.bin) && ['.', 'S', '*'].includes(die.bin.special)) {
+            return;
+        }
         const rowIdx = die.y - minY;
         const colIdx = die.x - minX;
-
-        if (rowIdx < 0 || rowIdx >= rows.length || colIdx < 0 || colIdx >= rows[rowIdx].length) return;
-
-        if (isNumberBin(die.bin)) {
-            rows[rowIdx][colIdx] = die.bin.number.toString();
-        } else if (isSpecialBin(die.bin) && !['.', 'S', '*'].includes(die.bin.special)) {
-            rows[rowIdx][colIdx] = die.bin.special;
+        if (
+            rowIdx < 0 ||
+            rowIdx >= map.length ||
+            colIdx < 0 ||
+            colIdx >= map[rowIdx].length
+        ) {
+            return;
+        }
+        const currentPriority = existingPriorities[rowIdx][colIdx];
+        let shouldOverwrite = false;
+        if (layerPriority > currentPriority) {
+            shouldOverwrite = true;
+        } else if (layerPriority < currentPriority) {
+            const existingChar = map[rowIdx][colIdx];
+            shouldOverwrite = existingChar === '1';
+        }
+        if (shouldOverwrite) {
+            if (isNumberBin(die.bin)) {
+                map[rowIdx][colIdx] = die.bin.number.toString();
+            } else if (isSpecialBin(die.bin)) {
+                map[rowIdx][colIdx] = die.bin.special;
+            }
+            existingPriorities[rowIdx][colIdx] = layerPriority;
         }
     });
-
-    return rows.map((row) => row.join(''));
 };
 
-export const mergeDiesWithPriority = (allDies: AsciiDie[][], layerNames: string[]): AsciiDie[] => {
-    const dieMap = new Map<string, { die: AsciiDie; priority: number }>();
+/**
+ * 删除ASCII Map中的空行/空列
+ */
+export const removeEmptyRowsAndCols = (map: string[][]): string[][] => {
+    const filteredMap = map.filter((row) => !row.every((char) => char === '.'));
+    if (filteredMap.length === 0) return [];
+    const colCount = filteredMap[0].length;
+    const transposed = Array.from({ length: colCount }, (_, col) =>
+        filteredMap.map((row) => row[col])
+    );
+    const filteredTransposed = transposed.filter(
+        (col) => !col.every((char) => char === '.')
+    );
+    if (filteredTransposed.length === 0) return [];
+    return Array.from({ length: filteredMap.length }, (_, row) =>
+        filteredTransposed.map((col) => col[row])
+    );
+};
 
-    allDies.forEach((dies, index) => {
-        const layerName = layerNames[index];
-        const currentPriority = getLayerPriority(layerName);
 
-        dies.forEach((die) => {
-            const isSkipSpecial = isSpecialBin(die.bin) && ['.', 'S', '*'].includes(die.bin.special);
-            if (isSkipSpecial) return;
-
-            const key = `${die.x},${die.y}`;
-            const existing = dieMap.get(key);
-
-            if (!existing) {
-                dieMap.set(key, { die, priority: currentPriority });
-                return;
-            }      const existingPriority = existing.priority;
-
-
-            if (currentPriority > existing.priority) {
-                dieMap.set(key, { die, priority: currentPriority });
-            } else if (currentPriority < existingPriority) {
-                const isExistingBin1 = isNumberBin(existing.die.bin) && existing.die.bin.number === 1;
-                if (isExistingBin1) dieMap.set(key, { die, priority: currentPriority });
-            }
+/**
+ * 从ASCII Map反推合并后的Die数据
+ */
+export const mapToMergedDies = (
+    map: string[][],
+    minX: number,
+    minY: number
+): AsciiDie[] => {
+    const mergedDies: AsciiDie[] = [];
+    map.forEach((row, rowIdx) => {
+        row.forEach((char, colIdx) => {
+            if (char === '.') return;
+            const x = colIdx + minX;
+            const y = rowIdx + minY;
+            const bin = /^\d+$/.test(char)
+                ? { number: parseInt(char, 10) }
+                : { special: char };
+            mergedDies.push({ x, y, bin });
         });
     });
-
-    return Array.from(dieMap.values()).map((item) => item.die);
+    return mergedDies;
 };
 
+
+/**
+ * 对ASCII Map的XY坐标整体偏移（并同步更新Die数据）
+ */
+export const applyOffsetToAsciiMap = (
+    mergedDies: AsciiDie[],
+    dx: number,
+    dy: number
+): {
+    offsetMap: string[][];
+    offsetDies: AsciiDie[];
+    newMinX: number;
+    newMinY: number;
+} => {
+    const offsetDies = mergedDies.map((die) => ({
+        ...die,
+        x: die.x + dx,
+        y: die.y + dy,
+    }));
+    const xs = offsetDies.map((die) => die.x);
+    const ys = offsetDies.map((die) => die.y);
+    const newMinX = Math.min(...xs);
+    const newMaxX = Math.max(...xs);
+    const newMinY = Math.min(...ys);
+    const newMaxY = Math.max(...ys);
+    const offsetMap = Array.from({ length: newMaxY - newMinY + 1 }, () =>
+        Array(newMaxX - newMinX + 1).fill('.')
+    );
+    offsetDies.forEach((die) => {
+        const rowIdx = die.y - newMinY;
+        const colIdx = die.x - newMinX;
+        if (
+            rowIdx >= 0 &&
+            rowIdx < offsetMap.length &&
+            colIdx >= 0 &&
+            colIdx < offsetMap[rowIdx].length
+        ) {
+            offsetMap[rowIdx][colIdx] = isNumberBin(die.bin)
+                ? die.bin.number.toString()
+                : (die.bin as { special: string }).special;
+        }
+    });
+    return { offsetMap, offsetDies, newMinX, newMinY };
+};
+
+
+export const calculateStats = (mapData: string[]): Statistics => {
+    let totalTested = 0;
+    let totalPass = 0;
+
+    for (const row of mapData) {
+        for (const char of row) {
+            if (char !== '.' && char !== 'S' && char !== '*') {
+                totalTested++;
+                if (
+                    char === '1' ||
+                    char === 'G' ||
+                    char === 'H' ||
+                    char === 'I' ||
+                    char === 'J'
+                ) {
+                    totalPass++;
+                }
+            }
+        }
+    }
+
+    const totalFail = totalTested - totalPass;
+    const yieldPercentage = totalTested > 0 ? (totalPass / totalTested) * 100 : 0;
+
+    return {
+        totalTested: totalTested || 0,
+        totalPass: totalPass || 0,
+        totalFail: totalFail || 0,
+        yieldPercentage: yieldPercentage || 0,
+    };
+};
+
+
+/**
+ * 提取Wafer头部信息
+ */
 export const extractWaferHeader = (wafer: Wafer): Record<string, string> => ({
     Operator: wafer.operator,
     'Device Name': wafer.device,
@@ -128,6 +251,9 @@ export const extractWaferHeader = (wafer: Wafer): Record<string, string> => ({
     Notch: wafer.notch,
 });
 
+/**
+ * 提取MapData头部信息
+ */
 export const extractMapDataHeader = (mapData: MapData): Record<string, string> => ({
     'Device Name': mapData.deviceName || 'Unknown',
     'Lot No.': mapData.lotNo || 'Unknown',
@@ -142,6 +268,9 @@ export const extractMapDataHeader = (mapData: MapData): Record<string, string> =
     Yield: mapData.yieldPercent ? mapData.yieldPercent.toString() : '0',
 });
 
+/**
+ * 转换为MapData格式
+ */
 export const convertToMapData = (
     mapData: string[],
     stats: Statistics,
@@ -164,22 +293,36 @@ export const convertToMapData = (
         raw: mapData,
         dies: mapData.flatMap((row, y) =>
             row.split('').map((char, x) => ({
-                x,
-                y,
-                bin: char === '.' ? { special: '.' } : { number: parseInt(char, 10) },
+                x: Number.isFinite(x) ? x : 0,
+                y: Number.isFinite(y) ? y : 0,
+                bin:
+                    char === '.'
+                        ? { special: '.' }
+                        : {
+                            number: Number.isFinite(parseInt(char, 10))
+                                ? parseInt(char, 10)
+                                : 0,
+                        },
             }))
         ),
     },
 });
 
+/**
+ * 生成BinMap数据
+ */
 export const convertToBinMapData = (
-    mergedDies: AsciiDie[],
+    offsetDies: AsciiDie[],
     header?: Record<string, string>
 ): BinMapData => {
-    const map: WaferMapDie[] = mergedDies
+    const map: WaferMapDie[] = offsetDies
         .filter((die) => isNumberBin(die.bin))
-        .map((die) => ({ x: die.x - 1, y: die.y, bin: die.bin, reserved: 0 }));
-
+        .map((die) => ({
+            x: die.x - 1,
+            y: die.y,
+            bin: die.bin,
+            reserved: 0,
+        }));
     const binCounts: Record<number, number> = {};
     map.forEach((die) => {
         if (isNumberBin(die.bin)) {
@@ -195,7 +338,7 @@ export const convertToBinMapData = (
     return {
         waferType: header?.['WaferType'] ? parseInt(header['WaferType']) : 0,
         dut: header?.['DUT'] ? parseInt(header['DUT']) : 0,
-        mode: header?.['Mode'] ? parseInt(header['DUT']) : 0,
+        mode: header?.['Mode'] ? parseInt(header['Mode']) : 0,
         product: header?.['Device Name'] || 'Unknown',
         waferLots: header?.['Lot No.'] || 'Unknown',
         waferNo: header?.['Wafer ID'] || 'Unknown',
@@ -207,6 +350,9 @@ export const convertToBinMapData = (
     };
 };
 
+/**
+ * 转换为HexMapData类型
+ */
 export const convertToHexMapData = (
     mapData: string[],
     header?: Record<string, string>
@@ -228,7 +374,6 @@ export const convertToHexMapData = (
         I: 18,
         J: 19,
     };
-
     const grid: HexMap['grid'] = validMapData.map((row) =>
         row.split('').map((char) => {
             if (char === '.') return null;
@@ -244,9 +389,16 @@ export const convertToHexMapData = (
     const dies = validMapData
         .flatMap((row, y) =>
             row.split('').map((char, x) => ({
-                x,
-                y,
-                bin: char === '.' ? { special: '.' } : { number: parseInt(char, 10) },
+                x: Number.isFinite(x) ? x : 0,
+                y: Number.isFinite(y) ? y : 0,
+                bin:
+                    char === '.'
+                        ? { special: '.' }
+                        : {
+                            number: Number.isFinite(parseInt(char, 10))
+                                ? parseInt(char, 10)
+                                : 0,
+                        },
             }))
         )
         .filter((die) => isNumberBin(die.bin));
