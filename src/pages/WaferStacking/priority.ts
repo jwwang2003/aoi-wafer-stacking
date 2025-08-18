@@ -1,6 +1,6 @@
 import { DataSourceType } from '@/types/dataSource';
 
-type LayerMeta = {
+export type LayerMeta = {
     stage: DataSourceType;
     subStage?: string | number | null; // e.g. "1" / 1 / "CP-2"
     retest_count?: number | null;
