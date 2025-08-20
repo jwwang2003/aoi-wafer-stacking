@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
-import { infoToast } from '@/components/Toaster';
+import { infoToast, errorToast } from '@/components/Toaster';
 import { LayerMeta } from './priority';
 import {
     Title,
@@ -12,14 +12,12 @@ import {
     ScrollArea,
     Text,
     Paper,
-    Alert,
     Tooltip,
     SimpleGrid,
     Divider,
 } from '@mantine/core';
 import { join } from '@tauri-apps/api/path';
 import { mkdir } from '@tauri-apps/plugin-fs';
-import { Statistics } from './types';
 import {
     exportWaferHex,
     exportWaferMapData,
@@ -27,8 +25,9 @@ import {
     invokeParseWafer,
     parseWaferMapEx,
     parseWaferMap,
+    invokeParseSubstrateDefectXls,
 } from '@/api/tauri/wafer';
-import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin } from '@/types/ipc';
+import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
 import { useAppSelector } from '@/hooks';
 import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
@@ -42,14 +41,14 @@ import {
     getLayerPriority,
     extractAlignmentMarkers,
     calculateOffset,
-    createEmptyAsciiMap,
-    fillLayerToAsciiMap,
-    removeEmptyRowsAndCols,
-    mapToMergedDies,
-    calculateStats,
-    applyOffsetToAsciiMap,
+    createDieMapStructure,
+    mergeLayerToDieMap,
+    pruneEmptyRegions,
+    calculateStatsFromDies,
+    applyOffsetToDies,
     extractWaferHeader,
     extractMapDataHeader,
+    extractBinMapHeader,
     convertToMapData,
     convertToBinMapData,
     convertToHexMapData,
@@ -145,6 +144,7 @@ export default function WaferStacking() {
 
         return items;
     }, [jobSubstrate, jobSubId, jobWaferMaps]);
+
     const mergeHeader = (newHeader: Record<string, string>) => {
         setCombinedHeaders((prev) => {
             const merged = { ...prev };
@@ -208,6 +208,14 @@ export default function WaferStacking() {
             });
 
             const baseTargetDir = outputDir || finalOutputDir;
+            if (!outputDir && !finalOutputDir) {
+                // 提示用户选择路径
+                errorToast({
+                    title: '路径未选择',
+                    message: '请先选择导出文件的保存路径'
+                });
+                return; // 终止后续处理
+            }
             const outputRootDir = await join(baseTargetDir, '输出文件');
             try {
                 await mkdir(outputRootDir, { recursive: true });
@@ -234,7 +242,7 @@ export default function WaferStacking() {
                 const { filePath, layerType, stage, subStage } = layer;
                 if (!filePath) continue;
 
-                let content: BinMapData | MapData | Wafer | null = null;
+                let content: SubstrateDefectXlsResult | BinMapData | MapData | Wafer | null = null;
                 let header: Record<string, string> = {};
                 let dies: AsciiDie[] = [];
                 let layerName = 'Unknown';
@@ -250,20 +258,25 @@ export default function WaferStacking() {
                         if (['1', '2'].includes(cpType)) {
                             content = await parseWaferMapEx(filePath);
                             if (content && content.map.dies) {
+                                console.log('Wafer content12:', content);
                                 header = extractMapDataHeader(content);
                                 dies = content.map.dies;
                                 if (cpType === '1') cp1Header = { ...header };
                             }
                         } else if (cpType === '3') {
                             content = await invokeParseWafer(filePath);
+                            console.log('Wafer content3:', content);
                             if (content && content.map.dies) {
                                 header = extractWaferHeader(content);
                                 dies = content.map.dies;
                             }
+
                         }
                     } else if (stage === DataSourceType.Wlbi) {
                         content = await parseWaferMap(filePath);
                         if (content && content.map) {
+                            console.log('Wafer wlbi content:', content);
+                            header = extractBinMapHeader(content);
                             dies = content.map.map((die) => {
                                 if (isNumberBin(die.bin) && die.bin.number === 257) {
                                     return { ...die, bin: { special: '*' } };
@@ -273,6 +286,7 @@ export default function WaferStacking() {
                         }
                     } else if (stage === DataSourceType.Aoi) {
                         content = await parseWaferMapEx(filePath);
+                        console.log('Wafer aoi content:', content);
                         if (content && content.map.dies) {
                             header = extractMapDataHeader(content);
                             dies = content.map.dies;
@@ -282,7 +296,8 @@ export default function WaferStacking() {
 
                 if (layerType === 'substrate') {
                     layerName = 'Substrate';
-                    // content = await parseSubstrateFile(filePath);
+                    content = await invokeParseSubstrateDefectXls(filePath);
+                    console.log('Substrate content:', content);
                     // if (content) { /* 提取基板数据 */ }
                 }
 
@@ -314,64 +329,33 @@ export default function WaferStacking() {
                 const currentDies = originalDiesList[i];
                 const currentMarkers = extractAlignmentMarkers(currentDies);
                 const { dx, dy } = calculateOffset(baseMarkers, currentMarkers);
-                const alignedDies = currentDies.map((die) => ({
-                    ...die,
-                    x: die.x + dx,
-                    y: die.y + dy,
-                }));
-                alignedDiesList.push(alignedDies);
+                alignedDiesList.push(
+                    applyOffsetToDies(currentDies, dx, dy)
+                );
+                console.log('Wafer aligned content:', alignedDiesList);
             }
 
-            const {
-                map: emptyMap,
-                minX: globalMinX,
-                minY: globalMinY,
-            } = createEmptyAsciiMap(alignedDiesList);
-
-            const priorityMatrix = Array.from({ length: emptyMap.length }, () =>
-                Array(emptyMap[0].length).fill(0)
-            );
+            const { dieMap } = createDieMapStructure(alignedDiesList);
 
             alignedDiesList.forEach((dies, index) => {
                 const layer = sortedLayers[index];
                 if (layer.layerType !== 'map' || !layer.stage) return;
+
                 const layerMeta: LayerMeta = {
                     stage: layer.stage,
                     subStage: layer.subStage,
                 };
-
                 const priority = getLayerPriority(layerMeta);
-                fillLayerToAsciiMap(
-                    emptyMap,
-                    dies,
-                    priority,
-                    globalMinX,
-                    globalMinY,
-                    priorityMatrix
-                );
+
+                mergeLayerToDieMap(dieMap, dies, priority);
             });
 
-            const mapWithoutEmpty = removeEmptyRowsAndCols(emptyMap);
-            if (mapWithoutEmpty.length === 0) {
+            const mergedDies = pruneEmptyRegions(dieMap);
+            if (mergedDies.length === 0) {
                 throw new Error('处理后地图为空');
             }
 
-            const mergedDies = mapToMergedDies(
-                mapWithoutEmpty,
-                globalMinX,
-                globalMinY
-            );
-
-            const finalOffset = { dx: 0, dy: 0 };
-            const { offsetMap } = applyOffsetToAsciiMap(
-                mergedDies,
-                finalOffset.dx,
-                finalOffset.dy
-            );
-
-            const overlayedMap = offsetMap.map((row) => row.join(''));
-            console.log('叠合后的地图数据:', overlayedMap);
-            const stats: Statistics = calculateStats(overlayedMap);
+            const stats = calculateStatsFromDies(mergedDies);
             const baseFileName =
                 jobOemId +
                 '_' +
@@ -386,34 +370,44 @@ export default function WaferStacking() {
                 ...tempCombinedHeaders,
                 ...(cp1Header || headers[0] || {}),
             };
-            console.log(overlayedMap);
 
-            const mapExData = convertToMapData(overlayedMap, stats, useHeader);
-            console.log('mapExData:', mapExData);
-            const mapExPath = await join(
-                outputRootDir,
-                `${baseFileName}_overlayed.mapEx`
-            );
-            console.log('mapExPath:', mapExPath);
+            if (selectedOutputs.includes('mapEx')) {
+                const mapExData = convertToMapData(mergedDies, stats, useHeader);
+                console.log('MapEx Data:', mapExData);
+                const mapExPath = await join(
+                    outputRootDir,
+                    `${baseFileName}_overlayed.mapEx`
+                );
+                console.log('MapEx Data??:', mapExData);
+                await exportWaferMapData(mapExData, mapExPath);
+            }
 
-            await exportWaferMapData(mapExData, mapExPath);
+            if (selectedOutputs.includes('HEX')) {
+                const hexData = convertToHexMapData(mergedDies, useHeader);
+                console.log('HEX Data:', hexData);
 
-            const hexData = convertToHexMapData(overlayedMap, useHeader);
-            const hexPath = await join(
-                outputRootDir,
-                `${baseFileName}_overlayed.hex`
-            );
-            await exportWaferHex(hexData, hexPath);
+                const hexPath = await join(
+                    outputRootDir,
+                    `${baseFileName}_overlayed.hex`
+                );
+                await exportWaferHex(hexData, hexPath);
+            }
 
-            const binData = convertToBinMapData(mergedDies, useHeader);
-            const binPath = await join(
-                outputRootDir,
-                `${baseFileName}_overlayed.bin`
-            );
-            await exportWaferBin(binData, binPath);
+            if (selectedOutputs.includes('bin')) {
+                const binData = convertToBinMapData(mergedDies, useHeader);
+                console.log('Bin Data:', binData);
+                const binPath = await join(
+                    outputRootDir,
+                    `${baseFileName}_overlayed.bin`
+                );
+                await exportWaferBin(binData, binPath);
+            }
 
             setResult('叠图完成！');
-            infoToast({ title: '成功', message: '叠图处理已完成' });
+            infoToast({
+                title: '成功',
+                message: '叠图处理已完成'
+            });
         } catch (error) {
             console.error('处理失败:', error);
             setResult(
@@ -503,16 +497,6 @@ export default function WaferStacking() {
                                 )}
                             </Stack>
                         </Checkbox.Group>
-
-                        <Group mt='md'>
-                            <Button
-                                onClick={processMapping}
-                                loading={processing}
-                                leftSection={processing ? <IconRefresh size={16} /> : null}
-                            >
-                                立刻处理
-                            </Button>
-                        </Group>
                     </Stack>
 
                     {/* 右侧：任务列表区 */}
@@ -538,24 +522,6 @@ export default function WaferStacking() {
                         </Button>
                     </Stack>
                 </Group>
-
-                {result !== null && (
-                    <Alert
-                        title='处理结果'
-                        withCloseButton
-                        onClose={() => setResult(null)}
-                    >
-                        <Button
-                            mt='md'
-                            leftSection={<IconDownload size={16} />}
-                            onClick={() =>
-                                infoToast({ title: '提示', message: '文件已保存到输出目录' })
-                            }
-                        >
-                            下载结果
-                        </Button>
-                    </Alert>
-                )}
 
                 <Divider />
 
