@@ -1,5 +1,4 @@
-import { useState, useMemo } from 'react';
-import { IconDownload, IconRefresh } from '@tabler/icons-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { infoToast, errorToast } from '@/components/Toaster';
 import { LayerMeta } from './priority';
 import {
@@ -18,6 +17,9 @@ import {
 } from '@mantine/core';
 import { join } from '@tauri-apps/api/path';
 import { mkdir } from '@tauri-apps/plugin-fs';
+import { getOemOffset } from '@/db/offsets';
+import { Input } from '@mantine/core';
+import { IconDownload, IconRefresh } from '@tabler/icons-react';
 import {
     exportWaferHex,
     exportWaferMapData,
@@ -26,15 +28,15 @@ import {
     parseWaferMapEx,
     parseWaferMap,
     invokeParseSubstrateDefectXls,
+    exportWaferJpg,
 } from '@/api/tauri/wafer';
+import { generateGridWithSubstrateDefects } from './substrateMapping'
+import { generateDiesImage } from './ExportJpg';
 import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
 import { useAppSelector } from '@/hooks';
 import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
-import {
-    ExcelMetadataCard,
-    WaferFileMetadataCard,
-} from '@/components/MetadataCard';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
 import { toWaferFileMetadata } from '@/types/helpers';
 import { PathPicker } from '@/components';
 import {
@@ -65,7 +67,7 @@ const OUTPUT_OPTIONS = [
     { id: 'mapEx', label: 'WaferMapEx' },
     { id: 'bin', label: 'BinMap' },
     { id: 'HEX', label: 'HexMap' },
-    { id: 'image', label: 'Image (TODO)', disabled: true },
+    { id: 'image', label: 'Image (TODO)' },
 ] as const satisfies readonly OutputOption[];
 
 // Map your DataSourceType to a short stage label shown in the UI
@@ -90,11 +92,9 @@ export default function WaferStacking() {
     const [selectedLayers, setSelectedLayers] = useState<string[]>([]);
     const [tasks, setTasks] = useState<string[][]>([]);
     const [processing, setProcessing] = useState(false);
-    const [result, setResult] = useState<string | null>(null);
-    const [combinedHeaders, setCombinedHeaders] = useState<
-        Record<string, string>
-    >({});
     const [finalOutputDir, setFinalOutputDir] = useState<string>('');
+    const [substrateOffset, setSubstrateOffset] = useState({ x: 0, y: 0 });
+    const lastSavedOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
     const job = useAppSelector((s) => s.stackingJob);
     const {
@@ -106,6 +106,27 @@ export default function WaferStacking() {
         waferSubstrate: jobSubstrate,
         waferMaps: jobWaferMaps,
     } = job;
+
+    useEffect(() => {
+        if (!jobOemId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const found = await getOemOffset(jobOemId);
+                if (cancelled) return;
+                if (found) {
+                    setSubstrateOffset({ x: found.x_offset, y: found.y_offset });
+                    lastSavedOffsetRef.current = { x: found.x_offset, y: found.y_offset };
+                } else {
+                    setSubstrateOffset({ x: 0, y: 0 });
+                    lastSavedOffsetRef.current = { x: 0, y: 0 };
+                }
+            } catch (e) {
+                errorToast({ title: '读取失败', message: `加载偏移量失败: ${String(e)}` });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [jobOemId]);
 
     const selectableLayers = useMemo(() => {
         type Item = {
@@ -145,21 +166,8 @@ export default function WaferStacking() {
         return items;
     }, [jobSubstrate, jobSubId, jobWaferMaps]);
 
-    const mergeHeader = (newHeader: Record<string, string>) => {
-        setCombinedHeaders((prev) => {
-            const merged = { ...prev };
-            Object.entries(newHeader).forEach(([key, value]) => {
-                if (!(key in merged)) {
-                    merged[key] = value;
-                }
-            });
-            return merged;
-        });
-    };
-
     const processMapping = async () => {
         setProcessing(true);
-        setResult(null);
         try {
             const selectedLayerInfo = selectedLayers
                 .map((layerValue) => {
@@ -168,6 +176,7 @@ export default function WaferStacking() {
                         return {
                             layerType: 'substrate' as const,
                             filePath: jobSubstrate?.file_path || '',
+                            stage: DataSourceType.Substrate,
                         };
                     } else if (layerType === 'map' && id) {
                         const wm = jobWaferMaps.find(
@@ -194,27 +203,25 @@ export default function WaferStacking() {
             }
 
             const sortedLayers = selectedLayerInfo.sort((a, b) => {
-                if (a.layerType !== 'map') return 1;
-                if (b.layerType !== 'map') return -1;
-
-                const getLayerMeta = (item: typeof a): LayerMeta => ({
-                    stage: item.stage as DataSourceType,
-                    subStage: item.subStage,
-                });
-                const aPriority = getLayerPriority(getLayerMeta(a));
-                const bPriority = getLayerPriority(getLayerMeta(b));
-
+                const getPriority = (layer: typeof a) => {
+                    const layerMeta: LayerMeta = ({
+                        stage: layer.stage as DataSourceType,
+                        subStage: layer.subStage,
+                    });
+                    return getLayerPriority(layerMeta);
+                };
+                const aPriority = getPriority(a);
+                const bPriority = getPriority(b);
                 return bPriority - aPriority;
             });
 
             const baseTargetDir = outputDir || finalOutputDir;
             if (!outputDir && !finalOutputDir) {
-                // 提示用户选择路径
                 errorToast({
                     title: '路径未选择',
                     message: '请先选择导出文件的保存路径'
                 });
-                return; // 终止后续处理
+                return;
             }
             const outputRootDir = await join(baseTargetDir, '输出文件');
             try {
@@ -234,9 +241,7 @@ export default function WaferStacking() {
             const originalDiesList: AsciiDie[][] = [];
             const formatNamesList: string[] = [];
             let cp1Header: Record<string, string> = {};
-            const tempCombinedHeaders: Record<string, string> = {
-                ...combinedHeaders,
-            };
+            const tempCombinedHeaders: Record<string, string> = {};
 
             for (const layer of sortedLayers) {
                 const { filePath, layerType, stage, subStage } = layer;
@@ -252,20 +257,17 @@ export default function WaferStacking() {
                         stage === DataSourceType.CpProber
                             ? `CP${subStage || ''}`
                             : stageLabel(stage);
-
                     if (stage === DataSourceType.CpProber) {
                         const cpType = subStage || '1';
                         if (['1', '2'].includes(cpType)) {
                             content = await parseWaferMapEx(filePath);
                             if (content && content.map.dies) {
-                                console.log('Wafer content12:', content);
                                 header = extractMapDataHeader(content);
                                 dies = content.map.dies;
                                 if (cpType === '1') cp1Header = { ...header };
                             }
                         } else if (cpType === '3') {
                             content = await invokeParseWafer(filePath);
-                            console.log('Wafer content3:', content);
                             if (content && content.map.dies) {
                                 header = extractWaferHeader(content);
                                 dies = content.map.dies;
@@ -275,7 +277,6 @@ export default function WaferStacking() {
                     } else if (stage === DataSourceType.Wlbi) {
                         content = await parseWaferMap(filePath);
                         if (content && content.map) {
-                            console.log('Wafer wlbi content:', content);
                             header = extractBinMapHeader(content);
                             dies = content.map.map((die) => {
                                 if (isNumberBin(die.bin) && die.bin.number === 257) {
@@ -286,7 +287,6 @@ export default function WaferStacking() {
                         }
                     } else if (stage === DataSourceType.Aoi) {
                         content = await parseWaferMapEx(filePath);
-                        console.log('Wafer aoi content:', content);
                         if (content && content.map.dies) {
                             header = extractMapDataHeader(content);
                             dies = content.map.dies;
@@ -297,8 +297,26 @@ export default function WaferStacking() {
                 if (layerType === 'substrate') {
                     layerName = 'Substrate';
                     content = await invokeParseSubstrateDefectXls(filePath);
-                    console.log('Substrate content:', content);
-                    // if (content) { /* 提取基板数据 */ }
+                    if (content) {
+                        const plDefects = content['PL defect list'] || [];
+                        const surfaceDefects = content['Surface defect list'] || [];
+                        let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number }> = [];
+                        allSubstrateDefects = [
+                            ...plDefects.map(defect => ({
+                                x: defect.x,
+                                y: defect.y,
+                                w: defect.w / 1000,
+                                h: defect.h / 1000
+                            })),
+                            ...surfaceDefects.map(defect => ({
+                                x: defect.x,
+                                y: defect.y,
+                                w: defect.w / 1000,
+                                h: defect.h / 1000
+                            }))
+                        ];
+                        dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, substrateOffset.x, substrateOffset.y);
+                    }
                 }
 
                 if (!content || dies.length === 0) continue;
@@ -306,7 +324,6 @@ export default function WaferStacking() {
                 Object.entries(header).forEach(([key, value]) => {
                     if (!(key in tempCombinedHeaders)) tempCombinedHeaders[key] = value;
                 });
-                mergeHeader(header);
                 originalDiesList.push(dies);
                 formatNamesList.push(layerName);
                 headers.push(header);
@@ -317,8 +334,7 @@ export default function WaferStacking() {
             }
 
             const alignedDiesList: AsciiDie[][] = [];
-            const highestPriorityLayerIndex = 0;
-            const baseDies = originalDiesList[highestPriorityLayerIndex];
+            const baseDies = originalDiesList[0];
             const baseMarkers = extractAlignmentMarkers(baseDies).sort(
                 (a, b) => a.y - b.y || a.x - b.x
             );
@@ -332,21 +348,18 @@ export default function WaferStacking() {
                 alignedDiesList.push(
                     applyOffsetToDies(currentDies, dx, dy)
                 );
-                console.log('Wafer aligned content:', alignedDiesList);
             }
 
             const { dieMap } = createDieMapStructure(alignedDiesList);
 
             alignedDiesList.forEach((dies, index) => {
                 const layer = sortedLayers[index];
-                if (layer.layerType !== 'map' || !layer.stage) return;
-
+                if (!layer.stage) return;
                 const layerMeta: LayerMeta = {
                     stage: layer.stage,
                     subStage: layer.subStage,
                 };
                 const priority = getLayerPriority(layerMeta);
-
                 mergeLayerToDieMap(dieMap, dies, priority);
             });
 
@@ -354,18 +367,10 @@ export default function WaferStacking() {
             if (mergedDies.length === 0) {
                 throw new Error('处理后地图为空');
             }
+            console.log('Merged dies:', mergedDies);
 
             const stats = calculateStatsFromDies(mergedDies);
-            const baseFileName =
-                jobOemId +
-                '_' +
-                jobProductId +
-                '_' +
-                jobBatchId +
-                '_' +
-                jobWaferId +
-                '_' +
-                jobSubId;
+            const baseFileName = jobOemId + '_' + jobProductId + '_' + jobBatchId + '_' + jobWaferId + '_' + jobSubId;
             const useHeader = {
                 ...tempCombinedHeaders,
                 ...(cp1Header || headers[0] || {}),
@@ -373,19 +378,15 @@ export default function WaferStacking() {
 
             if (selectedOutputs.includes('mapEx')) {
                 const mapExData = convertToMapData(mergedDies, stats, useHeader);
-                console.log('MapEx Data:', mapExData);
                 const mapExPath = await join(
                     outputRootDir,
                     `${baseFileName}_overlayed.mapEx`
                 );
-                console.log('MapEx Data??:', mapExData);
                 await exportWaferMapData(mapExData, mapExPath);
             }
 
             if (selectedOutputs.includes('HEX')) {
                 const hexData = convertToHexMapData(mergedDies, useHeader);
-                console.log('HEX Data:', hexData);
-
                 const hexPath = await join(
                     outputRootDir,
                     `${baseFileName}_overlayed.hex`
@@ -395,7 +396,6 @@ export default function WaferStacking() {
 
             if (selectedOutputs.includes('bin')) {
                 const binData = convertToBinMapData(mergedDies, useHeader);
-                console.log('Bin Data:', binData);
                 const binPath = await join(
                     outputRootDir,
                     `${baseFileName}_overlayed.bin`
@@ -403,16 +403,21 @@ export default function WaferStacking() {
                 await exportWaferBin(binData, binPath);
             }
 
-            setResult('叠图完成！');
+            if (selectedOutputs.includes('image')) {
+                // console.log("Generating image with header:", useHeader);
+                const imageData = await generateDiesImage(mergedDies, useHeader);
+                const imagePath = await join(
+                    outputRootDir,
+                    `${baseFileName}_overlayed.jpg`
+                );
+                await exportWaferJpg(imageData, imagePath);
+            }
             infoToast({
                 title: '成功',
                 message: '叠图处理已完成'
             });
         } catch (error) {
             console.error('处理失败:', error);
-            setResult(
-                `处理失败: ${error instanceof Error ? error.message : String(error)}`
-            );
         } finally {
             setProcessing(false);
         }
@@ -430,6 +435,7 @@ export default function WaferStacking() {
         'mapEx',
         'HEX',
         'bin',
+        'image',
     ]);
     const [outputDir, setOutputDir] = useState<string>('');
 
@@ -468,7 +474,6 @@ export default function WaferStacking() {
                 )}
 
                 <Divider />
-
                 <Group align='flex-start' grow>
                     <Stack w='50%' gap='sm'>
                         <Checkbox.Group
@@ -481,24 +486,49 @@ export default function WaferStacking() {
                                     <Text c='dimmed'>暂无可选图层，请先在数据库选择数据</Text>
                                 ) : (
                                     selectableLayers.map((item) => (
-                                        <Tooltip
-                                            key={item.value}
-                                            label={item.tooltip}
-                                            position='right'
-                                            disabled={!item.tooltip}
-                                        >
-                                            <Checkbox
-                                                value={item.value}
-                                                label={item.label}
-                                                disabled={item.disabled}
-                                            />
-                                        </Tooltip>
+                                        <React.Fragment key={item.value}>
+                                            <Tooltip
+                                                label={item.tooltip}
+                                                position='right'
+                                                disabled={!item.tooltip}
+                                            >
+                                                <Checkbox
+                                                    value={item.value}
+                                                    label={item.label}
+                                                    disabled={item.disabled}
+                                                />
+                                            </Tooltip>
+                                            {item.value.startsWith('substrate:') && selectedLayers.includes(item.value) && (
+                                                <Stack ml="2rem" gap="sm">
+                                                    <Group align="center" gap="sm">
+                                                        <Text size="sm">偏移补偿(X, Y):</Text>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="X偏移"
+                                                            value={substrateOffset.x}
+                                                            onChange={(e) => setSubstrateOffset({ ...substrateOffset, x: parseFloat(e.target.value) || 0 })}
+                                                            style={{ width: '80px' }}
+                                                            step="0.001"
+                                                            disabled={true}
+                                                        />
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="Y偏移"
+                                                            value={substrateOffset.y}
+                                                            onChange={(e) => setSubstrateOffset({ ...substrateOffset, y: parseFloat(e.target.value) || 0 })}
+                                                            style={{ width: '80px' }}
+                                                            step="0.001"
+                                                            disabled={true}
+                                                        />
+                                                    </Group>
+                                                </Stack>
+                                            )}
+                                        </React.Fragment>
                                     ))
                                 )}
                             </Stack>
                         </Checkbox.Group>
                     </Stack>
-
                     {/* 右侧：任务列表区 */}
                     <Stack w='50%' gap='sm'>
                         <Title order={3}>待处理任务</Title>
@@ -522,12 +552,9 @@ export default function WaferStacking() {
                         </Button>
                     </Stack>
                 </Group>
-
                 <Divider />
-
                 <Title order={2}>输出设置</Title>
                 <Stack>
-                    {/* Output format checkboxes */}
                     <Checkbox.Group
                         label='选择导出格式'
                         value={selectedOutputs}
@@ -539,12 +566,10 @@ export default function WaferStacking() {
                                     key={opt.id}
                                     value={opt.id}
                                     label={opt.label}
-                                    disabled={'disabled' in opt ? (opt as any).disabled : false}
                                 />
                             ))}
                         </Group>
                     </Checkbox.Group>
-
                     {/* Path selector */}
                     <Group align='end' grow>
                         <PathPicker

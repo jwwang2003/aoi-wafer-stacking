@@ -74,7 +74,8 @@ fn run_once() -> Result<(), tauri::Error> {
             commands::rust_export_wafer_map_data,
             commands::rust_print_wafer_map_data,
             commands::rust_export_wafer_hex,
-            commands::rust_print_wafer_hex
+            commands::rust_print_wafer_hex,
+            commands::rust_export_wafer_jpg
         ])
         .build(tauri::generate_context!())?;
 

@@ -74,3 +74,8 @@ export async function exportWaferHex(wafer_hex: HexMapData, outputPath: string):
 export async function printWaferHex(wafer_hex: HexMapData): Promise<void> {
     await invokeSafe('rust_print_wafer_hex', { waferHex: wafer_hex });
 }
+
+//jpg
+export async function exportWaferJpg(imageData: Uint8Array, outputPath: string): Promise<void> {
+    await invokeSafe('rust_export_wafer_jpg', { imageData, outputPath });
+}

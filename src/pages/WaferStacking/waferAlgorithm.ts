@@ -10,7 +10,6 @@ import {
     isSpecialBin,
     isNumberBin,
 } from '@/types/ipc';
-import { Statistics } from './types';
 import { PRIORITY_RULES, LayerMeta } from './priority';
 
 export const getLayerPriority = (meta: LayerMeta): number => {
@@ -30,7 +29,12 @@ export const extractAlignmentMarkers = (
         )
         .map((die) => ({ x: die.x, y: die.y }));
 };
-
+export interface Statistics {
+    totalTested: number;
+    totalPass: number;
+    totalFail: number;
+    yieldPercentage: number;
+}
 
 export const calculateOffset = (
     baseMarkers: { x: number; y: number }[],
@@ -71,6 +75,7 @@ export const createDieMapStructure = (
         bounds: { minX, maxX, minY, maxY }
     };
 };
+
 export const mergeLayerToDieMap = (
     dieMap: Map<string, { die: AsciiDie; priority: number }>,
     dies: AsciiDie[],
@@ -80,7 +85,6 @@ export const mergeLayerToDieMap = (
         if (isSpecialBin(die.bin) && ['.', 'S', '*'].includes(die.bin.special)) {
             return;
         }
-
         const key = `${die.x},${die.y}`;
         const existing = dieMap.get(key);
 
@@ -90,7 +94,10 @@ export const mergeLayerToDieMap = (
         } else if (layerPriority > existing.priority) {
             shouldOverwrite = true;
         } else if (layerPriority < existing.priority) {
-            shouldOverwrite = isNumberBin(existing.die.bin) && existing.die.bin.number === 1;
+            const existingValue = 'number' in existing.die.bin
+                ? existing.die.bin.number.toString()
+                : existing.die.bin.special;
+            shouldOverwrite = existingValue === '1';
         }
 
         if (shouldOverwrite) {
@@ -336,8 +343,8 @@ export const convertToHexMapData = (
             wafer: header?.['Wafer ID'] || 'Unknown',
             rowCt: maxY - minY + 1,
             colCt: maxX - minX + 1,
-            refpx: 1,
-            refpy: 28,
+            refpx: 1, //未知
+            refpy: 28, //未知
             dutMs: 'MM',
             xDies: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) / 1000 : 0,
             yDies: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) / 1000 : 0,
