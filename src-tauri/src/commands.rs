@@ -206,3 +206,10 @@ pub fn rust_print_wafer_hex(wafer_hex: HexMapData) -> Result<(), String> {
     println!("{}", wafer_hex.to_string());
     Ok(())
 }
+
+
+#[tauri::command]
+pub fn rust_export_wafer_jpg(image_data: Vec<u8>, output_path: String) -> Result<(), String> {
+   fs::write(&output_path, image_data)
+        .map_err(|e| format!("Failed to write image data to file: {}", e))
+}

@@ -98,7 +98,7 @@ export default function SubstrateRenderer({
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
             const x = xCoord * gridWidth + offsetX;
-            const y = yCoord * gridHeight + offsetY;
+            const y = -yCoord * gridHeight + offsetY;
             minX = Math.min(minX, x);
             maxX = Math.max(maxX, x + gridWidth);
             minY = Math.min(minY, y);
@@ -265,19 +265,24 @@ export default function SubstrateRenderer({
         const gridObjs: THREE.Object3D[] = [];
 
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
-            const x = xCoord * gridWidth + offsetX;
-            const y = yCoord * gridHeight + offsetY;
-
-            const hasOverlap =
-                selectedSheetId && sheetsData[selectedSheetId]
-                    ? sheetsData[selectedSheetId].some((d) => {
-                        const gridMinX = x;
-                        const gridMaxX = x + gridWidth;
-                        const gridMinY = y;
-                        const gridMaxY = y + gridHeight;
-                        return d.x >= gridMinX && d.x <= gridMaxX && d.y >= gridMinY && d.y <= gridMaxY;
-                    })
-                    : false;
+            const gridLeft = xCoord * gridWidth + offsetX;
+            const gridRight = gridLeft + gridWidth;
+            const gridTop = -yCoord * gridHeight + offsetY;
+            const gridBottom = gridTop + gridHeight;
+            const hasOverlap = selectedSheetId && sheetsData[selectedSheetId]
+                ? sheetsData[selectedSheetId].some(defect => {
+                    const defectLeft = defect.x - (defect.w / 300) / 2;
+                    const defectRight = defect.x + (defect.w / 300) / 2;
+                    const defectTop = defect.y - (defect.h / 300) / 2;
+                    const defectBottom = defect.y + (defect.h / 300) / 2;
+                    return !(
+                        gridRight < defectLeft ||
+                        gridLeft > defectRight ||
+                        gridBottom < defectTop ||
+                        gridTop > defectBottom
+                    );
+                })
+                : false;
 
             const material = hasOverlap
                 ? new THREE.MeshBasicMaterial({ color: overlapColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
@@ -285,7 +290,7 @@ export default function SubstrateRenderer({
 
             const geometry = new THREE.PlaneGeometry(gridWidth, gridHeight);
             const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.set(x + gridWidth / 2, y + gridHeight / 2, -0.1);
+            mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
             sceneRef.current.add(mesh);
             gridObjs.push(mesh);
 
