@@ -5,15 +5,34 @@ import { colorMap } from '@/components/Substrate/Wafer';
 import { BinValue } from '@/types/ipc';
 import { isNumberBin, isSpecialBin } from '@/types/ipc';
 
+const LETTER_TO_NUMBER_MAP: Record<string, number> = {
+    'A': 10,
+    'B': 11,
+    'C': 12,
+    'D': 13,
+    'E': 14,
+    'F': 15,
+    'G': 16,
+    'H': 17,
+    'I': 18,
+    'J': 19,
+};
+
+const convertBinToNumber = (binKey: string): string | null => {
+    if (!isNaN(Number(binKey))) {
+        return binKey;
+    }
+    const mappedNumber = LETTER_TO_NUMBER_MAP[binKey];
+    return mappedNumber !== undefined ? mappedNumber.toString() : null;
+};
+
 function calculateTestStats(binCounts: Map<string, number>): { totalTested: number; totalPass: number; yieldRate: number } {
     let totalTested = 0, totalPass = 0;
     const passBins = ['1', 'G', 'H', 'I', 'J'];
-
     binCounts.forEach((count, binKey) => {
         if (!['S', '*'].includes(binKey)) totalTested += count;
         if (passBins.includes(binKey)) totalPass += count;
     });
-
     return {
         totalTested,
         totalPass,
@@ -25,11 +44,16 @@ function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
     const binCounts = new Map<string, number>();
     dies.forEach(die => {
         if ('bin' in die) {
-            const binKey = isNumberBin(die.bin)
+            const originalBinKey = isNumberBin(die.bin)
                 ? die.bin.number.toString()
                 : isSpecialBin(die.bin) ? die.bin.special : '';
 
-            if (binKey) binCounts.set(binKey, (binCounts.get(binKey) || 0) + 1);
+            if (!originalBinKey) return;
+
+            const numericBinKey = convertBinToNumber(originalBinKey);
+            if (!numericBinKey) return;
+
+            binCounts.set(numericBinKey, (binCounts.get(numericBinKey) || 0) + 1);
         }
     });
     return binCounts;
@@ -63,7 +87,7 @@ export function getColorByBin(bin: BinValue, defaultColor: number = 0xcccccc): n
     if (isNumberBin(bin)) {
         switch (bin.number) {
             case 0: return 0xd49ec3;
-            case 1: return 0x19f520;
+            case 1: return 0x19f520; // 8cefa1
             case 2: return 0x9790bc;
             case 3: return 0xf686ed;
             case 4: return 0xfff700;
@@ -74,8 +98,8 @@ export function getColorByBin(bin: BinValue, defaultColor: number = 0xcccccc): n
             case 9: return 0x675b63;
             case 10: return 0xca57c7;
             case 11: return 0x2338bc;
-            case 12: return 0xa4ee6b;
-            case 13: return 0x51fd54;
+            case 12: return 0x9ccda8;
+            case 13: return 0x6bff8b;
             case 14: return 0xffc929;
             case 15: return 0x9e49cc;
             case 16: return 0x256ebd;
@@ -84,10 +108,10 @@ export function getColorByBin(bin: BinValue, defaultColor: number = 0xcccccc): n
             case 19: return 0x23cd64;
             case 20: return 0x685c5c;
         }
-    } else if (isSpecialBin(bin)) { //后续字母转数字
-        switch (bin.special) {
-            case 'A': return 0xe82ef2;
-            case 'B': return 0x1d37ac;
+    } else if (isSpecialBin(bin)) {
+        const numericBin = LETTER_TO_NUMBER_MAP[bin.special];
+        if (numericBin !== undefined) {
+            return getColorByBin({ number: numericBin }, defaultColor);
         }
     }
     return defaultColor;
