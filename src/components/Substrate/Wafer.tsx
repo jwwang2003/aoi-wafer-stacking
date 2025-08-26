@@ -15,6 +15,24 @@ interface SubstrateRendererProps {
     dies: AsciiDie[] | WaferMapDie[] | null;
 }
 
+export const colorMap = new Map<string, number>([
+    ['Unclassified', 0xff0000],
+    ['Particle', 0x000000],
+    ['Pit', 0x00ff00],
+    ['Bump', 0xadaf08],
+    ['MicroPipe', 0x0000ff],
+    ['Line', 0x00ffff],
+    ['carrot', 0xff92f8],
+    ['triangle', 0xc15dd7],
+    ['Downfall', 0x0000ff],
+    ['scratch', 0xc15dd7],
+    ['PL_Black', 0xffa500],
+    ['PL_White', 0xff007b],
+    ['PL_BPD', 0x38d1ff],
+    ['PL_SF', 0x6d6df2],
+    ['PL_BSF', 0xff92f8],
+]);
+
 export default function SubstrateRenderer({
     gridWidth = 4.134,
     gridHeight = 3.74,
@@ -39,23 +57,6 @@ export default function SubstrateRenderer({
     const gridObjectsRef = useRef<THREE.Object3D[]>([]);
     const { x: offsetX, y: offsetY } = gridOffset;
 
-    const colorMap = new Map<string, number>([
-        ['Unclassified', 0xff0000],
-        ['Particle', 0x000000],
-        ['Pit', 0x00ff00],
-        ['Bump', 0xadaf08],
-        ['MicroPipe', 0x0000ff],
-        ['Line', 0x00ffff],
-        ['carrot', 0xff92f8],
-        ['triangle', 0xc15dd7],
-        ['Downfall', 0x0000ff],
-        ['scratch', 0xc15dd7],
-        ['PL_Black', 0xffa500],
-        ['PL_White', 0xff007b],
-        ['PL_BPD', 0x38d1ff],
-        ['PL_SF', 0x6d6df2],
-        ['PL_BSF', 0xff92f8],
-    ]);
 
     // Fit to current square size
     const sizeRendererToSquare = () => {

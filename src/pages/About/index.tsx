@@ -47,7 +47,7 @@ export default function AboutPage() {
         </List.Item>
         <List.Item>
           <Group>
-            <Text size="sm">YI TING</Text>
+            <Text size="sm">CHEN YI TING</Text>
             <Anchor href="https://github.com/ee731" target="_blank">
               @ee731
             </Anchor>
