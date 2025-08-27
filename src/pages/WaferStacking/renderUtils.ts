@@ -248,9 +248,9 @@ export async function renderAsJpg(
         });
 
         defects.forEach(defect => {
-            const defectWidth = Math.max(defect.w / 300, 0.5);
-            const defectHeight = Math.max(defect.h / 300, 0.5);
-            const geometry = new THREE.PlaneGeometry(defectWidth, defectHeight);
+            defect.w = defect.w * 1000;
+            defect.h = defect.h * 1000;
+            const geometry = new THREE.PlaneGeometry(defect.w / 300, defect.h / 300);
             const color = colorMap.get(defect.class) || 0xff00ff;
 
             const material = new THREE.MeshBasicMaterial({
