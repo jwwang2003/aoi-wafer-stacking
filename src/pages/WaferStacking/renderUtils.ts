@@ -86,27 +86,27 @@ function createInfoLinesCanvas(infoLines: string[], targetWidth: number): HTMLCa
 export function getColorByBin(bin: BinValue, defaultColor: number = 0xcccccc): number {
     if (isNumberBin(bin)) {
         switch (bin.number) {
-            case 0: return 0xd49ec3;
-            case 1: return 0x19f520; // 8cefa1
-            case 2: return 0x9790bc;
-            case 3: return 0xf686ed;
-            case 4: return 0xfff700;
-            case 5: return 0x2fc2ef;
-            case 6: return 0x2f7ebe;
-            case 7: return 0xc0658b;
-            case 8: return 0xeb42b0;
-            case 9: return 0x675b63;
-            case 10: return 0xca57c7;
-            case 11: return 0x2338bc;
-            case 12: return 0x9ccda8;
-            case 13: return 0x6bff8b;
-            case 14: return 0xffc929;
-            case 15: return 0x9e49cc;
-            case 16: return 0x256ebd;
-            case 17: return 0x487eb8;
-            case 18: return 0xfc3a3a;
-            case 19: return 0x23cd64;
-            case 20: return 0x685c5c;
+            case 0: return 0xd8a5bb;
+            case 1: return 0x00ff00;
+            case 2: return 0x7b7bc6;
+            case 3: return 0xff78f6;
+            case 4: return 0xfdfe00;
+            case 5: return 0x00c8f7;
+            case 6: return 0x2469d2;
+            case 7: return 0xc85576;
+            case 8: return 0xff00e2;
+            case 9: return 0x394c44;
+            case 10: return 0xcf1afc;
+            case 11: return 0x2c31b0;
+            case 12: return 0xa8cf7e;
+            case 13: return 0x00fc70;
+            case 14: return 0xfbc03a;
+            case 15: return 0x9000ca;
+            case 16: return 0x085ab4;
+            case 17: return 0x3a56b9;
+            case 18: return 0xff0700;
+            case 19: return 0x00b673;
+            case 20: return 0x594543;
         }
     } else if (isSpecialBin(bin)) {
         const numericBin = LETTER_TO_NUMBER_MAP[bin.special];

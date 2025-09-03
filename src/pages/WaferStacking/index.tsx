@@ -388,7 +388,7 @@ export default function WaferStacking() {
                 const mapExData = convertToMapData(mergedDies, stats, useHeader);
                 const mapExPath = await join(
                     outputRootDir,
-                    `${baseFileName}_overlayed.mapEx`
+                    `${baseFileName}_overlayed.txt`
                 );
                 await exportWaferMapData(mapExData, mapExPath);
             }
@@ -397,7 +397,7 @@ export default function WaferStacking() {
                 const hexData = convertToHexMapData(mergedDies, useHeader);
                 const hexPath = await join(
                     outputRootDir,
-                    `${baseFileName}_overlayed.hex`
+                    `${baseFileName}_overlayed.sinf`
                 );
                 await exportWaferHex(hexData, hexPath);
             }
@@ -406,7 +406,7 @@ export default function WaferStacking() {
                 const binData = convertToBinMapData(mergedDies, useHeader);
                 const binPath = await join(
                     outputRootDir,
-                    `${baseFileName}_overlayed.bin`
+                    `${baseFileName}_overlayed.WaferMap`
                 );
                 await exportWaferBin(binData, binPath);
             }

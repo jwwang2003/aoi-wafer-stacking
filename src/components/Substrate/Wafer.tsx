@@ -17,20 +17,20 @@ interface SubstrateRendererProps {
 
 export const colorMap = new Map<string, number>([
     ['Unclassified', 0xff0000],
-    ['Particle', 0x000000],
-    ['Pit', 0x00ff00],
-    ['Bump', 0xadaf08],
+    ['Particle', 0x010101],
+    ['Pit', 0x00ff6d],
+    ['Bump', 0xaaaa00],
     ['MicroPipe', 0x0000ff],
     ['Line', 0x00ffff],
-    ['carrot', 0xff92f8],
-    ['triangle', 0xc15dd7],
-    ['Downfall', 0x0000ff],
-    ['scratch', 0xc15dd7],
+    ['carrot', 0xff80ff],
+    ['triangle', 0xba00ff],
+    ['Downfall', 0x0101ff],
+    ['scratch', 0xba00ff],
     ['PL_Black', 0xffa500],
-    ['PL_White', 0xff007b],
-    ['PL_BPD', 0x38d1ff],
-    ['PL_SF', 0x6d6df2],
-    ['PL_BSF', 0xff92f8],
+    ['PL_White', 0xff007f],
+    ['PL_BPD', 0x00adff],
+    ['PL_SF', 0x5555ff],
+    ['PL_BSF', 0xff80ff],
 ]);
 
 export default function SubstrateRenderer({
@@ -360,7 +360,7 @@ export default function SubstrateRenderer({
                         top: 0,
                         left: 0,
                         width: '100%',
-                        backgroundColor: '#ff4444',
+                        backgroundColor: '#ff4444ff',
                         color: 'white',
                         zIndex: 100,
                     }}
