@@ -18,6 +18,7 @@ import {
 import { join } from '@tauri-apps/api/path';
 import { mkdir } from '@tauri-apps/plugin-fs';
 import { getOemOffset } from '@/db/offsets';
+import { getProductSize } from '@/db/productSize';
 import { Input } from '@mantine/core';
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
 import {
@@ -31,7 +32,7 @@ import {
     exportWaferJpg,
 } from '@/api/tauri/wafer';
 import { generateGridWithSubstrateDefects } from './substrateMapping'
-import { generateDiesImage } from './ExportJpg';
+import { renderAsJpg } from './renderUtils';
 import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
 import { useAppSelector } from '@/hooks';
 import { ExcelType } from '@/types/wafer';
@@ -67,7 +68,7 @@ const OUTPUT_OPTIONS = [
     { id: 'mapEx', label: 'WaferMapEx' },
     { id: 'bin', label: 'BinMap' },
     { id: 'HEX', label: 'HexMap' },
-    { id: 'image', label: 'Image (TODO)' },
+    { id: 'image', label: 'Image' },
 ] as const satisfies readonly OutputOption[];
 
 // Map your DataSourceType to a short stage label shown in the UI
@@ -94,6 +95,7 @@ export default function WaferStacking() {
     const [processing, setProcessing] = useState(false);
     const [finalOutputDir, setFinalOutputDir] = useState<string>('');
     const [substrateOffset, setSubstrateOffset] = useState({ x: 0, y: 0 });
+    const [dieSize, setDieSize] = useState({ x: 0, y: 0 });
     const lastSavedOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
     const job = useAppSelector((s) => s.stackingJob);
@@ -113,6 +115,7 @@ export default function WaferStacking() {
         (async () => {
             try {
                 const found = await getOemOffset(jobOemId);
+                const sizeData = await getProductSize(jobOemId);
                 if (cancelled) return;
                 if (found) {
                     setSubstrateOffset({ x: found.x_offset, y: found.y_offset });
@@ -121,8 +124,11 @@ export default function WaferStacking() {
                     setSubstrateOffset({ x: 0, y: 0 });
                     lastSavedOffsetRef.current = { x: 0, y: 0 };
                 }
+                if (sizeData) {
+                    setDieSize({ x: sizeData.die_x, y: sizeData.die_y });
+                }
             } catch (e) {
-                errorToast({ title: '读取失败', message: `加载偏移量失败: ${String(e)}` });
+                errorToast({ title: '读取失败', message: `加载偏移量/尺寸失败: ${String(e)}` });
             }
         })();
         return () => { cancelled = true; };
@@ -242,6 +248,7 @@ export default function WaferStacking() {
             const formatNamesList: string[] = [];
             let cp1Header: Record<string, string> = {};
             const tempCombinedHeaders: Record<string, string> = {};
+            let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number, class: string }> = [];
 
             for (const layer of sortedLayers) {
                 const { filePath, layerType, stage, subStage } = layer;
@@ -300,19 +307,20 @@ export default function WaferStacking() {
                     if (content) {
                         const plDefects = content['PL defect list'] || [];
                         const surfaceDefects = content['Surface defect list'] || [];
-                        let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number }> = [];
                         allSubstrateDefects = [
                             ...plDefects.map(defect => ({
                                 x: defect.x,
                                 y: defect.y,
                                 w: defect.w / 1000,
-                                h: defect.h / 1000
+                                h: defect.h / 1000,
+                                class: defect.class
                             })),
                             ...surfaceDefects.map(defect => ({
                                 x: defect.x,
                                 y: defect.y,
                                 w: defect.w / 1000,
-                                h: defect.h / 1000
+                                h: defect.h / 1000,
+                                class: defect.class
                             }))
                         ];
                         dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, substrateOffset.x, substrateOffset.y);
@@ -380,7 +388,7 @@ export default function WaferStacking() {
                 const mapExData = convertToMapData(mergedDies, stats, useHeader);
                 const mapExPath = await join(
                     outputRootDir,
-                    `${baseFileName}_overlayed.mapEx`
+                    `${baseFileName}_overlayed.txt`
                 );
                 await exportWaferMapData(mapExData, mapExPath);
             }
@@ -389,7 +397,7 @@ export default function WaferStacking() {
                 const hexData = convertToHexMapData(mergedDies, useHeader);
                 const hexPath = await join(
                     outputRootDir,
-                    `${baseFileName}_overlayed.hex`
+                    `${baseFileName}_overlayed.sinf`
                 );
                 await exportWaferHex(hexData, hexPath);
             }
@@ -398,24 +406,20 @@ export default function WaferStacking() {
                 const binData = convertToBinMapData(mergedDies, useHeader);
                 const binPath = await join(
                     outputRootDir,
-                    `${baseFileName}_overlayed.bin`
+                    `${baseFileName}_overlayed.WaferMap`
                 );
                 await exportWaferBin(binData, binPath);
             }
 
             if (selectedOutputs.includes('image')) {
-                // console.log("Generating image with header:", useHeader);
-                const imageData = await generateDiesImage(mergedDies, useHeader);
                 const imagePath = await join(
                     outputRootDir,
                     `${baseFileName}_overlayed.jpg`
                 );
+                const imageData = await renderAsJpg(mergedDies, allSubstrateDefects, dieSize.x, dieSize.y, substrateOffset, useHeader);
                 await exportWaferJpg(imageData, imagePath);
             }
-            infoToast({
-                title: '成功',
-                message: '叠图处理已完成'
-            });
+            infoToast({ title: '成功', message: '叠图处理已完成' });
         } catch (error) {
             console.error('处理失败:', error);
         } finally {
