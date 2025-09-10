@@ -3,6 +3,11 @@ import { WaferMapRow } from './types'; // Ensure this includes "idx?: number"
 
 const TABLE = 'wafer_maps';
 
+type ExecResult = { rowsAffected?: number } | void | null | undefined;
+function rowsAffected(res: ExecResult): number {
+    return (res && typeof res === 'object' && 'rowsAffected' in res ? (res as { rowsAffected?: number }).rowsAffected : undefined) ?? 0;
+}
+
 /**
  * NOTE: DB should enforce: CREATE UNIQUE INDEX IF NOT EXISTS uq_wafer_maps_file_path ON wafer_maps(file_path);
  *
@@ -310,7 +315,7 @@ VALUES ${placeholders}
 export async function deleteWaferMapByIdx(idx: number): Promise<number> {
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${TABLE} WHERE idx = ?`, [idx]);
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 
 /**
@@ -327,14 +332,14 @@ export async function deleteWaferMapsByTriple(
         `DELETE FROM ${TABLE} WHERE product_id = ? AND batch_id = ? AND wafer_id = ?`,
         [product_id, batch_id, wafer_id]
     );
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 
 /** Delete by file_path (unique). */
 export async function deleteWaferMapsByFilePath(file_path: string): Promise<number> {
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${TABLE} WHERE file_path = ?`, [file_path]);
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 
 /** Bulk delete by idx (batched). */
@@ -349,7 +354,7 @@ export async function deleteManyWaferMapsByIdx(
         const batch = idxs.slice(i, i + batchSize);
         const placeholders = batch.map(() => '?').join(',');
         const res = await db.execute(`DELETE FROM ${TABLE} WHERE idx IN (${placeholders})`, batch);
-        total += (res as any)?.rowsAffected ?? 0;
+        total += rowsAffected(res);
     }
     return total;
 }
@@ -368,7 +373,7 @@ export async function deleteManyWaferMapsByPK(
         const orClauses = batch.map(() => `(product_id = ? AND batch_id = ? AND wafer_id = ?)`).join(' OR ');
         const params = batch.flatMap(k => [k.product_id, k.batch_id, k.wafer_id]);
         const res = await db.execute(`DELETE FROM ${TABLE} WHERE ${orClauses}`, params);
-        total += (res as any)?.rowsAffected ?? 0;
+        total += rowsAffected(res);
     }
     return total;
 }
@@ -378,5 +383,5 @@ export async function deleteAllWaferMaps(vacuumAfter = false): Promise<number> {
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${TABLE};`);
     if (vacuumAfter) await vacuum();
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }

@@ -7,6 +7,7 @@ import {
     IconInfoCircle,
     IconMessage2,
     IconStack3,
+    IconUserShield,
 } from '@tabler/icons-react';
 
 import {
@@ -17,9 +18,10 @@ import {
     Log as LogPage,
     About as AboutPage,
     ComingSoon,
+    Admin as AdminPage,
 } from '@/pages';
 
-export type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'log' | 'help' | 'about';
+export type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'log' | 'help' | 'about' | 'admin';
 
 export interface MenuItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,7 +32,7 @@ export interface MenuItem {
     component: React.FC; // Functional component for routing
 }
 
-export const menuItems: MenuItem[] = [
+const menuItems: MenuItem[] = [
     {
         icon: IconHome,
         label: '主页',
@@ -87,4 +89,13 @@ export const menuItems: MenuItem[] = [
         path: '/about',
         component: AboutPage,
     },
+    {
+        icon: IconUserShield,
+        label: '管理',
+        value: 'admin',
+        path: '/admin',
+        component: AdminPage,
+    },
 ];
+
+export default menuItems;

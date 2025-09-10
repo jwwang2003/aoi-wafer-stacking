@@ -12,11 +12,11 @@ function compactSql(sql: string) {
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 export async function withRetry<T>(fn: () => Promise<T>, attempts = 4, base = 60): Promise<T> {
-    let lastErr: any;
+    let lastErr: unknown;
     for (let i = 0; i < attempts; i++) {
         try { return await fn(); }
-        catch (e: any) {
-            const msg = String(e?.message ?? e);
+        catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes('database is locked') || msg.includes('SQLITE_BUSY')) {
                 await sleep(base * (2 ** i) + Math.floor(Math.random() * base));
                 lastErr = e;
@@ -28,8 +28,10 @@ export async function withRetry<T>(fn: () => Promise<T>, attempts = 4, base = 60
     throw lastErr;
 }
 
+type DbWithLoggerFlag = Database & { __sqlLoggerInstalled?: boolean };
 function instrumentDbLogging(db: Database) {
-    if ((db as any).__sqlLoggerInstalled) return;
+    const dbx = db as DbWithLoggerFlag;
+    if (dbx.__sqlLoggerInstalled) return;
 
     const origExecute = db.execute.bind(db);
     const origSelect = db.select.bind(db);
@@ -39,7 +41,9 @@ function instrumentDbLogging(db: Database) {
         try {
             const res = await origExecute(sql, params);
             const ms = (performance.now() - start).toFixed(1);
-            const rowsAffected = (res as any)?.rowsAffected;
+            const rowsAffected = (res && typeof res === 'object' && 'rowsAffected' in (res as object)
+                ? (res as { rowsAffected?: number }).rowsAffected
+                : undefined);
             console.groupCollapsed(
                 `%cSQL %cEXEC%c ${ms}ms`,
                 'color:#667', 'color:#06f;font-weight:600', 'color:#999'
@@ -68,8 +72,11 @@ function instrumentDbLogging(db: Database) {
         try {
             const rows = await origSelect<T>(sql, params);
             const ms = (performance.now() - start).toFixed(1);
-            const count =
-                Array.isArray(rows) ? rows.length : (rows as any)?.length ?? 'unknown';
+            const count = Array.isArray(rows)
+                ? rows.length
+                : (rows && typeof rows === 'object' && 'length' in (rows as object)
+                    ? Number((rows as { length?: number }).length)
+                    : 'unknown');
             console.groupCollapsed(
                 `%cSQL %cSELECT%c ${ms}ms rows=${count}`,
                 'color:#667', 'color:#0a0;font-weight:600', 'color:#999'
@@ -92,7 +99,7 @@ function instrumentDbLogging(db: Database) {
         }
     }) as typeof db.select;
 
-    (db as any).__sqlLoggerInstalled = true;
+    dbx.__sqlLoggerInstalled = true;
 }
 
 /**
@@ -118,7 +125,7 @@ export async function getDb(): Promise<Database> {
 /** Internal: run VACUUM safely (must not be inside an open transaction). */
 export async function vacuum(): Promise<void> {
     const db = await getDb();
-    try { await db.execute('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { }
+    try { await db.execute('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* noop */ }
     await db.execute('VACUUM');
 }
 

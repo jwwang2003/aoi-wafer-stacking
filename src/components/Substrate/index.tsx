@@ -76,7 +76,7 @@ export default function SubstratePane({
                     }
                     case DataSourceType.Wlbi: {
                         const parsed = await parseWaferMap(map.file_path);
-                        data = parsed.map; // AsciiMap
+                        data = parsed.map; // WaferMapDie[]
                         break;
                     }
                     case DataSourceType.CpProber:
@@ -91,7 +91,7 @@ export default function SubstratePane({
                     }
                 }
 
-                if (!cancelled) setDieData(data as any);
+                if (!cancelled) setDieData(data);
             } catch (err) {
                 console.error('[SubstratePane] parse wafer map failed:', err);
                 if (!cancelled) setDieData(null);

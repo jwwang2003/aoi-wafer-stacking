@@ -95,8 +95,9 @@ export default function PathPicker({
                     setError(result);
                 }
             }
-        } catch (e: any) {
-            setError(`选择失败: ${e?.message ?? String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setError(`选择失败: ${msg}`);
         }
     };
 

@@ -45,8 +45,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                     await dispatch(addFolder({ type, path: norm(absPath) }));
                 }
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('添加目录失败', e);
         }
     };
@@ -87,8 +86,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             await upsertOneFolderIndex({ folder_path: newPath, last_mtime: Number(mtime) });
             await dispatch(addFolder({ type, path: newPath }));
             setSelected((s) => s.filter((x) => x !== oldPath));
-            // eslint-disable-next-line @typescript-eslint/no-explicit-a    ny
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('修改目录失败', e);
         }
     };

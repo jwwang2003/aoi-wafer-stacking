@@ -136,7 +136,7 @@ type FetchState<T> = {
 function useFetchList<T>(
     enabled: boolean,
     fetcher: () => Promise<T>,
-    deps: any[] = [],               // eslint-disable-current-line @typescript-eslint/no-explicit-any
+    deps: ReadonlyArray<unknown> = [],
     initial: T,
     transform?: (v: T) => T
 ): FetchState<T> {
@@ -153,9 +153,10 @@ function useFetchList<T>(
         try {
             const res = await fetcher();
             if (!cancelRef.current) setData(transform ? transform(res) : res);
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
-            if (!cancelRef.current) setError(e?.message ?? 'Failed to load');
+            const msg = e instanceof Error ? e.message : String(e);
+            if (!cancelRef.current) setError(msg || 'Failed to load');
         } finally {
             if (!cancelRef.current) setLoading(false);
         }
@@ -344,8 +345,9 @@ export default function ProductBatchNavigator({
                 })
             );
 
-        } catch (e: any) {
-            setMapsError(e?.message ?? '加载叠图失败');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setMapsError(msg || '加载叠图失败');
         }
     }
 

@@ -139,7 +139,9 @@ export async function deleteAllOemProductMappings(vacuumAfter = false): Promise<
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${OEM_MAP_TABLE}`);
     if (vacuumAfter) await vacuum();
-    return (res as any)?.rowsAffected ?? 0;
+    return (res && typeof res === 'object' && 'rowsAffected' in (res as object)
+        ? (res as { rowsAffected?: number }).rowsAffected ?? 0
+        : 0);
 }
 
 // =============================================================================
@@ -368,7 +370,9 @@ export async function deleteAllProductDefectMaps(vacuumAfter = false): Promise<n
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${PRODUCT_DEFECT_TABLE}`);
     if (vacuumAfter) await vacuum();
-    return (res as any)?.rowsAffected ?? 0;
+    return (res && typeof res === 'object' && 'rowsAffected' in (res as object)
+        ? (res as { rowsAffected?: number }).rowsAffected ?? 0
+        : 0);
 }
 
 // =============================================================================
@@ -484,7 +488,9 @@ export async function deleteAllSubstrateDefects(vacuumAfter = false): Promise<nu
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${SUBSTRATE_TABLE}`);
     if (vacuumAfter) await vacuum();
-    return (res as any)?.rowsAffected ?? 0;
+    return (res && typeof res === 'object' && 'rowsAffected' in (res as object)
+        ? (res as { rowsAffected?: number }).rowsAffected ?? 0
+        : 0);
 }
 
 // =============================================================================
@@ -492,7 +498,9 @@ export async function deleteAllSubstrateDefects(vacuumAfter = false): Promise<nu
  * Wipe wafer_maps, substrate_defect, product_defect_map, and oem_product_map
  * in that order (children → parent), then VACUUM once (default true).
  */
-const rows = (r: any) => (r?.rowsAffected ?? 0);
+const rows = (r: unknown) => (r && typeof r === 'object' && 'rowsAffected' in (r as object)
+    ? (r as { rowsAffected?: number }).rowsAffected ?? 0
+    : 0);
 export async function resetSpreadSheetData(options: { vacuumAfter?: boolean } = {}): Promise<{
     deletedWaferMaps: number;
     deletedSubstrateDefects: number;

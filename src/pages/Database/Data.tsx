@@ -122,8 +122,9 @@ function MorePage() {
             await writeFile(target, bytes);
 
             setMsg(`已导出到：${target}`);
-        } catch (e: any) {
-            setErr(`导出失败：${e?.message ?? String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setErr(`导出失败：${msg}`);
         } finally {
             setBusy(false);
         }

@@ -3,6 +3,8 @@ import { getDb, MAX_PARAMS, vacuum, withRetry } from './index';
 import { FolderIndexRow } from './types';
 
 const TABLE = 'folder_index';
+type ExecResult = { rowsAffected?: number } | void | null | undefined;
+const rowsAffected = (res: ExecResult): number => (res && typeof res === 'object' && 'rowsAffected' in res ? (res as { rowsAffected?: number }).rowsAffected ?? 0 : 0);
 
 // CREATE TABLE IF NOT EXISTS folder_index (
 //     folder_path TEXT PRIMARY KEY,
@@ -167,5 +169,5 @@ export async function deleteAllFolderIndexes(vacuumAfter = false): Promise<numbe
     const res = await db.execute(`DELETE FROM ${TABLE}`);
     if (vacuumAfter) await vacuum();
     await resetSessionFolderIndexCache();
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }

@@ -5,6 +5,7 @@ import Database from './Database';
 import Log from './Log';
 import About from './About';
 import ComingSoon from './ComingSoon';
+import Admin from './Admin';
 
 export {
     Welcome,
@@ -13,5 +14,6 @@ export {
     Database,
     Log,
     About,
-    ComingSoon
+    ComingSoon,
+    Admin
 }

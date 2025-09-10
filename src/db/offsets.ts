@@ -15,6 +15,8 @@ CREATE INDEX IF NOT EXISTS idx_oem_product_offset_id ON oem_product_offset(oem_p
 */
 
 const COLUMNS = 'oem_product_id, x_offset, y_offset';
+type ExecResult = { rowsAffected?: number } | void | null | undefined;
+const rowsAffected = (res: ExecResult): number => (res && typeof res === 'object' && 'rowsAffected' in res ? (res as { rowsAffected?: number }).rowsAffected ?? 0 : 0);
 
 export async function getOemOffset(oem_product_id: string): Promise<OemProductOffset | null> {
     const db = await getDb();
@@ -69,7 +71,7 @@ export async function deleteOemOffset(oem_product_id: string): Promise<number> {
         `DELETE FROM ${TABLE} WHERE oem_product_id = ?`,
         [oem_product_id]
     );
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 
 /** Bulk delete by ids. Returns total rows deleted. */
@@ -88,7 +90,7 @@ export async function deleteManyOemOffsets(
             `DELETE FROM ${TABLE} WHERE oem_product_id IN (${placeholders})`,
             batch
         );
-        total += (res as any)?.rowsAffected ?? 0;
+        total += rowsAffected(res);
     }
     return total;
 }
@@ -98,7 +100,7 @@ export async function deleteAllOemOffsets(vacuumAfter = false): Promise<number> 
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${TABLE}`);
     if (vacuumAfter) await vacuum();
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 /** Return a Map for quick lookups in code. */
 export async function getOemOffsetMap(): Promise<OemProductOffsetMap> {

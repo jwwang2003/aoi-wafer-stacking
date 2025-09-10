@@ -6,6 +6,7 @@ import { exists, ExistsOptions, mkdir, writeTextFile } from '@tauri-apps/plugin-
 import { appDataDir, localDataDir, BaseDirectory, resolve } from '@tauri-apps/api/path';
 import { initialDataSourceState } from '@/constants/default';
 import { getDb } from '@/db';
+import { maybeApplyEnvAdminDefault } from '@/db/auth';
 import { createDefaultPreferences } from './helper';
 
 /**
@@ -110,6 +111,15 @@ export async function init_db(): Promise<void> {
     try {
         const db = await getDb();
         console.log('%cInitialized database!', 'color: orange', db.path);
+        // Ensure the default admin password reflects env configuration if still at seed value.
+        try {
+            const changed = await maybeApplyEnvAdminDefault();
+            if (changed) {
+                console.log('%cAdmin default password set from env.', 'color: orange');
+            }
+        } catch (e) {
+            console.warn('Failed to apply env admin default password:', e);
+        }
     } catch (err) {
         console.error('Database initialization failed:', err);
         throw err;

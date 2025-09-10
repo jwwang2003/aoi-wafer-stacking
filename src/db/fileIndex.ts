@@ -3,6 +3,8 @@ import { FileIndexRow } from './types';
 import { resetSessionFileIndexCache } from '@/utils/fs';
 
 const TABLE = 'file_index';
+type ExecResult = { rowsAffected?: number } | void | null | undefined;
+const rowsAffected = (res: ExecResult): number => (res && typeof res === 'object' && 'rowsAffected' in res ? (res as { rowsAffected?: number }).rowsAffected ?? 0 : 0);
 
 /**
  * Retrieves a single file index record by its path.
@@ -154,5 +156,5 @@ export async function deleteAllFileIndexes(vacuumAfter = false): Promise<number>
     const res = await db.execute(`DELETE FROM ${TABLE}`);
     if (vacuumAfter) await vacuum();
     await resetSessionFileIndexCache();
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
