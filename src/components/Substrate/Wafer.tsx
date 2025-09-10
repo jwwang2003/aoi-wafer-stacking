@@ -124,7 +124,6 @@ export default function SubstrateRenderer({
         camera.bottom = -side / 2 / scale;
         camera.position.x = centerX;
         camera.position.y = centerY;
-        camera.zoom = zoom;
         camera.updateProjectionMatrix();
 
         controls.target.set(centerX, centerY, 0);
@@ -192,9 +191,25 @@ export default function SubstrateRenderer({
 
         const ro = new ResizeObserver(() => {
             sizeRendererToSquare();
+            // Ensure view refits instead of sticking at an extreme zoom
+            setZoom(1);
+            const cam = cameraRef.current;
+            if (cam) { cam.zoom = 1; cam.updateProjectionMatrix(); }
             fitCameraToData();
         });
         ro.observe(container);
+
+        // Refit when tab becomes visible again (e.g., after switching away/back)
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                sizeRendererToSquare();
+                setZoom(1);
+                const cam = cameraRef.current;
+                if (cam) { cam.zoom = 1; cam.updateProjectionMatrix(); }
+                fitCameraToData();
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibility);
 
         let raf = 0;
         const animate = () => {
@@ -206,6 +221,7 @@ export default function SubstrateRenderer({
 
         return () => {
             ro.disconnect();
+            document.removeEventListener('visibilitychange', onVisibility);
             cancelAnimationFrame(raf);
             if (renderer && container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);

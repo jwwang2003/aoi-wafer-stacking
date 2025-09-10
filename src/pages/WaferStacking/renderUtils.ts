@@ -224,6 +224,9 @@ export async function renderAsJpg(
 
         if (mapCoordinates.length === 0) throw new Error('没有可渲染的晶粒数据');
 
+        // Reuse geometries/materials to reduce allocations
+        const sharedPlane = new THREE.PlaneGeometry(gridWidth, gridHeight);
+        const sharedEdges = new THREE.EdgesGeometry(sharedPlane);
         const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
 
         mapCoordinates.forEach(([xCoord, yCoord]) => {
@@ -235,13 +238,12 @@ export async function renderAsJpg(
             const gridColor = 'bin' in die ? getColorByBin(die.bin) : 0x8cefa1;
 
             const material = new THREE.MeshBasicMaterial({ color: gridColor, side: THREE.DoubleSide });
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(gridWidth, gridHeight), material);
+            const mesh = new THREE.Mesh(sharedPlane, material);
             mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
             mesh.renderOrder = 0;
             scene.add(mesh);
 
-            const edges = new THREE.EdgesGeometry(new THREE.PlaneGeometry(gridWidth, gridHeight));
-            const border = new THREE.LineSegments(edges, borderMaterial);
+            const border = new THREE.LineSegments(sharedEdges, borderMaterial);
             border.position.copy(mesh.position);
             border.renderOrder = 1;
             scene.add(border);

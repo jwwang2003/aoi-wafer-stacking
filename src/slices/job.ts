@@ -1,7 +1,8 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { v4 as uuidv4 } from 'uuid';
 import { SubstrateDefectRow, WaferMapRow } from '@/db/types';
 
-interface WaferState {
+export interface WaferState {
     oemProductId: string;
 
     // triple + sub
@@ -14,7 +15,22 @@ interface WaferState {
     waferMaps: WaferMapRow[];
 }
 
-const initialState: WaferState = {
+export type JobStatus = 'queued' | 'active' | 'done' | 'error';
+
+export interface JobItem extends WaferState {
+    id: string;
+    name?: string;
+    note?: string;
+    createdAt: number;
+    status: JobStatus;
+}
+
+interface JobsState extends WaferState {
+    queue: JobItem[];
+    activeId: string | null;
+}
+
+const initialState: JobsState = {
     oemProductId: '',
     productId: '',
     batchId: '',
@@ -22,6 +38,8 @@ const initialState: WaferState = {
     subId: '',
     waferSubstrate: null,
     waferMaps: [],
+    queue: [],
+    activeId: null,
 };
 
 // ---- helpers ----
@@ -168,6 +186,69 @@ const stackingJobSlice = createSlice({
             state.waferSubstrate = null;
             state.waferMaps = [];
         },
+
+        // ===== Queue management =====
+        queueAddFromCurrent(state, action: PayloadAction<{ name?: string; note?: string } | undefined>) {
+            const id = uuidv4();
+            const job: JobItem = {
+                id,
+                name: action.payload?.name ?? undefined,
+                note: action.payload?.note ?? undefined,
+                createdAt: Date.now(),
+                status: 'queued',
+                oemProductId: state.oemProductId,
+                productId: state.productId,
+                batchId: state.batchId,
+                waferId: state.waferId,
+                subId: state.subId,
+                waferSubstrate: state.waferSubstrate,
+                waferMaps: state.waferMaps.slice(),
+            };
+            state.queue.push(job);
+        },
+        queueAddJob(state, action: PayloadAction<Omit<JobItem, 'id' | 'createdAt' | 'status'>>) {
+            const id = uuidv4();
+            const payload = action.payload;
+            const job: JobItem = {
+                ...payload,
+                id,
+                createdAt: Date.now(),
+                status: 'queued',
+            };
+            state.queue.push(job);
+        },
+        queueRemoveJob(state, action: PayloadAction<string>) {
+            const id = action.payload;
+            state.queue = state.queue.filter(j => j.id !== id);
+            if (state.activeId === id) state.activeId = null;
+        },
+        queueUpdateJob(state, action: PayloadAction<{ id: string; changes: Partial<JobItem> }>) {
+            const { id, changes } = action.payload;
+            const j = state.queue.find(x => x.id === id);
+            if (!j) return;
+            Object.assign(j, changes);
+        },
+        queueSetActive(state, action: PayloadAction<string | null>) {
+            const id = action.payload;
+            // reset previous active status
+            if (state.activeId) {
+                const prev = state.queue.find(x => x.id === state.activeId);
+                if (prev) prev.status = prev.status === 'done' ? 'done' : 'queued';
+            }
+            state.activeId = id;
+            if (!id) return;
+            const j = state.queue.find(x => x.id === id);
+            if (!j) return;
+            j.status = 'active';
+            // apply job into active fields to keep compatibility with existing consumers
+            state.oemProductId = j.oemProductId;
+            state.productId = j.productId;
+            state.batchId = j.batchId;
+            state.waferId = j.waferId;
+            state.subId = j.subId;
+            state.waferSubstrate = j.waferSubstrate;
+            state.waferMaps = j.waferMaps.slice();
+        },
     },
 });
 
@@ -182,6 +263,11 @@ export const {
     setJobWaferId,
     setJobSubId,
     clearJob,
+    queueAddFromCurrent,
+    queueAddJob,
+    queueRemoveJob,
+    queueUpdateJob,
+    queueSetActive,
 } = stackingJobSlice.actions;
 
 export default stackingJobSlice.reducer;

@@ -210,8 +210,6 @@ export default function ProductBatchNavigator({
     const [productFilter, setProductFilter] = useState('');
     const [lotFilter, setLotFilter] = useState('');
     const [waferFilter, setWaferFilter] = useState('');
-    const [subIdFilter, setSubIdFilter] = useState('');
-    const [pathFilter, setPathFilter] = useState('');
 
     const resetAfterProduct = () => {
         setSelectedLotId(null);
@@ -294,14 +292,15 @@ export default function ProductBatchNavigator({
     );
     useEffect(() => { resetAfterWafer(); }, [selectedWaferId]);
 
-    const filteredSubs = useMemo(() => {
-        const qs = subIdFilter.trim().toLowerCase();
-        const qp = pathFilter.trim().toLowerCase();
-        return subsState.data.filter(s =>
-            (!qs || s.sub_id.toLowerCase().includes(qs)) &&
-            (!qp || s.file_path.toLowerCase().includes(qp))
-        );
-    }, [subsState.data, subIdFilter, pathFilter]);
+    // 自动选择逻辑：当选中晶圆且子编号列表加载完成后，自动选择第一个子编号
+    useEffect(() => {
+        if (!selectedWaferId) return;
+        if (selectedSubId) return; // 已有选择则不重复
+        if (subsState.loading) return; // 等待加载完成
+        if (!subsState.data?.length) return; // 无可用子编号
+        void loadWaferMaps(subsState.data[0].sub_id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedWaferId, selectedSubId, subsState.loading, subsState.data]);
 
     // 5) 叠图面板（点击子编号后加载）
     const [mapsError, setMapsError] = useState<string | null>(null);
@@ -358,9 +357,14 @@ export default function ProductBatchNavigator({
 
     return (
         <Stack gap="md">
-            <Group align="start" gap="md" wrap="nowrap">
+            <Group align="start" gap="md">
                 {/* 列 1：OEM ↔ 产品 */}
-                <Card withBorder radius="lg" w={360} p="sm" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                <Card
+                    withBorder
+                    radius="lg"
+                    p="sm"
+                    style={{ flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column' }}
+                >
                     <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.oemProduct}</Title>
                         <Tooltip label={zh.reload} withArrow>
@@ -428,7 +432,12 @@ export default function ProductBatchNavigator({
                 </Card>
 
                 {/* 列 2：批次 */}
-                <Card withBorder radius="lg" w={220} p="sm" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                <Card
+                    withBorder
+                    radius="lg"
+                    p="sm"
+                    style={{ flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column' }}
+                >
                     <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.batches}</Title>
                         <Group gap={1} align="end" style={{ alignItems: 'center' }}>
@@ -480,8 +489,13 @@ export default function ProductBatchNavigator({
                     </Group>
                 </Card>
 
-                {/* 列 3：晶圆 */}
-                <Card withBorder radius="lg" w={220} p="sm" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                {/* 列 3：晶圆（填充剩余空间） */}
+                <Card
+                    withBorder
+                    radius="lg"
+                    p="sm"
+                    style={{ flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column' }}
+                >
                     <Group justify="space-between" mb="xs">
                         <Title order={4}>{zh.wafers}</Title>
                         <Group gap={1} align="end" style={{ alignItems: 'center' }}>
@@ -533,93 +547,7 @@ export default function ProductBatchNavigator({
                     </Group>
                 </Card>
 
-                {/* 列 4：子编号（最后列宽度自适应，路径列可伸展） */}
-                <Card withBorder radius="lg" p="sm" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                    <Group justify="space-between" mb="xs">
-                        <Title order={4}>{zh.subs}</Title>
-                        <Group gap={1} align="end" style={{ alignItems: 'center' }}>
-                            <Text size="xs" c="dimmed">{zh.wafer}</Text>
-                            <Text size="sm" fw={600}>{selectedWaferId ?? '—'}</Text>
-                        </Group>
-                    </Group>
-                    {subsState.error && <Alert color="red" icon={<IconAlertCircle size={16} />} mb="xs">{subsState.error}</Alert>}
-                    <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
-                        <Table
-                            striped
-                            highlightOnHover
-                            withRowBorders={false}
-                            // 关键：固定表格布局 + 占满宽度，便于最后一列自适应
-                            style={{ tableLayout: 'fixed', width: '100%' }}
-                        >
-                            <Table.Thead {...stickyHeadProps}>
-                                <Table.Tr>
-                                    {/* 固定第一列宽度，第二列自动伸展 */}
-                                    <Table.Th style={{ width: 160, whiteSpace: 'nowrap' }}>{zh.subId}</Table.Th>
-                                    <Table.Th>{zh.filePathCol}</Table.Th>
-                                </Table.Tr>
-                                {/* ▼ NEW: 双列筛选（子编号 / 路径） */}
-                                <Table.Tr>
-                                    <Table.Th style={{ width: 160 }}>
-                                        <ClearableInput
-                                            value={subIdFilter}
-                                            onChange={(e) => setSubIdFilter(e.currentTarget.value)}
-                                            onClear={() => setSubIdFilter('')}
-                                            placeholder={`${zh.subId} ${zh.searchPlaceholder}`}
-                                            w="100%"
-                                        />
-                                    </Table.Th>
-                                    <Table.Th>
-                                        <ClearableInput
-                                            value={pathFilter}
-                                            onChange={(e) => setPathFilter(e.currentTarget.value)}
-                                            onClear={() => setPathFilter('')}
-                                            placeholder={`${zh.filePathCol} ${zh.searchPlaceholder}`}
-                                            w="100%"
-                                        />
-                                    </Table.Th>
-                                </Table.Tr>
-                            </Table.Thead>
-                            <Table.Tbody>
-                                {subsState.loading ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
-                                ) : !selectedWaferId ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{zh.selectWafer}</Text></Table.Td></Table.Tr>
-                                ) : filteredSubs.length === 0 ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{zh.noSubs}</Text></Table.Td></Table.Tr>
-                                ) : filteredSubs.map(s => {
-                                    const active = s.sub_id === selectedSubId;
-                                    return (
-                                        <Table.Tr
-                                            key={s.sub_id}
-                                            onClick={() => loadWaferMaps(s.sub_id)}
-                                            style={{ cursor: 'pointer', background: active ? 'var(--mantine-color-blue-0)' : undefined }}
-                                            title={zh.clickToLoad}
-                                        >
-                                            {/* 第一列固定宽 */}
-                                            <Table.Td style={{ width: 160 }}>
-                                                <Text fw={active ? 700 : 400} truncate="end">{s.sub_id}</Text>
-                                            </Table.Td>
-                                            {/* 最后一列自适应 + 单行省略号 */}
-                                            <Table.Td style={{ overflow: 'hidden' }}>
-                                                <Text
-                                                    title={s.file_path}
-                                                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                                >
-                                                    {s.file_path}
-                                                </Text>
-                                            </Table.Td>
-                                        </Table.Tr>
-                                    );
-                                })}
-                            </Table.Tbody>
-                        </Table>
-                    </ScrollArea.Autosize>
-                    <Group justify="space-between" mt="xs">
-                        <Text size="xs" c="dimmed">
-                            {selectedWaferId ? zh.subsCount(filteredSubs.length) : '—'}
-                        </Text>
-                    </Group>
-                </Card>
+                {/* 已移除子编号列：选择晶圆后自动选择第一个子编号并加载叠图 */}
             </Group>
 
             {/* 晶圆叠图面板 */}

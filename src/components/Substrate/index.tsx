@@ -103,7 +103,7 @@ export default function SubstratePane({
     }, [waferMaps]);
 
     return (
-        <Flex gap="md" style={{ height: 'calc(100vh - 50px)', width: '100%' }}>
+        <Flex gap="md" style={{ width: '100%' }}>
             {showParameters && (
                 <Parameters
                     oemProductId={oemProductId}
@@ -122,7 +122,7 @@ export default function SubstratePane({
                 />
             )}
 
-            <Box style={{ flex: 1, minWidth: 0 }}>
+            <Box style={{ flex: 1, minWidth: 0, height: 'min-content' }}>
                 {sheetsData && dieData && (
                     <SubstrateRenderer
                         gridWidth={dieX}

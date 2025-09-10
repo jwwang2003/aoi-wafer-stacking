@@ -14,6 +14,8 @@ import {
 } from '@mantine/core';
 import { IconDatabase, IconDeviceFloppy, IconEraser, IconTrash } from '@tabler/icons-react';
 import { errorToast } from '@/components/Toaster';
+import { useAppSelector } from '@/hooks';
+import { AuthRole } from '@/types/auth';
 
 // Offsets (existing)
 import { getOemOffset, upsertOemOffset, deleteOemOffset } from '@/db/offsets';
@@ -58,6 +60,8 @@ export default function Parameters({
     maxDie = 50,
     stepDie = 0.001,
 }: ParametersProps) {
+    const role = useAppSelector(s => s.auth.role);
+    const readOnlyMode = role !== AuthRole.Admin;
     // --------------------------
     // Offset state
     // --------------------------
@@ -150,8 +154,8 @@ export default function Parameters({
     };
 
     const offsetControlsDisabled = useMemo(
-        () => loadingOffset || savingOffset,
-        [loadingOffset, savingOffset]
+        () => readOnlyMode || loadingOffset || savingOffset,
+        [readOnlyMode, loadingOffset, savingOffset]
     );
 
     // Offset inputs
@@ -271,7 +275,7 @@ export default function Parameters({
         }
     };
 
-    const sizeControlsDisabled = useMemo(() => loadingSize || savingSize, [loadingSize, savingSize]);
+    const sizeControlsDisabled = useMemo(() => readOnlyMode || loadingSize || savingSize, [readOnlyMode, loadingSize, savingSize]);
 
     // Size inputs
     const onDieXChange = (val: string | number) => {

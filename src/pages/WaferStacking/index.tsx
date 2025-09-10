@@ -1,26 +1,28 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { infoToast, errorToast } from '@/components/Toaster';
-import { LayerMeta } from './priority';
-import {
-    Title,
-    Group,
-    Container,
-    Stack,
-    Checkbox,
-    Button,
-    ScrollArea,
-    Text,
-    Paper,
-    Tooltip,
-    SimpleGrid,
-    Divider,
-} from '@mantine/core';
-import { join } from '@tauri-apps/api/path';
+import { join, desktopDir } from '@tauri-apps/api/path';
 import { mkdir } from '@tauri-apps/plugin-fs';
+
+import { useRef, useEffect, useState } from 'react';
+import { useAppSelector } from '@/hooks';
+
+import { IconDownload, IconRefresh } from '@tabler/icons-react';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox } from '@mantine/core';
+
+import { PathPicker } from '@/components';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import JobManager from '@/components/JobManager';
+import LayersSelector, { LayerChoice } from '@/components/LayersSelector';
+import { infoToast, errorToast } from '@/components/Toaster';
+
+// DB
 import { getOemOffset } from '@/db/offsets';
 import { getProductSize } from '@/db/productSize';
-import { Input } from '@mantine/core';
-import { IconDownload, IconRefresh } from '@tabler/icons-react';
+
+// TYPES
+import { ExcelType } from '@/types/wafer';
+import { DataSourceType } from '@/types/dataSource';
+import { toWaferFileMetadata } from '@/types/helpers';
+
+// WAFER
 import {
     exportWaferHex,
     exportWaferMapData,
@@ -31,15 +33,14 @@ import {
     invokeParseSubstrateDefectXls,
     exportWaferJpg,
 } from '@/api/tauri/wafer';
+// IPC types for Tauri API calls
+import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
+
 import { generateGridWithSubstrateDefects } from './substrateMapping'
 import { renderAsJpg } from './renderUtils';
-import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
-import { useAppSelector } from '@/hooks';
-import { ExcelType } from '@/types/wafer';
-import { DataSourceType } from '@/types/dataSource';
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
-import { toWaferFileMetadata } from '@/types/helpers';
-import { PathPicker } from '@/components';
+
+import { LayerMeta } from './priority';
+
 import {
     getLayerPriority,
     extractAlignmentMarkers,
@@ -56,6 +57,8 @@ import {
     convertToBinMapData,
     convertToHexMapData,
 } from './waferAlgorithm';
+
+
 type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
 
 type OutputOption = {
@@ -90,7 +93,7 @@ function stageLabel(
 }
 
 export default function WaferStacking() {
-    const [selectedLayers, setSelectedLayers] = useState<string[]>([]);
+    const [layerChoice, setLayerChoice] = useState<LayerChoice>({ includeSubstrate: false, maps: [] });
     const [tasks, setTasks] = useState<string[][]>([]);
     const [processing, setProcessing] = useState(false);
     const [finalOutputDir, setFinalOutputDir] = useState<string>('');
@@ -134,75 +137,20 @@ export default function WaferStacking() {
         return () => { cancelled = true; };
     }, [jobOemId]);
 
-    const selectableLayers = useMemo(() => {
-        type Item = {
-            value: string; // unique key for Checkbox value
-            label: string; // main label
-            disabled?: boolean; // WLBI disabled
-            tooltip?: string; // optional tooltip
-        };
-        const items: Item[] = [];
-
-        // Substrate (if present)
-        if (jobSubstrate) {
-            const subId = jobSubstrate.sub_id || jobSubId || '—';
-            items.push({
-                value: `substrate:${subId}`,
-                label: `Substrate / ${subId}`,
-            });
-        }
-
-        // Wafer maps
-        for (const wm of jobWaferMaps) {
-            // const stage = stageLabel(wm.stage, wm.sub_stage);
-            const stage = stageLabel(wm.stage);
-            const subStage = wm.sub_stage ? ` / ${wm.sub_stage}` : '';
-            const retest = ` / Retest ${wm.retest_count ?? 0}`;
-            const id =
-                wm.idx != null
-                    ? `map:${wm.idx}`
-                    : `map:${wm.product_id}|${wm.batch_id}|${wm.wafer_id}|${wm.stage}`; // fallback key
-
-            items.push({
-                value: id,
-                label: `${stage}${subStage}${retest}`,
-            });
-        }
-
-        return items;
-    }, [jobSubstrate, jobSubId, jobWaferMaps]);
+    // no-op: replaced by LayersSelector
 
     const processMapping = async () => {
         setProcessing(true);
         try {
-            const selectedLayerInfo = selectedLayers
-                .map((layerValue) => {
-                    const [layerType, id] = layerValue.split(':', 2);
-                    if (layerType === 'substrate') {
-                        return {
-                            layerType: 'substrate' as const,
-                            filePath: jobSubstrate?.file_path || '',
-                            stage: DataSourceType.Substrate,
-                        };
-                    } else if (layerType === 'map' && id) {
-                        const wm = jobWaferMaps.find(
-                            (item) => item.idx === parseInt(id, 10)
-                        );
-                        return {
-                            layerType: 'map' as const,
-                            filePath: wm?.file_path || '',
-                            stage: wm?.stage as DataSourceType,
-                            subStage: wm?.sub_stage || '',
-                        };
-                    }
-                    return null;
-                })
-                .filter(Boolean) as Array<{
-                    layerType: 'map' | 'substrate';
-                    filePath: string;
-                    stage?: DataSourceType;
-                    subStage?: string;
-                }>;
+            const selectedLayerInfo = [
+                ...(layerChoice.includeSubstrate && jobSubstrate ? [{ layerType: 'substrate' as const, filePath: jobSubstrate.file_path, stage: DataSourceType.Substrate }] : []),
+                ...layerChoice.maps.map((wm) => ({
+                    layerType: 'map' as const,
+                    filePath: wm.file_path,
+                    stage: wm.stage as DataSourceType,
+                    subStage: wm.sub_stage || '',
+                })),
+            ];
 
             if (selectedLayerInfo.length === 0) {
                 throw new Error('未选择有效图层或图层无文件路径');
@@ -212,7 +160,7 @@ export default function WaferStacking() {
                 const getPriority = (layer: typeof a) => {
                     const layerMeta: LayerMeta = ({
                         stage: layer.stage as DataSourceType,
-                        subStage: layer.subStage,
+                        subStage: layer.layerType === 'map' ? layer.subStage : undefined,
                     });
                     return getLayerPriority(layerMeta);
                 };
@@ -251,7 +199,7 @@ export default function WaferStacking() {
             let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number, class: string }> = [];
 
             for (const layer of sortedLayers) {
-                const { filePath, layerType, stage, subStage } = layer;
+                const { filePath, layerType, stage } = layer;
                 if (!filePath) continue;
 
                 let content: SubstrateDefectXlsResult | BinMapData | MapData | Wafer | null = null;
@@ -262,10 +210,10 @@ export default function WaferStacking() {
                 if (layerType === 'map' && stage) {
                     layerName =
                         stage === DataSourceType.CpProber
-                            ? `CP${subStage || ''}`
+                            ? `CP${layer.subStage || ''}`
                             : stageLabel(stage);
                     if (stage === DataSourceType.CpProber) {
-                        const cpType = subStage || '1';
+                        const cpType = layer.subStage || '1';
                         if (['1', '2'].includes(cpType)) {
                             content = await parseWaferMapEx(filePath);
                             if (content && content.map.dies) {
@@ -365,7 +313,7 @@ export default function WaferStacking() {
                 if (!layer.stage) return;
                 const layerMeta: LayerMeta = {
                     stage: layer.stage,
-                    subStage: layer.subStage,
+                    subStage: layer.layerType === 'map' ? layer.subStage : undefined,
                 };
                 const priority = getLayerPriority(layerMeta);
                 mergeLayerToDieMap(dieMap, dies, priority);
@@ -443,120 +391,26 @@ export default function WaferStacking() {
     ]);
     const [outputDir, setOutputDir] = useState<string>('');
 
+    // Default output directory to user's Desktop if not chosen
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                if (outputDir) return; // respect already selected value
+                const desktop = await desktopDir();
+                if (alive && desktop) setOutputDir(desktop);
+            } catch {/* noop */ }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [outputDir]);
+
     return (
         <Container fluid p='md'>
             <Stack gap='md'>
                 <Title order={1}>晶圆叠图</Title>
 
-                <Divider />
-
-                {job && jobSubstrate ? (
-                    <>
-                        <Title order={4}>当前Wafer数据</Title>
-                        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
-                            {jobWaferMaps.map((r, i) => (
-                                <WaferFileMetadataCard
-                                    key={`${r.idx}-${i}`}
-                                    data={toWaferFileMetadata(r)}
-                                />
-                            ))}
-                            {jobSubstrate && (
-                                <ExcelMetadataCard
-                                    data={{
-                                        ...jobSubstrate,
-                                        type: ExcelType.DefectList,
-                                        stage: DataSourceType.Substrate,
-                                        filePath: jobSubstrate.file_path,
-                                        lastModified: 0,
-                                    }}
-                                />
-                            )}
-                        </SimpleGrid>
-                    </>
-                ) : (
-                    <Text>先前往数据库选择一个有效的数据集</Text>
-                )}
-
-                <Divider />
-                <Group align='flex-start' grow>
-                    <Stack w='50%' gap='sm'>
-                        <Checkbox.Group
-                            label='选择叠图层 (阶段/工序/复测)'
-                            value={selectedLayers}
-                            onChange={setSelectedLayers}
-                        >
-                            <Stack gap='xs' mt='sm'>
-                                {selectableLayers.length === 0 ? (
-                                    <Text c='dimmed'>暂无可选图层，请先在数据库选择数据</Text>
-                                ) : (
-                                    selectableLayers.map((item) => (
-                                        <React.Fragment key={item.value}>
-                                            <Tooltip
-                                                label={item.tooltip}
-                                                position='right'
-                                                disabled={!item.tooltip}
-                                            >
-                                                <Checkbox
-                                                    value={item.value}
-                                                    label={item.label}
-                                                    disabled={item.disabled}
-                                                />
-                                            </Tooltip>
-                                            {item.value.startsWith('substrate:') && selectedLayers.includes(item.value) && (
-                                                <Stack ml="2rem" gap="sm">
-                                                    <Group align="center" gap="sm">
-                                                        <Text size="sm">偏移补偿(X, Y):</Text>
-                                                        <Input
-                                                            type="number"
-                                                            placeholder="X偏移"
-                                                            value={substrateOffset.x}
-                                                            onChange={(e) => setSubstrateOffset({ ...substrateOffset, x: parseFloat(e.target.value) || 0 })}
-                                                            style={{ width: '80px' }}
-                                                            step="0.001"
-                                                            disabled={true}
-                                                        />
-                                                        <Input
-                                                            type="number"
-                                                            placeholder="Y偏移"
-                                                            value={substrateOffset.y}
-                                                            onChange={(e) => setSubstrateOffset({ ...substrateOffset, y: parseFloat(e.target.value) || 0 })}
-                                                            style={{ width: '80px' }}
-                                                            step="0.001"
-                                                            disabled={true}
-                                                        />
-                                                    </Group>
-                                                </Stack>
-                                            )}
-                                        </React.Fragment>
-                                    ))
-                                )}
-                            </Stack>
-                        </Checkbox.Group>
-                    </Stack>
-                    {/* 右侧：任务列表区 */}
-                    <Stack w='50%' gap='sm'>
-                        <Title order={3}>待处理任务</Title>
-                        <ScrollArea h={200}>
-                            <Stack gap='xs'>
-                                {tasks.length === 0 ? (
-                                    <Text c='dimmed'>暂无任务</Text>
-                                ) : (
-                                    tasks.map((task, idx) => (
-                                        <Paper key={idx} shadow='xs' p='xs' radius='sm'>
-                                            <Text size='sm'>
-                                                任务 {idx + 1}: {task.join(', ')}
-                                            </Text>
-                                        </Paper>
-                                    ))
-                                )}
-                            </Stack>
-                        </ScrollArea>
-                        <Button onClick={handleBatchProcess} disabled={tasks.length === 0}>
-                            批量处理
-                        </Button>
-                    </Stack>
-                </Group>
-                <Divider />
                 <Title order={2}>输出设置</Title>
                 <Stack>
                     <Checkbox.Group
@@ -574,32 +428,125 @@ export default function WaferStacking() {
                             ))}
                         </Group>
                     </Checkbox.Group>
-                    {/* Path selector */}
+
+                    {/* Top-level output directory selector with Desktop default */}
                     <Group align='end' grow>
                         <PathPicker
                             label='输出目录'
-                            placeholder='使用默认输出目录（由配置控制）'
+                            placeholder='默认：桌面(Desktop)'
                             value={outputDir}
                             onChange={(e) => setOutputDir(e)}
                             readOnly
                         />
-                        <Button
-                            color='blue'
-                            leftSection={
-                                processing ? (
-                                    <IconRefresh size={16} />
-                                ) : (
-                                    <IconDownload size={16} />
-                                )
-                            }
-                            loading={processing}
-                            onClick={processMapping}
-                            disabled={selectedOutputs.length === 0}
-                        >
-                            导出
-                        </Button>
                     </Group>
                 </Stack>
+
+                <Divider />
+
+                <Group align='flex-start'>
+                    {/* 右侧：任务列表区 → 嵌入 JobManager */}
+                    <Stack w='25%' gap='sm'>
+                        <Title order={3}>待处理任务</Title>
+                        <JobManager disableAddFromCurrent />
+                    </Stack>
+
+                    <Stack style={{ flex: 1, minWidth: 0 }}>
+                        {job && jobSubstrate ? (
+                            <>
+                                <Title order={4}>当前Wafer数据</Title>
+                                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
+                                    {jobWaferMaps.map((r, i) => (
+                                        <WaferFileMetadataCard
+                                            key={`${r.idx}-${i}`}
+                                            data={toWaferFileMetadata(r)}
+                                        />
+                                    ))}
+                                    {jobSubstrate && (
+                                        <ExcelMetadataCard
+                                            data={{
+                                                ...jobSubstrate,
+                                                type: ExcelType.DefectList,
+                                                stage: DataSourceType.Substrate,
+                                                filePath: jobSubstrate.file_path,
+                                                lastModified: 0,
+                                            }}
+                                        />
+                                    )}
+                                </SimpleGrid>
+                            </>
+                        ) : (
+                            <Text>先前往数据库选择一个有效的数据集</Text>
+                        )}
+
+                        <Divider />
+
+                        <Stack gap='sm'>
+                            <LayersSelector onChange={setLayerChoice} />
+                            {layerChoice.includeSubstrate && (
+                                <Stack style={{ flex: 1, minWidth: 0 }} gap="sm">
+                                    <Group align="center" gap="sm">
+                                        <Text size="sm">偏移补偿(X, Y):</Text>
+                                        <Input
+                                            type="number"
+                                            placeholder="X偏移"
+                                            value={substrateOffset.x}
+                                            onChange={(e) => setSubstrateOffset({ ...substrateOffset, x: parseFloat(e.target.value) || 0 })}
+                                            style={{ width: '80px' }}
+                                            step="0.001"
+                                            disabled={true}
+                                        />
+                                        <Input
+                                            type="number"
+                                            placeholder="Y偏移"
+                                            value={substrateOffset.y}
+                                            onChange={(e) => setSubstrateOffset({ ...substrateOffset, y: parseFloat(e.target.value) || 0 })}
+                                            style={{ width: '80px' }}
+                                            step="0.001"
+                                            disabled={true}
+                                        />
+                                    </Group>
+                                </Stack>
+                            )}
+                        </Stack>
+                        <Group align='end' grow>
+                            <Button
+                                color='blue'
+                                leftSection={
+                                    processing ? (
+                                        <IconRefresh size={16} />
+                                    ) : (
+                                        <IconDownload size={16} />
+                                    )
+                                }
+                                loading={processing}
+                                onClick={processMapping}
+                                disabled={selectedOutputs.length === 0}
+                            >
+                                处理当前
+                            </Button>
+                        </Group>
+                    </Stack>
+                </Group>
+
+                <Divider />
+
+                <Group align='end' grow>
+                    <Button
+                        color='blue'
+                        leftSection={
+                            processing ? (
+                                <IconRefresh size={16} />
+                            ) : (
+                                <IconDownload size={16} />
+                            )
+                        }
+                        loading={processing}
+                        onClick={processMapping}
+                        disabled={selectedOutputs.length === 0}
+                    >
+                        处理全部
+                    </Button>
+                </Group>
             </Stack>
         </Container>
     );
