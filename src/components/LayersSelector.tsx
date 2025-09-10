@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Checkbox, Group, Stack, Text, Title } from '@mantine/core';
 import { useAppSelector } from '@/hooks';
+import { useDispatch } from 'react-redux';
+import type { AppDispatch } from '@/store';
+import { setLayerSelection } from '@/slices/job';
 import type { WaferMapRow } from '@/db/types';
 import { DataSourceType } from '@/types/dataSource';
 
@@ -39,6 +42,7 @@ function pickHighestRetestPerGroup(rows: WaferMapRow[]): WaferMapRow[] {
 
 export default function LayersSelector({ onChange }: { onChange?: (sel: LayerChoice) => void }) {
     const job = useAppSelector((s) => s.stackingJob);
+    const dispatch = useDispatch<AppDispatch>();
     const { waferMaps, waferSubstrate, subId } = job;
 
     const candidates = useMemo(() => pickHighestRetestPerGroup(waferMaps), [waferMaps]);
@@ -54,11 +58,12 @@ export default function LayersSelector({ onChange }: { onChange?: (sel: LayerCho
     }, [waferSubstrate, candidates]);
 
     useEffect(() => {
-        onChange?.({
-            includeSubstrate: includeSub,
-            maps: candidates.filter((r) => checkedIds.has(r.idx ?? `${r.stage}|${r.sub_stage}`)),
-        });
-    }, [includeSub, checkedIds, candidates, onChange]);
+        const selected = candidates.filter((r) => checkedIds.has(r.idx ?? `${r.stage}|${r.sub_stage}`));
+        onChange?.({ includeSubstrate: includeSub, maps: selected });
+        // Publish selection to Redux so JobManager can respect it when enqueuing
+        const keys = selected.map((r) => String(r.idx ?? `${r.stage}|${r.sub_stage}`));
+        dispatch(setLayerSelection({ includeSubstrate: includeSub, selectedLayerKeys: keys }));
+    }, [includeSub, checkedIds, candidates, onChange, dispatch]);
 
     return (
         <Card withBorder radius="lg" p="sm">

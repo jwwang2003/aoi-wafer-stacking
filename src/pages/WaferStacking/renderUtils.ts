@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AsciiDie, WaferMapDie } from '@/types/ipc';
-import { colorMap } from '@/components/Substrate/Wafer';
 import { BinValue } from '@/types/ipc';
 import { isNumberBin, isSpecialBin } from '@/types/ipc';
 
@@ -207,6 +206,9 @@ export async function renderAsJpg(
         renderer.setSize(mainSize, mainSize);
         container.appendChild(renderer.domElement);
 
+        // Mark parameter as used to satisfy noUnusedParameters while ignoring defects in rendering
+        void defects;
+
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = false;
         controls.enableRotate = false;
@@ -249,21 +251,7 @@ export async function renderAsJpg(
             scene.add(border);
         });
 
-        defects.forEach(defect => {
-            defect.w = defect.w * 1000;
-            defect.h = defect.h * 1000;
-            const geometry = new THREE.PlaneGeometry(defect.w / 300, defect.h / 300);
-            const color = colorMap.get(defect.class) || 0xff00ff;
-
-            const material = new THREE.MeshBasicMaterial({
-                color, side: THREE.DoubleSide, transparent: true, opacity: 0.8
-            });
-
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.set(defect.x, defect.y, 0.1);
-            mesh.renderOrder = 2;
-            scene.add(mesh);
-        });
+        // No defect rendering
 
         const fitCameraToData = () => {
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -277,17 +265,7 @@ export async function renderAsJpg(
                 maxY = Math.max(maxY, y + gridHeight);
             });
 
-            defects.forEach(defect => {
-                const defectLeft = defect.x - (defect.w / 300) / 2;
-                const defectRight = defect.x + (defect.w / 300) / 2;
-                const defectTop = defect.y - (defect.h / 300) / 2;
-                const defectBottom = defect.y + (defect.h / 300) / 2;
-
-                minX = Math.min(minX, defectLeft);
-                maxX = Math.max(maxX, defectRight);
-                minY = Math.min(minY, defectTop);
-                maxY = Math.max(maxY, defectBottom);
-            });
+            // Defects are ignored for camera fitting
 
             const padding = 5;
             minX -= padding; maxX += padding; minY -= padding; maxY += padding;
@@ -333,6 +311,134 @@ export async function renderAsJpg(
         const blob = await response.blob();
         const arrayBuffer = await blob.arrayBuffer();
 
+        return new Uint8Array(arrayBuffer);
+    } finally {
+        document.body.removeChild(container);
+    }
+}
+
+export async function renderSubstrateAsJpg(
+    dies: (AsciiDie | WaferMapDie)[],
+    _defects: Array<{ x: number; y: number; w: number; h: number; class: string }>,
+    gridWidth: number = 4.134,
+    gridHeight: number = 3.74,
+    gridOffset: { x: number; y: number } = { x: 0, y: 0 },
+    header?: Record<string, string>
+): Promise<Uint8Array> {
+    const mainSize = 1000;
+    const container = document.createElement('div');
+    container.style.cssText = `position:absolute;top:-9999px;left:-9999px;width:${mainSize}px;height:${mainSize + 500}px`;
+    document.body.appendChild(container);
+
+    try {
+        // Mark parameter as used; defects are not rendered in substrate-style output
+        void _defects;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff);
+
+        const camera = new THREE.OrthographicCamera(
+            -mainSize / 2, mainSize / 2, mainSize / 2, -mainSize / 2, 0.1, 1000
+        );
+        camera.position.z = 10;
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            preserveDrawingBuffer: true,
+            alpha: false
+        });
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.setSize(mainSize, mainSize);
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = false;
+        controls.enableRotate = false;
+        controls.enableZoom = false;
+        controls.enablePan = true;
+        controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+        controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
+
+        const baseGridColor = 0x8cefa1;
+        const dieMap = new Map<string, AsciiDie | WaferMapDie>();
+        dies.forEach(die => dieMap.set(`${die.x}|${die.y}`, die));
+        const mapCoordinates = Array.from(dieMap.keys()).map(key =>
+            key.split('|').map(Number) as [number, number]
+        );
+        if (mapCoordinates.length === 0) throw new Error('没有可渲染的晶粒数据');
+
+        const sharedPlane = new THREE.PlaneGeometry(gridWidth, gridHeight);
+        const sharedEdges = new THREE.EdgesGeometry(sharedPlane);
+        const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+        const fillMaterial = new THREE.MeshBasicMaterial({ color: baseGridColor, side: THREE.DoubleSide });
+
+        mapCoordinates.forEach(([xCoord, yCoord]) => {
+            const gridLeft = xCoord * gridWidth + gridOffset.x;
+            const gridTop = -yCoord * gridHeight + gridOffset.y;
+
+            const mesh = new THREE.Mesh(sharedPlane, fillMaterial);
+            mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
+            mesh.renderOrder = 0;
+            scene.add(mesh);
+
+            const border = new THREE.LineSegments(sharedEdges, borderMaterial);
+            border.position.copy(mesh.position);
+            border.renderOrder = 1;
+            scene.add(border);
+        });
+
+        const fitCameraToData = () => {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            mapCoordinates.forEach(([xCoord, yCoord]) => {
+                const x = xCoord * gridWidth + gridOffset.x;
+                const y = -yCoord * gridHeight + gridOffset.y;
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x + gridWidth);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y + gridHeight);
+            });
+
+            const padding = 5;
+            minX -= padding; maxX += padding; minY -= padding; maxY += padding;
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const dataW = maxX - minX;
+            const dataH = maxY - minY;
+            const scale = Math.min(
+                mainSize / (dataW * 1.0 || 1),
+                mainSize / (dataH * 1.0 || 1)
+            ) || 1;
+
+            camera.left = -mainSize / 2 / scale;
+            camera.right = mainSize / 2 / scale;
+            camera.top = mainSize / 2 / scale;
+            camera.bottom = -mainSize / 2 / scale;
+            camera.position.set(centerX, centerY, 10);
+            camera.updateProjectionMatrix();
+
+            controls.target.set(centerX, centerY, 0);
+            controls.update();
+        };
+        fitCameraToData();
+        renderer.render(scene, camera);
+
+        const mainCanvas = renderer.domElement;
+        const binCounts = countBinValues(dies);
+        const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts);
+
+        const infoLines = header ? [
+            `产品名称: ${(header['Product'] || header['Device Name']) + '_' + (header['Lot No.'] || '') + '_' + (header['Wafer ID'] || '')}       Wafer厚度:0.000`,
+            `晶圆尺寸: ${header['Wafer Size'] || 0}       布距: [${header['Index X'] || 0}.000, ${header['Index Y'] || 0}.000]       切角: ${header['??'] || 'Unknown'}[${header['Flat/Notch'] || 'Unknown'}]`,
+            `时间: ${new Date().toLocaleString()}    测试总数: ${totalTested}    良品: ${totalPass}    次品: ${totalTested - totalPass}    良率: ${yieldRate}%`
+        ] : [];
+
+        const infoCanvas = createInfoLinesCanvas(infoLines, mainSize);
+        const legendCanvas = createBinLegend(binCounts, mainSize);
+        const mergedCanvas = mergeImages(mainCanvas, infoCanvas, legendCanvas);
+        const imageData = mergedCanvas.toDataURL('image/jpeg', 1.0);
+        const response = await fetch(imageData);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
         return new Uint8Array(arrayBuffer);
     } finally {
         document.body.removeChild(container);

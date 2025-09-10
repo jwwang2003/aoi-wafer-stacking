@@ -5,7 +5,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useAppSelector } from '@/hooks';
 
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
-import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox } from '@mantine/core';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio } from '@mantine/core';
 
 import { PathPicker } from '@/components';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
@@ -37,7 +37,7 @@ import {
 import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
 
 import { generateGridWithSubstrateDefects } from './substrateMapping'
-import { renderAsJpg } from './renderUtils';
+import { renderAsJpg, renderSubstrateAsJpg } from './renderUtils';
 
 import { LayerMeta } from './priority';
 
@@ -99,6 +99,7 @@ export default function WaferStacking() {
     const [finalOutputDir, setFinalOutputDir] = useState<string>('');
     const [substrateOffset, setSubstrateOffset] = useState({ x: 0, y: 0 });
     const [dieSize, setDieSize] = useState({ x: 0, y: 0 });
+    const [imageRenderer, setImageRenderer] = useState<'bin' | 'substrate'>('substrate');
     const lastSavedOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
     const job = useAppSelector((s) => s.stackingJob);
@@ -364,7 +365,9 @@ export default function WaferStacking() {
                     outputRootDir,
                     `${baseFileName}_overlayed.jpg`
                 );
-                const imageData = await renderAsJpg(mergedDies, allSubstrateDefects, dieSize.x, dieSize.y, substrateOffset, useHeader);
+                const imageData = imageRenderer === 'substrate'
+                    ? await renderSubstrateAsJpg(mergedDies, allSubstrateDefects, dieSize.x, dieSize.y, substrateOffset, useHeader)
+                    : await renderAsJpg(mergedDies, allSubstrateDefects, dieSize.x, dieSize.y, substrateOffset, useHeader);
                 await exportWaferJpg(imageData, imagePath);
             }
             infoToast({ title: '成功', message: '叠图处理已完成' });
@@ -428,6 +431,19 @@ export default function WaferStacking() {
                             ))}
                         </Group>
                     </Checkbox.Group>
+
+                    {selectedOutputs.includes('image') && (
+                        <Radio.Group
+                            label='图像渲染器'
+                            value={imageRenderer}
+                            onChange={(v) => setImageRenderer((v as 'bin' | 'substrate') || 'substrate')}
+                        >
+                            <Group gap='md' mt='xs'>
+                                <Radio value='substrate' label='Substrate 样式' />
+                                <Radio value='bin' label='Bin 颜色' />
+                            </Group>
+                        </Radio.Group>
+                    )}
 
                     {/* Top-level output directory selector with Desktop default */}
                     <Group align='end' grow>

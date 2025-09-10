@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
 import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
+
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult } from '@/types/ipc';
+
+import { colorMap } from './constants';
 
 interface SubstrateRendererProps {
     gridWidth?: number;
@@ -15,28 +19,11 @@ interface SubstrateRendererProps {
     dies: AsciiDie[] | WaferMapDie[] | null;
 }
 
-export const colorMap = new Map<string, number>([
-    ['Unclassified', 0xff0000],
-    ['Particle', 0x010101],
-    ['Pit', 0x00ff6d],
-    ['Bump', 0xaaaa00],
-    ['MicroPipe', 0x0000ff],
-    ['Line', 0x00ffff],
-    ['carrot', 0xff80ff],
-    ['triangle', 0xba00ff],
-    ['Downfall', 0x0101ff],
-    ['scratch', 0xba00ff],
-    ['PL_Black', 0xffa500],
-    ['PL_White', 0xff007f],
-    ['PL_BPD', 0x00adff],
-    ['PL_SF', 0x5555ff],
-    ['PL_BSF', 0xff80ff],
-]);
-
 export default function SubstrateRenderer({
     gridWidth = 4.134,
     gridHeight = 3.74,
-    overlapColor = 0xfa5959,
+    // Use a softer red for overlap to avoid overpowering other defects
+    overlapColor = 0xE58C8C,
     style,
     selectedSheetId,
     sheetsData,
@@ -113,10 +100,13 @@ export default function SubstrateRenderer({
         const dataH = maxY - minY;
         const margin = 1.0;
 
-        const scale = Math.min(
+        // Incorporate current zoom so effective view (frustum/zoom) fits content.
+        const currentZoom = camera.zoom || zoom || 1;
+        const baseScale = Math.min(
             side / (dataW * margin || 1),
             side / (dataH * margin || 1)
         ) || 1;
+        const scale = baseScale / currentZoom;
 
         camera.left = -side / 2 / scale;
         camera.right = side / 2 / scale;
@@ -163,6 +153,9 @@ export default function SubstrateRenderer({
             -side / 2, side / 2, side / 2, -side / 2, 0.1, 1000
         );
         camera.position.z = 10;
+        // Ensure default zoom is exactly 1 on init
+        camera.zoom = 1;
+        camera.updateProjectionMatrix();
         cameraRef.current = camera;
 
         const renderer = new THREE.WebGLRenderer({
@@ -189,28 +182,6 @@ export default function SubstrateRenderer({
         controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
         controlsRef.current = controls;
 
-        const ro = new ResizeObserver(() => {
-            sizeRendererToSquare();
-            // Ensure view refits instead of sticking at an extreme zoom
-            setZoom(1);
-            const cam = cameraRef.current;
-            if (cam) { cam.zoom = 1; cam.updateProjectionMatrix(); }
-            fitCameraToData();
-        });
-        ro.observe(container);
-
-        // Refit when tab becomes visible again (e.g., after switching away/back)
-        const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                sizeRendererToSquare();
-                setZoom(1);
-                const cam = cameraRef.current;
-                if (cam) { cam.zoom = 1; cam.updateProjectionMatrix(); }
-                fitCameraToData();
-            }
-        };
-        document.addEventListener('visibilitychange', onVisibility);
-
         let raf = 0;
         const animate = () => {
             controls.update();
@@ -220,8 +191,6 @@ export default function SubstrateRenderer({
         raf = requestAnimationFrame(animate);
 
         return () => {
-            ro.disconnect();
-            document.removeEventListener('visibilitychange', onVisibility);
             cancelAnimationFrame(raf);
             if (renderer && container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
@@ -238,6 +207,20 @@ export default function SubstrateRenderer({
         camera.updateProjectionMatrix();
     }, [zoom]);
 
+    // Active defects: null or missing selectedSheetId means render all sheets
+    const activeDefects = useMemo(() => {
+        if (!sheetsData) return [] as { x: number; y: number; w: number; h: number; class: string }[];
+        if (!selectedSheetId || !(sheetsData as any)[selectedSheetId]) {
+            const all: { x: number; y: number; w: number; h: number; class: string }[] = [];
+            for (const key of Object.keys(sheetsData as any)) {
+                const arr = (sheetsData as any)[key] as typeof all;
+                if (Array.isArray(arr)) all.push(...arr);
+            }
+            return all;
+        }
+        return (sheetsData as any)[selectedSheetId] as { x: number; y: number; w: number; h: number; class: string }[];
+    }, [selectedSheetId, sheetsData]);
+
     // Rebuild scene on data changes
     useEffect(() => {
         defectObjectsRef.current.forEach((o) => sceneRef.current.remove(o));
@@ -252,29 +235,62 @@ export default function SubstrateRenderer({
 
         createGridFromCoordinates();
 
-        if (selectedSheetId && sheetsData[selectedSheetId]) {
-            const defects = sheetsData[selectedSheetId];
+        // Helper: create a red question mark sprite
+        const makeQuestionMarkSprite = (w: number, h: number) => {
+            const canvas = document.createElement('canvas');
+            const size = 128;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d')!;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#ff0000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 100px Arial';
+            ctx.fillText('?', size / 2, size / 2 + 6);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.needsUpdate = true;
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            const sprite = new THREE.Sprite(mat);
+            sprite.scale.set(w, h, 1);
+            return sprite;
+        };
+
+        if (activeDefects && activeDefects.length) {
             const nodes: THREE.Object3D[] = [];
-            defects.forEach((item) => {
-                const geometry = new THREE.PlaneGeometry(item.w / 300, item.h / 300);
-                const color = colorMap.get(item.class) || 0xff00ff;
-                const material = new THREE.MeshBasicMaterial({
-                    color,
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0.8,
-                });
-                const mesh = new THREE.Mesh(geometry, material);
-                mesh.position.set(item.x, item.y, 0);
-                sceneRef.current.add(mesh);
-                nodes.push(mesh);
+            activeDefects.forEach((item) => {
+                const hasColor = colorMap.has(item.class);
+                const sizeX = Math.max(item.w / 300, gridWidth * 0.5);
+                const sizeY = Math.max(item.h / 300, gridHeight * 0.5);
+                if (!hasColor) {
+                    const sprite = makeQuestionMarkSprite(sizeX, sizeY);
+                    sprite.position.set(item.x, item.y, 0.2);
+                    sceneRef.current.add(sprite);
+                    nodes.push(sprite);
+                } else {
+                    const geometry = new THREE.PlaneGeometry(item.w / 300, item.h / 300);
+                    const color = colorMap.get(item.class)!;
+                    // Use fully opaque material for accurate, saturated color
+                    const material = new THREE.MeshBasicMaterial({
+                        color,
+                        side: THREE.DoubleSide,
+                        transparent: false,
+                        opacity: 1,
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.set(item.x, item.y, 0);
+                    sceneRef.current.add(mesh);
+                    nodes.push(mesh);
+                }
             });
             defectObjectsRef.current = nodes;
         }
 
         fitCameraToData();
         setError(null);
-    }, [mapCoordinates, selectedSheetId, sheetsData, gridWidth, gridHeight, overlapColor, offsetX, offsetY]);
+    }, [mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY]);
 
     const createGridFromCoordinates = () => {
         const baseGridColor = 0x8cefa1;
@@ -286,8 +302,8 @@ export default function SubstrateRenderer({
             const gridRight = gridLeft + gridWidth;
             const gridTop = -yCoord * gridHeight + offsetY;
             const gridBottom = gridTop + gridHeight;
-            const hasOverlap = selectedSheetId && sheetsData[selectedSheetId]
-                ? sheetsData[selectedSheetId].some(defect => {
+            const hasOverlap = activeDefects && activeDefects.length
+                ? activeDefects.some(defect => {
                     const defectLeft = defect.x - (defect.w / 300) / 2;
                     const defectRight = defect.x + (defect.w / 300) / 2;
                     const defectTop = defect.y - (defect.h / 300) / 2;
@@ -302,8 +318,10 @@ export default function SubstrateRenderer({
                 : false;
 
             const material = hasOverlap
-                ? new THREE.MeshBasicMaterial({ color: overlapColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
-                : new THREE.MeshBasicMaterial({ color: baseGridColor, opacity: 0.3, transparent: false, side: THREE.DoubleSide });
+                // Opaque overlap to avoid washed-out colors
+                ? new THREE.MeshBasicMaterial({ color: overlapColor, transparent: false, opacity: 1, side: THREE.DoubleSide })
+                // Opaque base grid to ensure saturation
+                : new THREE.MeshBasicMaterial({ color: baseGridColor, transparent: false, opacity: 1, side: THREE.DoubleSide });
 
             const geometry = new THREE.PlaneGeometry(gridWidth, gridHeight);
             const mesh = new THREE.Mesh(geometry, material);
@@ -322,8 +340,32 @@ export default function SubstrateRenderer({
         gridObjectsRef.current = gridObjs;
     };
 
-    const adjustCameraView = () => {
-        fitCameraToData();
+    const centerCameraToData = () => {
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        const coords = mapCoordinatesRef.current;
+        if (!camera || !controls || !coords.length) return;
+
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const [xCoord, yCoord] of coords) {
+            const x = xCoord * gridWidth + offsetX;
+            const y = -yCoord * gridHeight + offsetY;
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x + gridWidth);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y + gridHeight);
+        }
+        if (!isFinite(minX)) return;
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        // Only move camera/target; do not change frustum or zoom
+        camera.position.x = centerX;
+        camera.position.y = centerY;
+        camera.updateProjectionMatrix();
+        controls.target.set(centerX, centerY, 0);
+        controls.update();
     };
 
     return (
@@ -363,7 +405,7 @@ export default function SubstrateRenderer({
                 </Group>
 
                 <Group mt="xs" grow>
-                    <Button size="xs" variant="light" onClick={() => adjustCameraView()}>居中视图</Button>
+                    <Button size="xs" variant="light" onClick={() => centerCameraToData()}>居中视图</Button>
                     <Button size="xs" variant="light" onClick={() => setZoom(1)}>重置缩放</Button>
                 </Group>
                 <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} />
