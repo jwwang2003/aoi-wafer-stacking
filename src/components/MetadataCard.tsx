@@ -1,6 +1,6 @@
 import { ExcelMetadata, WaferFileMetadata } from '@/types/wafer';
 import { Card, Group, Stack, Text, Badge, Tooltip, ActionIcon, CopyButton, Kbd } from '@mantine/core';
-import { IconCopy, IconCheck, IconClock, IconFileText, IconHash, IconTag, IconDeviceFloppy, IconFolderOpen } from '@tabler/icons-react';
+import { IconCopy, IconCheck, IconClock, IconFileText, IconHash, IconTag, IconFolderOpen } from '@tabler/icons-react';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { useMemo } from 'react';
 
@@ -10,13 +10,16 @@ function basename(p: string) {
     const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
     return i >= 0 ? p.slice(i + 1) : p;
 }
-function fmtMs(ms?: number | null) {
-    if (!ms && ms !== 0) return '—';
-    const d = new Date(Number(ms));
-    return Number.isNaN(d.getTime()) ? String(ms) : d.toLocaleString();
-}
 function Muted({ children }: { children: React.ReactNode }) {
-    return <Text size="xs" c="dimmed">{children}</Text>;
+    return (
+        <Text
+            size="xs"
+            c="dimmed"
+            style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+        >
+            {children}
+        </Text>
+    );
 }
 
 function ShowInFolderButton({ path }: { path: string }) {
@@ -67,17 +70,21 @@ export function ExcelMetadataCard({
         >
             {/* Header row */}
             <Group justify="space-between" align="flex-start" mb={4}>
-                <Stack gap={2}>
+                <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                     <Group gap={6}>
                         <IconFileText size={16} />
-                        <Text fw={500} size="sm" style={{ lineHeight: 1.1 }}>
+                        <Text
+                            fw={500}
+                            size="sm"
+                            style={{ lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+                        >
                             {fileName || '未知文件'}
                         </Text>
                     </Group>
                     <Muted>{data.filePath}</Muted>
                 </Stack>
 
-                <Stack gap={6} align="flex-end" w="100%">
+                <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
                     <Group gap={6}>
                         <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
                         <Badge color="blue" variant="light" size="xs">{String(data.type).toUpperCase()}</Badge>
@@ -95,7 +102,6 @@ export function ExcelMetadataCard({
                 {data.oem && <Pill icon={<IconTag size={12} />} label="OEM" value={data.oem} />}
                 {data.id && <Pill icon={<IconHash size={12} />} label="ID" value={data.id} />}
                 {data.time && <Pill icon={<IconClock size={12} />} label="时间" value={data.time} />}
-                <Pill icon={<IconDeviceFloppy size={12} />} label="修改" value={fmtMs(data.lastModified)} />
             </Group>
         </Card>
     );
@@ -126,17 +132,21 @@ export function WaferFileMetadataCard({
         >
             {/* Header */}
             <Group justify="space-between" align="flex-start" mb={4}>
-                <Stack gap={2}>
+                <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                     <Group gap={6}>
                         <IconFileText size={16} />
-                        <Text fw={500} size="sm" style={{ lineHeight: 1.1 }}>
+                        <Text
+                            fw={500}
+                            size="sm"
+                            style={{ lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+                        >
                             {fileName || '未知文件'}
                         </Text>
                     </Group>
                     <Muted>{data.filePath}</Muted>
                 </Stack>
 
-                <Stack gap={6} align="flex-end">
+                <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
                     <Group gap="xs">
                         <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
                         <ShowInFolderButton path={data.filePath} />
@@ -154,8 +164,6 @@ export function WaferFileMetadataCard({
                 {typeof data.retestCount === 'number' && <Key kv="复测" v={String(data.retestCount)} />}
                 {data.time && <Key kv="时间" v={data.time} />}
             </Group>
-
-            <Muted>修改时间：{fmtMs(data.lastModified)}</Muted>
         </Card>
     );
 }

@@ -79,12 +79,10 @@ function fmtTime(ms: number | null | undefined) {
 // ---- 缓存清理 ----
 async function clearFileCache() {
     await deleteAllFileIndexes();
-    // TODO: Clear local cache
 }
 
 async function clearFolderCache() {
     await deleteAllFolderIndexes();
-    // TODO: Clear local cache
 }
 
 async function clearAllCaches() {

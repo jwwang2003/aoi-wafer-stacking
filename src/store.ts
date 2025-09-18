@@ -6,11 +6,13 @@ import dataSourceStateReducer from './slices/dataSourceStateSlice';
 import waferMetadataReducer from './slices/waferMetadataSlice';
 import stackingJobReducer from './slices/job';
 import loggingReducer from './slices/logSlice';
+import authReducer from './slices/authSlice';
 
 import { validationPersistenceMiddleware } from './slices/middleware';
 
 const store = configureStore({
     reducer: {
+        auth: authReducer,
         preferences: preferencesReducer,
         dataSourceConfig: dataSourceConfigReducer,
         dataSourceState: dataSourceStateReducer,

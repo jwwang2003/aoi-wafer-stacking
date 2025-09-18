@@ -1,0 +1,17 @@
+export const colorMap = new Map<string, number>([
+    ['Unclassified', 0xff0000],
+    ['Particle', 0x010101],
+    ['Pit', 0x00ff6d],
+    ['Bump', 0xaaaa00],
+    ['MicroPipe', 0x0000ff],
+    ['Line', 0x00ffff],
+    ['carrot', 0xff80ff],
+    ['triangle', 0xba00ff],
+    ['Downfall', 0x0101ff],
+    ['scratch', 0xba00ff],
+    ['PL_Black', 0xffa500],
+    ['PL_White', 0xff007f],
+    ['PL_BPD', 0x00adff],
+    ['PL_SF', 0x5555ff],
+    ['PL_BSF', 0xff80ff],
+]);

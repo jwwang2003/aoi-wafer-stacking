@@ -312,17 +312,22 @@ export const convertToHexMapData = (
     dies: AsciiDie[],
     header?: Record<string, string>
 ): HexMapData => {
+    // Build quick lookup to avoid O(n^2) `.find` inside nested loops
     const xs = dies.map(die => die.x);
     const ys = dies.map(die => die.y);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
+
+    const byCoord = new Map<string, AsciiDie>();
+    for (const d of dies) byCoord.set(`${d.x},${d.y}`, d);
+
     const grid: HexMap['grid'] = Array.from({ length: maxY - minY + 1 }, (_, yIdx) =>
         Array.from({ length: maxX - minX + 1 }, (_, xIdx) => {
             const x = minX + xIdx;
             const y = minY + yIdx;
-            const die = dies.find(d => d.x === x && d.y === y);
+            const die = byCoord.get(`${x},${y}`);
 
             if (!die) return null;
             if (isSpecialBin(die.bin)) {

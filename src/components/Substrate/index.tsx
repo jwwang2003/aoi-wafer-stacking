@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Flex } from '@mantine/core';
+import { Box, Flex, Group, Text, Select } from '@mantine/core';
 
 import SubstrateRenderer from './Wafer';
 import Parameters from './Parameters';
@@ -34,6 +34,8 @@ export default function SubstratePane({
     // Fetched data
     const [sheetsData, setSheetsData] = useState<SubstrateDefectXlsResult | null>(null);
     const [dieData, setDieData] = useState<AsciiDie[] | WaferMapDie[] | null>(null);
+    // Sheet selection via dropdown ("__ALL__" = All)
+    const [selectedSheetKey, setSelectedSheetKey] = useState<string>("__ALL__");
 
     // Fetch substrate XLS → sheetsData
     useEffect(() => {
@@ -76,7 +78,7 @@ export default function SubstratePane({
                     }
                     case DataSourceType.Wlbi: {
                         const parsed = await parseWaferMap(map.file_path);
-                        data = parsed.map; // AsciiMap
+                        data = parsed.map; // WaferMapDie[]
                         break;
                     }
                     case DataSourceType.CpProber:
@@ -91,7 +93,7 @@ export default function SubstratePane({
                     }
                 }
 
-                if (!cancelled) setDieData(data as any);
+                if (!cancelled) setDieData(data);
             } catch (err) {
                 console.error('[SubstratePane] parse wafer map failed:', err);
                 if (!cancelled) setDieData(null);
@@ -102,8 +104,21 @@ export default function SubstratePane({
         };
     }, [waferMaps]);
 
+    // Build select options from sheet names when available
+    const sheetNames = sheetsData ? Object.keys(sheetsData as Record<string, unknown>) : [];
+    const sheetOptions = [{ value: "__ALL__", label: "All" }, ...sheetNames.map((name) => ({ value: name, label: name }))];
+
+    // Keep selection valid when sheets change
+    useEffect(() => {
+        if (!sheetNames.includes(selectedSheetKey) && selectedSheetKey !== "__ALL__") {
+            setSelectedSheetKey("__ALL__");
+        }
+    }, [sheetNames.join("|")]);
+
+    const selectedSheetId = selectedSheetKey === "__ALL__" ? null : selectedSheetKey;
+
     return (
-        <Flex gap="md" style={{ height: 'calc(100vh - 50px)', width: '100%' }}>
+        <Flex gap="md" style={{ width: '100%' }}>
             {showParameters && (
                 <Parameters
                     oemProductId={oemProductId}
@@ -122,13 +137,28 @@ export default function SubstratePane({
                 />
             )}
 
-            <Box style={{ flex: 1, minWidth: 0 }}>
+            <Box style={{ flex: 1, minWidth: 0, height: 'min-content' }}>
+                {sheetsData && sheetOptions.length > 1 && (
+                    <Box mb="sm">
+                        <Group justify="space-between" mb={4}>
+                            <Text size="sm" c="dimmed">缺陷表选择</Text>
+                        </Group>
+                        <Select
+                            data={sheetOptions}
+                            value={selectedSheetKey}
+                            onChange={(v) => setSelectedSheetKey(v ?? "__ALL__")}
+                            allowDeselect={false}
+                            searchable
+                            nothingFoundMessage="无表"
+                        />
+                    </Box>
+                )}
                 {sheetsData && dieData && (
                     <SubstrateRenderer
                         gridWidth={dieX}
                         gridHeight={dieY}
                         dies={dieData}
-                        selectedSheetId="Surface defect list"
+                        selectedSheetId={selectedSheetId}
                         sheetsData={sheetsData}
                         gridOffset={{ x: xOffset, y: yOffset }}
                         style={{ height: '100%', width: '100%' }}

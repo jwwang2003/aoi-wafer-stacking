@@ -3,6 +3,8 @@ import { ProductSize, ProductSizeMap } from './types';
 
 const TABLE = 'product_size';
 const COLUMNS = 'oem_product_id, die_x, die_y';
+type ExecResult = { rowsAffected?: number } | void | null | undefined;
+const rowsAffected = (res: ExecResult): number => (res && typeof res === 'object' && 'rowsAffected' in res ? (res as { rowsAffected?: number }).rowsAffected ?? 0 : 0);
 
 /*
 CREATE TABLE IF NOT EXISTS product_size (
@@ -62,7 +64,7 @@ export async function deleteProductSize(oem_product_id: string): Promise<number>
         `DELETE FROM ${TABLE} WHERE oem_product_id = ?`,
         [oem_product_id]
     );
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 
 /** Bulk delete by ids. Returns total rows deleted. */
@@ -78,7 +80,7 @@ export async function deleteManyProductSizes(oem_product_ids: string[], batchSiz
             `DELETE FROM ${TABLE} WHERE oem_product_id IN (${placeholders})`,
             batch
         );
-        total += (res as any)?.rowsAffected ?? 0;
+        total += rowsAffected(res);
     }
     return total;
 }
@@ -88,7 +90,7 @@ export async function deleteAllProductSizes(vacuumAfter = false): Promise<number
     const db = await getDb();
     const res = await db.execute(`DELETE FROM ${TABLE}`);
     if (vacuumAfter) await vacuum();
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }
 
 /** Return a Map for quick lookups in code. */
