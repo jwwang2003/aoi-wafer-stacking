@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Flex, Group, Text, Select } from '@mantine/core';
+import { useMantineTheme } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 
 import SubstrateRenderer from './Wafer';
 import Parameters from './Parameters';
@@ -25,6 +27,8 @@ export default function SubstratePane({
     waferMaps,
     showParameters = false,
 }: SubstratePaneProps) {
+    const theme = useMantineTheme();
+    const isNarrow = useMediaQuery(`(max-width: ${theme.breakpoints.lg})`);
     // UI params
     const [dieX, setDieX] = useState(1);
     const [dieY, setDieY] = useState(1);
@@ -118,7 +122,7 @@ export default function SubstratePane({
     const selectedSheetId = selectedSheetKey === "__ALL__" ? null : selectedSheetKey;
 
     return (
-        <Flex gap="md" style={{ width: '100%' }}>
+        <Flex gap="md" style={{ width: '100%' }} direction={isNarrow ? 'column' : 'row'} align="stretch">
             {showParameters && (
                 <Parameters
                     oemProductId={oemProductId}

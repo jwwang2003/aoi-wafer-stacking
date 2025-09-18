@@ -12,6 +12,8 @@ import {
     Loader,
     NumberInput,
 } from '@mantine/core';
+import { useMantineTheme } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { IconDatabase, IconDeviceFloppy, IconEraser, IconTrash } from '@tabler/icons-react';
 import { errorToast } from '@/components/Toaster';
 import { useAppSelector } from '@/hooks';
@@ -60,6 +62,8 @@ export default function Parameters({
     maxDie = 50,
     stepDie = 0.001,
 }: ParametersProps) {
+    const theme = useMantineTheme();
+    const isNarrow = useMediaQuery(`(max-width: ${theme.breakpoints.lg})`);
     const role = useAppSelector(s => s.auth.role);
     const readOnlyMode = role !== AuthRole.Admin;
     // --------------------------
@@ -304,7 +308,14 @@ export default function Parameters({
     };
 
     return (
-        <Box w={320} p="md" style={{ borderRight: '1px solid var(--mantine-color-gray-3)' }}>
+        <Box
+            w={isNarrow ? '100%' : 320}
+            p="md"
+            style={{
+                borderRight: isNarrow ? 'none' : '1px solid var(--mantine-color-gray-3)',
+                borderBottom: isNarrow ? '1px solid var(--mantine-color-gray-3)' : 'none',
+            }}
+        >
             <Stack gap="xl">
                 {/* ---------------------- Die size ---------------------- */}
                 <Group justify="space-between" align="center">

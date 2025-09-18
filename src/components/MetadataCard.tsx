@@ -4,22 +4,10 @@ import { IconCopy, IconCheck, IconClock, IconFileText, IconHash, IconTag, IconFo
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { useMemo } from 'react';
 
-// ===== Small utils =====
 function basename(p: string) {
     if (!p) return '';
     const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
     return i >= 0 ? p.slice(i + 1) : p;
-}
-function Muted({ children }: { children: React.ReactNode }) {
-    return (
-        <Text
-            size="xs"
-            c="dimmed"
-            style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
-        >
-            {children}
-        </Text>
-    );
 }
 
 function ShowInFolderButton({ path }: { path: string }) {
@@ -68,34 +56,52 @@ export function ExcelMetadataCard({
                 boxShadow: selected ? '0 0 0 1px var(--mantine-color-blue-5) inset' : undefined,
             }}
         >
-            {/* Header row */}
-            <Group justify="space-between" align="flex-start" mb={4}>
-                <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                    <Group gap={6}>
-                        <IconFileText size={16} />
-                        <Text
-                            fw={500}
-                            size="sm"
-                            style={{ lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
-                        >
-                            {fileName || '未知文件'}
-                        </Text>
-                    </Group>
-                    <Muted>{data.filePath}</Muted>
-                </Stack>
-
-                <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
-                    <Group gap={6}>
-                        <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
-                        <Badge color="blue" variant="light" size="xs">{String(data.type).toUpperCase()}</Badge>
-                    </Group>
-
-                    <Group gap="xs">
+            <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Group gap={6} justify="space-between" align="center" w="100%">
+                    <IconFileText size={16} />
+                    <Group gap="xs" style={{ flexShrink: 0 }}>
                         <ShowInFolderButton path={data.filePath} />
                         <CopyPathButton path={data.filePath} />
                     </Group>
-                </Stack>
-            </Group>
+                </Group>
+
+                <Text
+                    fw={500}
+                    size="sm"
+                    style={{
+                        lineHeight: 1.1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        minWidth: 0,
+                        width: '100%'
+                    }}
+                >
+                    {fileName || '未知文件'}
+                </Text>
+
+                <Group gap={6}>
+                    <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
+                    <Badge color="blue" variant="light" size="xs">{String(data.type).toUpperCase()}</Badge>
+                </Group>
+
+                <Tooltip label={data.filePath} withArrow multiline>
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        title={data.filePath}
+                        style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0,
+                            width: '100%',
+                        }}
+                    >
+                        {data.filePath}
+                    </Text>
+                </Tooltip>
+            </Stack>
 
             {/* Body */}
             <Group gap="xs" wrap="wrap">
@@ -130,49 +136,78 @@ export function WaferFileMetadataCard({
                 boxShadow: selected ? '0 0 0 1px var(--mantine-color-blue-5) inset' : undefined,
             }}
         >
-            {/* Header */}
-            <Group justify="space-between" align="flex-start" mb={4}>
-                <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                    <Group gap={6}>
-                        <IconFileText size={16} />
-                        <Text
-                            fw={500}
-                            size="sm"
-                            style={{ lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
-                        >
-                            {fileName || '未知文件'}
-                        </Text>
-                    </Group>
-                    <Muted>{data.filePath}</Muted>
-                </Stack>
-
-                <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
-                    <Group gap="xs">
-                        <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
+            <Stack gap={4}>
+                <Group gap={6} justify="space-between" align="center" w="100%">
+                    <IconFileText size={16} />
+                    <Group gap="xs" style={{ flexShrink: 0 }}>
                         <ShowInFolderButton path={data.filePath} />
                         <CopyPathButton path={data.filePath} />
                     </Group>
-                </Stack>
-            </Group>
+                </Group>
 
-            {/* Key facts */}
-            <Group gap={8} wrap="wrap" mb={6}>
-                <Key kv="产品" v={data.productModel} />
-                <Key kv="批次" v={data.batch} />
-                <Key kv="晶圆" v={data.waferId} />
-                {typeof data.processSubStage === 'number' && <Key kv="子工序" v={String(data.processSubStage)} />}
-                {typeof data.retestCount === 'number' && <Key kv="复测" v={String(data.retestCount)} />}
-                {data.time && <Key kv="时间" v={data.time} />}
-            </Group>
+                <Text
+                    fw={500}
+                    size="sm"
+                    style={{
+                        lineHeight: 1.1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        minWidth: 0,
+                        width: '100%'
+                    }}
+                >
+                    {fileName || '未知文件'}
+                </Text>
+
+                <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
+
+                <Tooltip label={data.filePath} withArrow multiline>
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        title={data.filePath}
+                        style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0,
+                            width: '100%',
+                        }}
+                    >
+                        {data.filePath}
+                    </Text>
+                </Tooltip>
+
+                {/* Key facts */}
+                <Group gap={8} wrap="wrap" mb={6}>
+                    <Key kv="产品" v={data.productModel} />
+                    <Key kv="批次" v={data.batch} />
+                    <Key kv="晶圆" v={data.waferId} />
+                    {typeof data.processSubStage === 'number' && <Key kv="子工序" v={String(data.processSubStage)} />}
+                    {typeof data.retestCount === 'number' && <Key kv="复测" v={String(data.retestCount)} />}
+                    {data.time && <Key kv="时间" v={data.time} />}
+                </Group>
+            </Stack>
         </Card>
     );
 }
 
 function Key({ kv, v }: { kv: string; v?: string }) {
     return (
-        <Group gap={6} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, padding: '2px 6px' }}>
+        <Group
+            gap={6}
+            style={{
+                border: '1px solid var(--mantine-color-gray-3)',
+                borderRadius: 6,
+                padding: '2px 6px',
+                whiteSpace: 'nowrap',
+                maxWidth: '100%'
+            }}
+            title={`${kv}: ${v ?? '—'}`}
+        >
             <Text size="xs" c="dimmed">{kv}</Text>
-            <Kbd style={{ fontSize: 10 }}>{v ?? '—'}</Kbd>
+            <Kbd style={{ fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>{v ?? '—'}</Kbd>
         </Group>
     );
 }
@@ -180,8 +215,10 @@ function Key({ kv, v }: { kv: string; v?: string }) {
 function Pill({ icon, label, value }: { icon?: React.ReactNode; label: string; value?: string }) {
     return (
         <Tooltip label={`${label}: ${value ?? '—'}`} withArrow>
-            <Badge variant="outline" size="xs" leftSection={icon} pl={icon ? 6 : 8}>
-                <Text size="xs">{value ?? '—'}</Text>
+            <Badge variant="outline" size="xs" leftSection={icon} pl={icon ? 6 : 8} title={`${label}: ${value ?? '—'}`}>
+                <Text size="xs" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+                    {value ?? '—'}
+                </Text>
             </Badge>
         </Tooltip>
     );

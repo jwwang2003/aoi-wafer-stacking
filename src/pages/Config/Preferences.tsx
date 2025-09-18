@@ -132,41 +132,45 @@ export default function PreferencesSubpage() {
 
     return (
         <Stack gap="lg">
-            <Title order={2}>通用</Title>
-            <PathPicker
-                label=""
-                value={preferenceFilePath || ''}
-                disabled
-                onChange={() => {}}
-                variant="filled"
-                withAsterisk={false}
-                mode="file"
-            />
-            <Group>
-                <Button variant="light" onClick={() => dispatch(initPreferences())} disabled={status === 'loading'}>
-                    加载配置
-                </Button>
-                <Button variant="light" onClick={handlePrefReset} disabled={status === 'loading'}>
-                    初始化配置
-                </Button>
-            </Group>
+            <Group flex='1'>
+                <Stack>
+                    <Title order={2}>通用</Title>
+                    <PathPicker
+                        label=""
+                        value={preferenceFilePath || ''}
+                        disabled
+                        onChange={() => { }}
+                        variant="filled"
+                        withAsterisk={false}
+                        mode="file"
+                    />
+                    <Group>
+                        <Button variant="light" onClick={() => dispatch(initPreferences())} disabled={status === 'loading'}>
+                            加载配置
+                        </Button>
+                        <Button variant="light" onClick={handlePrefReset} disabled={status === 'loading'}>
+                            初始化配置
+                        </Button>
+                    </Group>
+                </Stack>
 
-            <Divider />
-
-            <Title order={2}>数据库</Title>
-            <PathPicker
-                label=""
-                value={dbPath || ''}
-                disabled
-                onChange={() => {}}
-                variant="filled"
-                withAsterisk={false}
-                mode="file"
-            />
-            <Group>
-                <Button variant="light" onClick={() => navigate('/db/data/more')} disabled={status === 'loading'}>
-                    前往更多选择
-                </Button>
+                <Stack>
+                    <Title order={2}>数据库</Title>
+                    <PathPicker
+                        label=""
+                        value={dbPath || ''}
+                        disabled
+                        onChange={() => { }}
+                        variant="filled"
+                        withAsterisk={false}
+                        mode="file"
+                    />
+                    <Group>
+                        <Button variant="light" onClick={() => navigate('/db/data/more')} disabled={status === 'loading'}>
+                            前往更多选择
+                        </Button>
+                    </Group>
+                </Stack>
             </Group>
 
             <Divider />
