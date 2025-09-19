@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Flex, Group, Text, Select } from '@mantine/core';
+import { useMantineTheme } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 
 import SubstrateRenderer from './Wafer';
 import Parameters from './Parameters';
@@ -25,6 +27,8 @@ export default function SubstratePane({
     waferMaps,
     showParameters = false,
 }: SubstratePaneProps) {
+    const theme = useMantineTheme();
+    const isNarrow = useMediaQuery(`(max-width: ${theme.breakpoints.lg})`);
     // UI params
     const [dieX, setDieX] = useState(1);
     const [dieY, setDieY] = useState(1);
@@ -35,7 +39,7 @@ export default function SubstratePane({
     const [sheetsData, setSheetsData] = useState<SubstrateDefectXlsResult | null>(null);
     const [dieData, setDieData] = useState<AsciiDie[] | WaferMapDie[] | null>(null);
     // Sheet selection via dropdown ("__ALL__" = All)
-    const [selectedSheetKey, setSelectedSheetKey] = useState<string>("__ALL__");
+    const [selectedSheetKey, setSelectedSheetKey] = useState<string>('__ALL__');
 
     // Fetch substrate XLS → sheetsData
     useEffect(() => {
@@ -106,19 +110,19 @@ export default function SubstratePane({
 
     // Build select options from sheet names when available
     const sheetNames = sheetsData ? Object.keys(sheetsData as Record<string, unknown>) : [];
-    const sheetOptions = [{ value: "__ALL__", label: "All" }, ...sheetNames.map((name) => ({ value: name, label: name }))];
+    const sheetOptions = [{ value: '__ALL__', label: 'All' }, ...sheetNames.map((name) => ({ value: name, label: name }))];
 
     // Keep selection valid when sheets change
     useEffect(() => {
-        if (!sheetNames.includes(selectedSheetKey) && selectedSheetKey !== "__ALL__") {
-            setSelectedSheetKey("__ALL__");
+        if (!sheetNames.includes(selectedSheetKey) && selectedSheetKey !== '__ALL__') {
+            setSelectedSheetKey('__ALL__');
         }
-    }, [sheetNames.join("|")]);
+    }, [sheetNames.join('|')]);
 
-    const selectedSheetId = selectedSheetKey === "__ALL__" ? null : selectedSheetKey;
+    const selectedSheetId = selectedSheetKey === '__ALL__' ? null : selectedSheetKey;
 
     return (
-        <Flex gap="md" style={{ width: '100%' }}>
+        <Flex gap="md" style={{ width: '100%' }} direction={isNarrow ? 'column' : 'row'} align="stretch">
             {showParameters && (
                 <Parameters
                     oemProductId={oemProductId}
@@ -146,7 +150,7 @@ export default function SubstratePane({
                         <Select
                             data={sheetOptions}
                             value={selectedSheetKey}
-                            onChange={(v) => setSelectedSheetKey(v ?? "__ALL__")}
+                            onChange={(v) => setSelectedSheetKey(v ?? '__ALL__')}
                             allowDeselect={false}
                             searchable
                             nothingFoundMessage="无表"

@@ -26,10 +26,10 @@ export async function initialize() {
         // Step. 1
         // Ensure AppData folder exists
         await get_folder('', { baseDir: appDataBaseDir });
-        console.log('AppData directory initialized at:', await appDataDir());
+        console.info('%cAppData directory initialized at:%c ' + await appDataDir(), 'color:#2563eb; font-weight:600', 'color:#334155');
         // Ensure LocalData folder exists
         await get_folder('', { baseDir: localDataBaseDir });
-        console.log('LocalData directory initialized at:', await localDataDir());
+        console.info('%cLocalData directory initialized at:%c ' + await localDataDir(), 'color:#2563eb; font-weight:600', 'color:#334155');
 
         // Step. 2 -- Init. all config files if not present
         await init_pref();
@@ -110,12 +110,12 @@ export async function init_data_source_config(): Promise<boolean> {
 export async function init_db(): Promise<void> {
     try {
         const db = await getDb();
-        console.log('%cInitialized database!', 'color: orange', db.path);
+        console.info('%cInitialized database!%c ' + db.path, 'color:#22c55e; font-weight:600', 'color:#334155');
         // Ensure the default admin password reflects env configuration if still at seed value.
         try {
             const changed = await maybeApplyEnvAdminDefault();
             if (changed) {
-                console.log('%cAdmin default password set from env.', 'color: orange');
+                console.info('%cAdmin default password set from env.', 'color:#22c55e; font-weight:600');
             }
         } catch (e) {
             console.warn('Failed to apply env admin default password:', e);

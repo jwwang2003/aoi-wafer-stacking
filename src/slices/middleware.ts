@@ -1,9 +1,14 @@
 import { Action, Middleware } from '@reduxjs/toolkit';
+
+import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
+import { appDataDir, resolve } from '@tauri-apps/api/path';
+
 import {
     advanceStepper,
     setAutoTriggerState,
     resetPreferencesToDefault,
     setDataSourceConfigPath,
+    setSqlDebug,
     setStepper
 } from './preferencesSlice';
 import {
@@ -12,16 +17,15 @@ import {
     removeDataSourcePath,
     setRootPath,
     setRegexPattern,
+    resetDataSourceConfigToDefault,
 } from './dataSourceConfigSlice';
 import { addFolder, removeFolder, removeFolderById, resetFolders } from './dataSourceStateSlice';
-import { RootState } from '@/store';
 
-import { exists, writeTextFile } from '@tauri-apps/plugin-fs';
-import { appDataDir, resolve } from '@tauri-apps/api/path';
-
-import { isDataSourceFoldersValid, isDataSourceRootValid } from '@/utils/validators';
+import { isDataSourceFoldersValid } from '@/utils/validators';
 import { prepPreferenceWriteOut } from '@/utils/helper';
 
+import { setSqlDebugLogging } from '@/db';
+import { RootState } from '@/store';
 import { ConfigStepperState } from '@/types/stepper';
 
 /**
@@ -29,7 +33,7 @@ import { ConfigStepperState } from '@/types/stepper';
  */
 export const validationPersistenceMiddleware: Middleware = storeApi => next => action => {
     const result = next(action) as RootState;    // Let the reducer run first
-    const state = storeApi.getState();
+    const state = storeApi.getState() as RootState;
     const {
         preferences,
         dataSourceConfig,
@@ -39,8 +43,9 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     // Match only path-related reducers
     const prefTypes: string[] = [
         // Preference files config types
-        dataSourceConfig.type,
+        setDataSourceConfigPath.type,
         setAutoTriggerState.type,
+        setSqlDebug.type,
         resetPreferencesToDefault.typePrefix,
     ];
     const dataSourceTypes: string[] = [
@@ -50,40 +55,41 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
         setDataSourcePaths.type,
         addDataSourcePath.type,
         removeDataSourcePath.type,
+        resetDataSourceConfigToDefault.type,
     ];
 
     const acc: Action = action as Action;
+
     switch (acc.type) {
-        case addFolder.type, removeFolder.type, removeFolderById.type, resetFolders.type: {
+        case setSqlDebug.type: {
+            // Apply SQL debug flag immediately to DB logger
+            setSqlDebugLogging(preferences.sqlDebug);
+            break;
+        }
+        // Validate stepper when paths or folders change
+        case setDataSourcePaths.type:
+        case addDataSourcePath.type:
+        case removeDataSourcePath.type:
+        case addFolder.type:
+        case removeFolder.type:
+        case removeFolderById.type:
+        case resetFolders.type: {
             // checks that all folders are valid (non-error) and that there is at least one folder
-            const result = isDataSourceFoldersValid(dataSourceState);
-            if (result) {
-                storeApi.dispatch(advanceStepper(ConfigStepperState.Metadata));
-            } else {
-                storeApi.dispatch(setStepper(ConfigStepperState.Subdirectories));
-            }
+            const ok = isDataSourceFoldersValid(dataSourceState);
+            if (ok) storeApi.dispatch(advanceStepper(ConfigStepperState.Metadata));
+            else storeApi.dispatch(setStepper(ConfigStepperState.Subdirectories));
             break;
         }
         case setRootPath.type: {
-            isDataSourceRootValid(dataSourceConfig)
-                .then((result) => {
-                    if (result) {
-                        storeApi.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
-                    } else {
-                        storeApi.dispatch(setStepper(ConfigStepperState.RootDirectory));
-                    }
-                });
+            // Root path is optional; keep user at Subdirectories step
+            storeApi.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
             break;
         }
         case setDataSourceConfigPath.type: {
-            exists(preferences.dataSourceConfigPath)
-                .then((result) => {
-                    if (result) {
-                        storeApi.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
-                    } else {
-                        storeApi.dispatch(setStepper(ConfigStepperState.ConfigInfo));
-                    }
-                });
+            exists(preferences.dataSourceConfigPath).then((ok) => {
+                if (ok) storeApi.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
+                else storeApi.dispatch(setStepper(ConfigStepperState.ConfigInfo));
+            });
             break;
         }
         default:

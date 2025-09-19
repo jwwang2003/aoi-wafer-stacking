@@ -1,4 +1,5 @@
-import { Container, Group, Stack, SegmentedControl, Button, Text, Paper } from '@mantine/core';
+import { Container, Group, Stack, SegmentedControl, Button, Text, Paper, useMantineTheme, Switch } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import {
     Routes,
     Route,
@@ -6,11 +7,10 @@ import {
     useLocation,
     Navigate,
 } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import ProductViewer from '@/components/Navigator/ProductViewer';
 import JobManager from '@/components/JobManager';
-import LayersSelector from '@/components/LayersSelector';
-import MinWidthNotice from '@/components/MinWidthNotice';
+import LayersSelector from '@/components/Form/LayersSelector';
 import ComingSoon from '../ComingSoon';
 
 import { appDataDir, join, basename } from '@tauri-apps/api/path';
@@ -21,6 +21,9 @@ import { resetSpreadSheetData } from '@/db/spreadSheet';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
 import { deleteAllWaferMaps } from '@/db/wafermaps';
 import { warmIndexCaches } from '@/utils/fs';
+import { useAppDispatch, useAppSelector } from '@/hooks';
+import { setSqlDebug } from '@/slices/preferencesSlice';
+import { setSqlDebugLogging } from '@/db';
 
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
@@ -42,18 +45,10 @@ export default function DatabaseIndexPage() {
         navigate(`/db/data/${value}`);
     };
 
-    const MIN_TOTAL_WIDTH = 860;
-
     return (
         <Group grow>
             <Container fluid p="md">
                 <Stack gap="md">
-                    <MinWidthNotice
-                        minWidth={MIN_TOTAL_WIDTH}
-                        title="窗口宽度不足"
-                        message="当前窗口宽度不足以完整显示数据浏览器与右侧面板，部分组件可能会被压缩或呈现不理想。"
-                        hint={<Text c="dimmed" size="sm">建议最小宽度：{MIN_TOTAL_WIDTH}px。请加宽窗口或使用更高分辨率显示器。</Text>}
-                    />
                     <SegmentedControl
                         w="min-content"
                         data={subpageOptions}
@@ -74,12 +69,21 @@ export default function DatabaseIndexPage() {
 }
 
 function BrowsePage() {
+    const theme = useMantineTheme();
+    const isNarrow = useMediaQuery(`(max-width: ${theme.breakpoints.lg})`);
     return (
-        <Group align="start" gap="md" wrap="nowrap" style={{ overflowX: 'auto' }}>
-            <Stack style={{ flex: 1, minWidth: 0 }}>
+        <Group align="start" gap="md" wrap="wrap" style={{ overflowX: 'visible' }}>
+            <Stack style={{ flex: '1 1 600px', minWidth: 0 }}>
                 <ProductViewer />
             </Stack>
-            <Stack gap="md" style={{ width: 360, minWidth: 300 }}>
+            <Stack
+                gap="md"
+                style={{
+                    flex: isNarrow ? '1 1 100%' : '0 0 360px',
+                    width: isNarrow ? '100%' : 360,
+                    minWidth: isNarrow ? 0 : 300,
+                }}
+            >
                 <LayersSelector />
                 <JobManager />
             </Stack>
@@ -96,6 +100,8 @@ async function getDbAbsolutePath() {
 
 /** “更多” subpage implementation */
 function MorePage() {
+    const dispatch = useAppDispatch();
+    const sqlDebug = useAppSelector(s => s.preferences.sqlDebug);
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
     const [err, setErr] = useState<string | null>(null);
@@ -143,6 +149,17 @@ function MorePage() {
         <Stack>
             <Paper withBorder p="md" radius="md">
                 <Stack gap="sm">
+                    <Group>
+                        <Switch
+                            checked={sqlDebug}
+                            label="输出 SQL 调试日志"
+                            onChange={(e) => {
+                                const on = e.currentTarget.checked;
+                                dispatch(setSqlDebug(on));
+                                setSqlDebugLogging(on);
+                            }}
+                        />
+                    </Group>
                     {/* <Text c="dimmed" size="sm">
                         工具与设置
                     </Text>

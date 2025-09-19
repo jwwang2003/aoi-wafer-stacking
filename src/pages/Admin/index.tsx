@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { AuthRole } from '@/types/auth';
 import { Box, Button, Divider, Flex, Group, PasswordInput, Table, Text, TextInput, Title } from '@mantine/core';
-import { infoToast, errorToast } from '@/components/Toaster';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 import * as authDb from '@/db/auth';
 import { ADMIN_DEFAULT_PASSWORD } from '@/env';
 

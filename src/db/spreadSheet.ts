@@ -1,4 +1,4 @@
-import { getDb, MAX_PARAMS, vacuum, withRetry } from '@/db';
+import { getDb, MAX_PARAMS, vacuum, withRetry, existingSet as getExistingSet } from '@/db';
 import { OemMapping, OemProductMapRow, ProductDefectMapRow, SubstrateDefectRow } from './types';
 
 const OEM_MAP_TABLE = 'oem_product_map';
@@ -267,6 +267,13 @@ export async function upsertProductDefectMap(
     row: ProductDefectMapRow
 ): Promise<boolean> {
     const db = await getDb();
+    // Preflight FK parents
+    const [hasOem] = await db.select<{ cnt: number }[]>(`SELECT COUNT(1) AS cnt FROM ${OEM_MAP_TABLE} WHERE oem_product_id = ? LIMIT 1`, [row.oem_product_id]);
+    const [hasFile] = await db.select<{ cnt: number }[]>(`SELECT COUNT(1) AS cnt FROM file_index WHERE file_path = ? LIMIT 1`, [row.file_path]);
+    if (!(hasOem?.cnt > 0) || !(hasFile?.cnt > 0)) {
+        console.warn(`[product_defect_map] Skip upsert for (${row.oem_product_id},${row.lot_id},${row.wafer_id}) due to missing FK parents`);
+        return false;
+    }
     await db.execute(`
 INSERT INTO ${PRODUCT_DEFECT_TABLE}
     oem_product_id, lot_id, wafer_id, sub_id, file_path)
@@ -302,7 +309,18 @@ export async function upsertManyProductDefectMaps(
         console.warn('%c[upsertManyProductDefectMaps] Duplicate PK rows detected:', 'color: orange;', duplicates);
     }
 
-    const unique = Array.from(byPk.values());
+    let unique = Array.from(byPk.values());
+    if (!unique.length) return 0;
+
+    // Preflight FK parents: oem_product_map.oem_product_id and file_index.file_path
+    const oemIds = Array.from(new Set(unique.map(r => r.oem_product_id).filter(Boolean)));
+    const filePaths = Array.from(new Set(unique.map(r => r.file_path).filter(Boolean)));
+    const okOem = await getExistingSet('oem_product_map', 'oem_product_id', oemIds);
+    const okFile = await getExistingSet('file_index', 'file_path', filePaths);
+    const before = unique.length;
+    unique = unique.filter(r => okOem.has(r.oem_product_id) && okFile.has(r.file_path));
+    const skipped = before - unique.length;
+    if (skipped > 0) console.warn(`[product_defect_map] Skipped ${skipped} row(s) due to missing FK parents`);
     if (!unique.length) return 0;
 
     // Chunking by host-parameter limit
@@ -333,6 +351,121 @@ ON CONFLICT(oem_product_id, lot_id, wafer_id) DO UPDATE SET
     }
 
     return written;
+}
+
+/**
+ * Batch upsert with statistics: counts duplicates in input, pre-existing keys, and
+ * returns which composite keys were inserted vs updated.
+ */
+export async function upsertManyProductDefectMapsWithStats(
+    rows: ProductDefectMapRow[]
+): Promise<{
+    written: number;
+    unique: number;
+    duplicates: number;
+    duplicateKeys: Array<{ oem_product_id: string; lot_id: string; wafer_id: string }>;
+    existing: number;
+    insertedKeys: Array<{ oem_product_id: string; lot_id: string; wafer_id: string }>;
+    updatedKeys: Array<{ oem_product_id: string; lot_id: string; wafer_id: string }>;
+    fkMissingKeys: Array<{ oem_product_id: string; lot_id: string; wafer_id: string; reason: string }>;
+}> {
+    if (!rows?.length) return { written: 0, unique: 0, duplicates: 0, duplicateKeys: [], existing: 0, insertedKeys: [], updatedKeys: [], fkMissingKeys: [] };
+
+    const db = await getDb();
+
+    // Build unique set and duplicates list
+    const byPk = new Map<string, ProductDefectMapRow>();
+    let duplicateCount = 0;
+    const duplicateSet = new Set<string>();
+    for (const r of rows) {
+        if (!r.oem_product_id || !r.lot_id || !r.wafer_id) continue;
+        const key = `${r.oem_product_id}|${r.lot_id}|${r.wafer_id}`;
+        if (byPk.has(key)) {
+            duplicateCount += 1;
+            duplicateSet.add(key);
+        }
+        byPk.set(key, r);
+    }
+    let unique = Array.from(byPk.values());
+    if (!unique.length) return { written: 0, unique: 0, duplicates: duplicateCount, duplicateKeys: [], existing: 0, insertedKeys: [], updatedKeys: [], fkMissingKeys: [] };
+
+    // FK preflight against parents
+    const oemIds = Array.from(new Set(unique.map(r => r.oem_product_id).filter(Boolean)));
+    const filePaths = Array.from(new Set(unique.map(r => r.file_path).filter(Boolean)));
+    const okOem = await getExistingSet('oem_product_map', 'oem_product_id', oemIds);
+    const okFile = await getExistingSet('file_index', 'file_path', filePaths);
+    const fkMissingRows = unique.filter(r => !okOem.has(r.oem_product_id) || !okFile.has(r.file_path));
+    const fkMissingKeys = fkMissingRows.map(r => ({
+        oem_product_id: r.oem_product_id,
+        lot_id: r.lot_id,
+        wafer_id: r.wafer_id,
+        reason: `${!okOem.has(r.oem_product_id) ? 'oem_product_id' : ''}${!okOem.has(r.oem_product_id) && !okFile.has(r.file_path) ? '+' : ''}${!okFile.has(r.file_path) ? 'file_path' : ''}`,
+    }));
+    unique = unique.filter(r => okOem.has(r.oem_product_id) && okFile.has(r.file_path));
+    if (!unique.length) return {
+        written: 0,
+        unique: 0,
+        duplicates: duplicateCount,
+        duplicateKeys: [],
+        existing: 0,
+        insertedKeys: [],
+        updatedKeys: [],
+        fkMissingKeys,
+    };
+
+    // Determine existing keys in DB in batches
+    const existingPkSet = new Set<string>();
+    const ROWS_PER_CHUNK = 300; // safe batch size for OR clauses
+    for (let i = 0; i < unique.length; i += ROWS_PER_CHUNK) {
+        const batch = unique.slice(i, i + ROWS_PER_CHUNK);
+        const orClauses = batch.map(() => `(oem_product_id = ? AND lot_id = ? AND wafer_id = ?)`).join(' OR ');
+        const params = batch.flatMap(r => [r.oem_product_id, r.lot_id, r.wafer_id]);
+        const sql = `SELECT oem_product_id, lot_id, wafer_id FROM ${PRODUCT_DEFECT_TABLE} WHERE ${orClauses}`;
+        const found = await db.select<ProductDefectMapRow[]>(sql, params);
+        for (const f of found) existingPkSet.add(`${f.oem_product_id}|${f.lot_id}|${f.wafer_id}`);
+    }
+
+    const updatedKeys: Array<{ oem_product_id: string; lot_id: string; wafer_id: string }> = [];
+    const insertedKeys: Array<{ oem_product_id: string; lot_id: string; wafer_id: string }> = [];
+    for (const r of unique) {
+        const k = `${r.oem_product_id}|${r.lot_id}|${r.wafer_id}`;
+        const keyObj = { oem_product_id: r.oem_product_id, lot_id: r.lot_id, wafer_id: r.wafer_id };
+        if (existingPkSet.has(k)) updatedKeys.push(keyObj); else insertedKeys.push(keyObj);
+    }
+
+    // Perform the same batched UPSERT as the original function
+    const PARAMS_PER_ROW = 5;
+    const LIMIT = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
+    const ROWS_PER_INSERT = Math.max(1, Math.floor(LIMIT / PARAMS_PER_ROW));
+
+    let written = 0;
+    for (let i = 0; i < unique.length; i += ROWS_PER_INSERT) {
+        const batch = unique.slice(i, i + ROWS_PER_INSERT);
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
+        const sql = `
+INSERT INTO ${PRODUCT_DEFECT_TABLE}
+    (oem_product_id, lot_id, wafer_id, sub_id, file_path)
+VALUES ${placeholders}
+ON CONFLICT(oem_product_id, lot_id, wafer_id) DO UPDATE SET
+    sub_id    = excluded.sub_id,
+    file_path = excluded.file_path
+        `;
+        const bindings: string[] = [];
+        for (const r of batch) bindings.push(r.oem_product_id, r.lot_id, r.wafer_id, r.sub_id, r.file_path);
+        await withRetry(() => db.execute(sql, bindings));
+        written += batch.length;
+    }
+
+    return {
+        written,
+        unique: unique.length,
+        duplicates: duplicateCount,
+        duplicateKeys: Array.from(duplicateSet).map(k => { const [oem_product_id, lot_id, wafer_id] = k.split('|'); return { oem_product_id, lot_id, wafer_id }; }),
+        existing: existingPkSet.size,
+        insertedKeys,
+        updatedKeys,
+        fkMissingKeys,
+    };
 }
 
 /**
@@ -410,8 +543,39 @@ WHERE file_path = ?`,
     );
 }
 
+/**
+ * Fetch triples by sub_id for display purposes. Returns rows for sub_ids that exist
+ * in product_defect_map; missing sub_ids will not be included.
+ */
+export async function getTriplesBySubIds(
+    sub_ids: string[]
+): Promise<Array<{ sub_id: string; oem_product_id: string; lot_id: string; wafer_id: string }>> {
+    if (!sub_ids?.length) return [];
+    const db = await getDb();
+    const CHUNK = 300;
+    const rows: Array<{ sub_id: string; oem_product_id: string; lot_id: string; wafer_id: string }> = [];
+    for (let i = 0; i < sub_ids.length; i += CHUNK) {
+        const batch = sub_ids.slice(i, i + CHUNK);
+        const placeholders = batch.map(() => '?').join(',');
+        const sql = `
+SELECT sub_id, oem_product_id, lot_id, wafer_id
+FROM ${PRODUCT_DEFECT_TABLE}
+WHERE sub_id IN (${placeholders})`;
+        const got = await db.select<Array<{ sub_id: string; oem_product_id: string; lot_id: string; wafer_id: string }>>(sql, batch);
+        rows.push(...got);
+    }
+    return rows;
+}
+
 export async function upsertSubstrateDefect(row: SubstrateDefectRow): Promise<boolean> {
     const db = await getDb();
+    // Preflight FK: sub_id must exist in product_defect_map, file_path must exist in file_index
+    const [hasSub] = await db.select<{ cnt: number }[]>(`SELECT COUNT(1) AS cnt FROM product_defect_map WHERE sub_id = ? LIMIT 1`, [row.sub_id]);
+    const [hasFile] = await db.select<{ cnt: number }[]>(`SELECT COUNT(1) AS cnt FROM file_index WHERE file_path = ? LIMIT 1`, [row.file_path]);
+    if (!(hasSub?.cnt > 0) || !(hasFile?.cnt > 0)) {
+        console.warn(`[substrate_defect] Skip upsert for sub_id=${row.sub_id} (parents missing: ${!(hasSub?.cnt > 0) ? 'sub_id' : ''}${!(hasSub?.cnt > 0) && !(hasFile?.cnt > 0) ? '+' : ''}${!(hasFile?.cnt > 0) ? 'file_path' : ''})`);
+        return false;
+    }
     await db.execute(`
 INSERT INTO ${SUBSTRATE_TABLE} (sub_id, file_path)
 VALUES (?, ?)
@@ -430,10 +594,21 @@ export async function upsertManySubstrateDefects(
     // Dedupe by sub_id (last-wins)
     const byId = new Map<string, SubstrateDefectRow>();
     for (const r of rows) if (r?.sub_id) byId.set(r.sub_id, r);
-    const unique = Array.from(byId.values());
+    let unique = Array.from(byId.values());
     if (!unique.length) return 0;
 
     const db = await getDb();
+
+    // Preflight FK parents
+    const subIds = Array.from(new Set(unique.map(r => r.sub_id)));
+    const filePaths = Array.from(new Set(unique.map(r => r.file_path)));
+    const okSub = await getExistingSet('product_defect_map', 'sub_id', subIds);
+    const okFile = await getExistingSet('file_index', 'file_path', filePaths);
+    const before = unique.length;
+    unique = unique.filter(r => okSub.has(r.sub_id) && okFile.has(r.file_path));
+    const skipped = before - unique.length;
+    if (skipped > 0) console.warn(`[substrate_defect] Skipped ${skipped} row(s) due to missing FK parents`);
+    if (!unique.length) return 0;
 
     // 2 params per row: (sub_id, file_path)
     const PARAMS_PER_ROW = 2;

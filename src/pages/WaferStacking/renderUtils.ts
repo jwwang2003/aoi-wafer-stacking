@@ -98,7 +98,7 @@ export function getColorByBin(bin: BinValue, defaultColor: number = 0xcccccc): n
             case 10: return 0xcf1afc;
             case 11: return 0x2c31b0;
             case 12: return 0xa8cf7e;
-            case 13: return 0x00fc70;
+            case 13: return 0x00eb7d;
             case 14: return 0xfbc03a;
             case 15: return 0x9000ca;
             case 16: return 0x085ab4;
@@ -200,7 +200,8 @@ export async function renderAsJpg(
         const renderer = new THREE.WebGLRenderer({
             antialias: true,
             preserveDrawingBuffer: true,
-            alpha: false
+            alpha: false,
+            precision: 'highp'
         });
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setSize(mainSize, mainSize);

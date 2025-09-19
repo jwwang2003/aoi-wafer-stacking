@@ -5,9 +5,10 @@ interface RegexInputProps {
   label: string;
   defaultRegex: string;
   onValidChange?: (newPattern: string) => void;
+  disabled?: boolean;
 }
 
-export default function RegexInput({ label, defaultRegex, onValidChange }: RegexInputProps) {
+export default function RegexInput({ label, defaultRegex, onValidChange, disabled = false }: RegexInputProps) {
   // This is the "committed" pattern we actually use
   const [pattern, setPattern] = useState(defaultRegex);
   // Error message if the user’s input fails to parse
@@ -40,6 +41,7 @@ export default function RegexInput({ label, defaultRegex, onValidChange }: Regex
       onChange={handleChange}
       error={error}
       onBlur={handleBlur} // Trigger regex compilation when input loses focus
+      disabled={disabled}
     />
   );
 }
