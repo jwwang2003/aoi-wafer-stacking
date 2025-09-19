@@ -19,7 +19,7 @@ import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
 import { toWaferFileMetadata } from '@/types/helpers';
 
-import { JobItem, JobStatus, queueUpdateJob } from '@/slices/job';
+import { JobItem, JobStatus, queueUpdateJob, queueSetActive, queueResetAllStatus, queueClearCompleted, queueClearAll } from '@/slices/job';
 
 // WAFER
 import {
@@ -117,8 +117,7 @@ export default function WaferStacking() {
         batchId: jobBatchId,
         waferId: jobWaferId,
         subId: jobSubId,
-        waferSubstrate: jobSubstrate,
-        waferMaps: jobWaferMaps,
+        waferSubstrate: jobSubstrate
     } = currentJob;
 
     useEffect(() => {
@@ -173,13 +172,20 @@ export default function WaferStacking() {
                 }
             }
 
+            // Build selection using stage|substage keys to match job.selectedLayerKeys
+            const keyOf = (wm: typeof waferMaps[number]) => `${String(wm.stage ?? '').toLowerCase()}|${wm.sub_stage == null ? '' : String(wm.sub_stage)}`;
+            const candidateKeys = new Set(waferMaps.map(keyOf));
+            const selectedKeys = (jobItem.selectedLayerKeys && jobItem.selectedLayerKeys.length > 0)
+                ? new Set(jobItem.selectedLayerKeys.filter((k) => candidateKeys.has(String(k))))
+                : candidateKeys; // fallback: all candidates
+
             const selectedLayerInfo = [
-                ...(waferSubstrate ? [{
+                ...((waferSubstrate && (jobItem.includeSubstrateSelected ?? !!waferSubstrate)) ? [{
                     layerType: 'substrate' as const,
                     filePath: waferSubstrate.file_path,
-                    stage: DataSourceType.Substrate
+                    stage: DataSourceType.Substrate,
                 }] : []),
-                ...waferMaps.map((wm) => ({
+                ...waferMaps.filter((wm) => selectedKeys.has(keyOf(wm))).map((wm) => ({
                     layerType: 'map' as const,
                     filePath: wm.file_path,
                     stage: wm.stage as DataSourceType,
@@ -541,11 +547,15 @@ export default function WaferStacking() {
                         <Radio.Group
                             label='图像渲染器'
                             value={imageRenderer}
-                            onChange={(v) => setImageRenderer((v as 'bin' | 'substrate') || 'substrate')}
+                            onChange={(v) => {
+                                const next = (v as 'bin' | 'substrate') || 'bin';
+                                // 禁用“真实衬底样式”，强制为 bin
+                                setImageRenderer(next === 'substrate' ? 'bin' : next);
+                            }}
                         >
                             <Group gap='md' mt='xs'>
-                                <Radio value='substrate' label='Substrate 样式' />
-                                <Radio value='bin' label='Bin 颜色' />
+                                <Radio value='bin' label='方块 (Bin颜色)' />
+                                <Radio value='substrate' label='真实衬底样式' disabled />
                             </Group>
                         </Radio.Group>
                     )}
@@ -596,19 +606,57 @@ export default function WaferStacking() {
                                 })}
                             </Group>
                         )}
+                        {/* Queue operations */}
+                        <Group gap="xs" wrap="wrap">
+                            <Button
+                                size="xs"
+                                variant="light"
+                                onClick={() => dispatch(queueSetActive(null))}
+                                disabled={!jobState.activeId}
+                            >
+                                取消激活
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="blue"
+                                onClick={() => dispatch(queueResetAllStatus())}
+                                disabled={queue.length === 0}
+                            >
+                                重置状态
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="orange"
+                                onClick={() => dispatch(queueClearCompleted())}
+                                disabled={!queue.some(j => j.status === 'done')}
+                            >
+                                清除已完成
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="red"
+                                onClick={() => dispatch(queueClearAll())}
+                                disabled={queue.length === 0}
+                            >
+                                清空全部
+                            </Button>
+                        </Group>
                     </Stack>
                     <Stack style={{ flex: 1, minWidth: 0 }}>
-                        {jobOemId && jobProductId ? (
+                        {(jobOemId && jobProductId && jobWaferId != null) ? (
                             <>
                                 <Title order={4}>当前Wafer数据</Title>
                                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
-                                    {jobWaferMaps.map((r, i) => (
+                                    {layerChoice.maps.map((r, i) => (
                                         <WaferFileMetadataCard
                                             key={`${r.idx}-${i}`}
                                             data={toWaferFileMetadata(r)}
                                         />
                                     ))}
-                                    {jobSubstrate && (
+                                    {layerChoice.includeSubstrate && jobSubstrate && (
                                         <ExcelMetadataCard
                                             data={{
                                                 ...jobSubstrate,
@@ -667,7 +715,7 @@ export default function WaferStacking() {
                                 }
                                 loading={processing}
                                 onClick={processMapping}
-                                disabled={selectedOutputs.length === 0 || !jobOemId}
+                                disabled={selectedOutputs.length === 0 || !jobOemId || jobWaferId == null}
                             >
                                 处理当前
                             </Button>

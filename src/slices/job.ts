@@ -94,9 +94,11 @@ function sortWaferMaps(maps: WaferMapRow[]): WaferMapRow[] {
     });
 }
 
-// Build a stable selection key for a wafer map row
+// Build a stable selection key for a wafer map row based on stage+sub_stage only
 function layerKey(r: WaferMapRow): string {
-    return String(r.idx ?? `${String(r.stage).toLowerCase()}|${r.sub_stage ?? ''}`);
+    const stage = String(r.stage ?? '').toLowerCase();
+    const sub = r.sub_stage == null ? '' : String(r.sub_stage);
+    return `${stage}|${sub}`;
 }
 
 // Group maps by (stage, sub_stage) and pick the one with highest retest_count
@@ -256,8 +258,21 @@ const stackingJobSlice = createSlice({
         },
         queueRemoveJob(state, action: PayloadAction<string>) {
             const id = action.payload;
+            const wasActive = state.activeId === id;
             state.queue = state.queue.filter(j => j.id !== id);
-            if (state.activeId === id) state.activeId = null;
+            if (wasActive) {
+                // Reset active selection and clear current job fields
+                state.activeId = null;
+                state.oemProductId = '';
+                state.productId = '';
+                state.batchId = '';
+                state.waferId = null;
+                state.subId = '';
+                state.waferSubstrate = null;
+                state.waferMaps = [];
+                state.includeSubstrateSelected = false;
+                state.selectedLayerKeys = [];
+            }
         },
         queueUpdateJob(state, action: PayloadAction<{ id: string; changes: Partial<JobItem> }>) {
             const { id, changes } = action.payload;
@@ -273,7 +288,19 @@ const stackingJobSlice = createSlice({
                 if (prev) prev.status = prev.status === 'done' ? 'done' : 'queued';
             }
             state.activeId = id;
-            if (!id) return;
+            if (!id) {
+                // Unset active → also clear the current job fields
+                state.oemProductId = '';
+                state.productId = '';
+                state.batchId = '';
+                state.waferId = null;
+                state.subId = '';
+                state.waferSubstrate = null;
+                state.waferMaps = [];
+                state.includeSubstrateSelected = false;
+                state.selectedLayerKeys = [];
+                return;
+            }
             const j = state.queue.find(x => x.id === id);
             if (!j) return;
             j.status = 'active';
@@ -289,10 +316,55 @@ const stackingJobSlice = createSlice({
             state.includeSubstrateSelected = !!j.waferSubstrate;
             state.selectedLayerKeys = pickHighestRetestPerGroup(state.waferMaps).map((r) => layerKey(r));
         },
+        // Reset all job statuses to queued and unset active
+        queueResetAllStatus(state) {
+            state.queue.forEach(j => { j.status = 'queued'; });
+            state.activeId = null;
+        },
+        // Remove completed jobs; unset active and clear fields if active was done
+        queueClearCompleted(state) {
+            const active = state.queue.find(j => j.id === state.activeId);
+            const activeWasDone = !!active && active.status === 'done';
+            state.queue = state.queue.filter(j => j.status !== 'done');
+            if (activeWasDone) {
+                state.activeId = null;
+                state.oemProductId = '';
+                state.productId = '';
+                state.batchId = '';
+                state.waferId = null;
+                state.subId = '';
+                state.waferSubstrate = null;
+                state.waferMaps = [];
+                state.includeSubstrateSelected = false;
+                state.selectedLayerKeys = [];
+            }
+        },
+        // Remove all jobs and clear current fields
+        queueClearAll(state) {
+            state.queue = [];
+            state.activeId = null;
+            state.oemProductId = '';
+            state.productId = '';
+            state.batchId = '';
+            state.waferId = null;
+            state.subId = '';
+            state.waferSubstrate = null;
+            state.waferMaps = [];
+            state.includeSubstrateSelected = false;
+            state.selectedLayerKeys = [];
+        },
         // ===== Layer selection management =====
         setLayerSelection(state, action: PayloadAction<{ includeSubstrate: boolean; selectedLayerKeys: string[] }>) {
             state.includeSubstrateSelected = action.payload.includeSubstrate;
             state.selectedLayerKeys = action.payload.selectedLayerKeys.slice();
+            // Persist selection into the active job as well, so edits from the selector update the job item
+            if (state.activeId) {
+                const j = state.queue.find(x => x.id === state.activeId);
+                if (j) {
+                    j.includeSubstrateSelected = action.payload.includeSubstrate;
+                    j.selectedLayerKeys = action.payload.selectedLayerKeys.slice();
+                }
+            }
         },
     },
 });
@@ -313,6 +385,9 @@ export const {
     queueRemoveJob,
     queueUpdateJob,
     queueSetActive,
+    queueResetAllStatus,
+    queueClearCompleted,
+    queueClearAll,
     setLayerSelection,
 } = stackingJobSlice.actions;
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, Checkbox, Group, Stack, Text, Title } from '@mantine/core';
 import { useAppSelector } from '@/hooks';
 import { useDispatch } from 'react-redux';
@@ -6,6 +6,7 @@ import type { AppDispatch } from '@/store';
 import { setLayerSelection } from '@/slices/job';
 import type { WaferMapRow } from '@/db/types';
 import { DataSourceType } from '@/types/dataSource';
+import { getWaferMapsByTriple } from '@/db/wafermaps';
 
 export type LayerChoice = {
     includeSubstrate: boolean;
@@ -43,27 +44,92 @@ function pickHighestRetestPerGroup(rows: WaferMapRow[]): WaferMapRow[] {
 export default function LayersSelector({ onChange }: { onChange?: (sel: LayerChoice) => void }) {
     const job = useAppSelector((s) => s.stackingJob);
     const dispatch = useDispatch<AppDispatch>();
-    const { waferMaps, waferSubstrate, subId } = job;
+    const { productId, batchId, waferId, waferMaps, waferSubstrate, subId, includeSubstrateSelected, selectedLayerKeys } = job;
 
-    const candidates = useMemo(() => pickHighestRetestPerGroup(waferMaps), [waferMaps]);
+    // Fetch fresh wafer maps from DB for the current triple to show all available layers
+    const [dbMaps, setDbMaps] = useState<WaferMapRow[]>(waferMaps);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                if (productId && batchId && typeof waferId === 'number' && Number.isFinite(waferId)) {
+                    const rows = await getWaferMapsByTriple(productId, batchId, waferId);
+                    if (!cancelled) setDbMaps(rows);
+                } else {
+                    // fallback to job-provided maps when triple incomplete
+                    if (!cancelled) setDbMaps(waferMaps);
+                }
+            } catch {
+                if (!cancelled) setDbMaps(waferMaps);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [productId, batchId, waferId, waferMaps]);
+
+    // Reverse display order (substrate checkbox stays on top separately)
+    const candidates = useMemo(() => pickHighestRetestPerGroup(dbMaps).reverse(), [dbMaps]);
 
     // selection state
-    const [includeSub, setIncludeSub] = useState<boolean>(!!waferSubstrate);
-    const [checkedIds, setCheckedIds] = useState<Set<number | string>>(() => new Set(candidates.map((r) => r.idx ?? `${r.stage}|${r.sub_stage}`)));
+    const keyOf = (r: WaferMapRow) => {
+        const stage = String(r.stage ?? '').toLowerCase();
+        const sub = r.sub_stage == null ? '' : String(r.sub_stage);
+        return `${stage}|${sub}`;
+    };
+    const defaultKeys = useMemo(() => candidates.map((r) => String(keyOf(r))), [candidates]);
+    const initialCheckedKeys = useMemo(() => {
+        // Preserve intentional empty selection; only fallback when undefined
+        const keys = (selectedLayerKeys !== undefined) ? selectedLayerKeys : defaultKeys;
+        const candidateSet = new Set(defaultKeys);
+        return keys.filter(k => candidateSet.has(String(k)));
+    }, [selectedLayerKeys, defaultKeys]);
+
+    const [includeSub, setIncludeSub] = useState<boolean>(
+        typeof includeSubstrateSelected === 'boolean' ? includeSubstrateSelected : !!waferSubstrate
+    );
+    const [checkedIds, setCheckedIds] = useState<Set<number | string>>(() => new Set(initialCheckedKeys));
+
+    const lastJobSigRef = useRef<string>('');
 
     useEffect(() => {
-        // reset when source changes
-        setIncludeSub(!!waferSubstrate);
-        setCheckedIds(new Set(candidates.map((r) => r.idx ?? `${r.stage}|${r.sub_stage}`)));
-    }, [waferSubstrate, candidates]);
+        // derive current job selection (normalized) and a signature of job+candidates
+        const candidateKeys = candidates.map((r) => String(keyOf(r)));
+        const jobInclude = (typeof includeSubstrateSelected === 'boolean') ? includeSubstrateSelected : !!waferSubstrate;
+        // Preserve intentional empty selection; only fallback when undefined
+        const jobBaseKeys = (selectedLayerKeys !== undefined) ? selectedLayerKeys : candidateKeys;
+        const jobValidKeys = jobBaseKeys.filter((k) => candidateKeys.includes(String(k))).map(String);
+        const jobSig = `${jobInclude ? 1 : 0}#${jobValidKeys.slice().sort().join('|')}#${candidateKeys.join('|')}`;
 
-    useEffect(() => {
-        const selected = candidates.filter((r) => checkedIds.has(r.idx ?? `${r.stage}|${r.sub_stage}`));
+        // If job/candidates changed since last sync, update locals to match and exit
+        if (lastJobSigRef.current !== jobSig) {
+            lastJobSigRef.current = jobSig;
+            if (includeSub !== jobInclude) setIncludeSub(jobInclude);
+            const sameSet = jobValidKeys.length === checkedIds.size && jobValidKeys.every((k) => checkedIds.has(k));
+            if (!sameSet) setCheckedIds(new Set(jobValidKeys));
+            return;
+        }
+
+        // Otherwise, publish local changes when they differ from job
+        const localKeys = Array.from(checkedIds).map(String).filter((k) => candidateKeys.includes(k)).sort();
+        const jobKeysSorted = jobValidKeys.slice().sort();
+        const sameInclude = includeSub === jobInclude;
+        const sameKeys = localKeys.length === jobKeysSorted.length && localKeys.every((k, i) => k === jobKeysSorted[i]);
+
+        const selected = candidates.filter((r) => checkedIds.has(keyOf(r)));
         onChange?.({ includeSubstrate: includeSub, maps: selected });
-        // Publish selection to Redux so JobManager can respect it when enqueuing
-        const keys = selected.map((r) => String(r.idx ?? `${r.stage}|${r.sub_stage}`));
-        dispatch(setLayerSelection({ includeSubstrate: includeSub, selectedLayerKeys: keys }));
-    }, [includeSub, checkedIds, candidates, onChange, dispatch]);
+
+        if (!(sameInclude && sameKeys)) {
+            dispatch(setLayerSelection({ includeSubstrate: includeSub, selectedLayerKeys: localKeys }));
+        }
+    }, [
+        waferSubstrate,
+        includeSubstrateSelected,
+        selectedLayerKeys,
+        candidates,
+        includeSub,
+        checkedIds,
+        dispatch,
+        onChange,
+    ]);
 
     return (
         <Card withBorder radius="lg" p="sm">
@@ -81,7 +147,7 @@ export default function LayersSelector({ onChange }: { onChange?: (sel: LayerCho
                         <Text size="sm" c="dimmed">暂无工序图层</Text>
                     ) : (
                         candidates.map((r) => {
-                            const id = r.idx ?? `${r.stage}|${r.sub_stage}`;
+                            const id = keyOf(r);
                             const label = stageLabel(r.stage, r.sub_stage);
                             const checked = checkedIds.has(id);
                             return (
