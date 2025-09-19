@@ -27,7 +27,7 @@ import { mergeDefinedKeys } from '@/utils/helper';
 
 import { baseDir, DATA_SOURCE_CONFIG_FILENAME } from '@/constants';
 import { initialDataSourceConfigState, initialDataSourceConfigState as initialState } from '@/constants/default';
-import { dirScanResultToast } from '@/components/Toaster';
+import { dirScanResultToast } from '@/components/UI/Toaster';
 import { init_data_source_config } from '@/utils/init';
 
 

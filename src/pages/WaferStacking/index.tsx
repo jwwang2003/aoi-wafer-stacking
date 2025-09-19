@@ -5,10 +5,10 @@ import { useAppSelector, useAppDispatch } from '@/hooks';
 import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
 import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge } from '@mantine/core';
 import { PathPicker } from '@/components';
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import JobManager from '@/components/JobManager';
-import LayersSelector, { LayerChoice } from '@/components/LayersSelector';
-import { infoToast, errorToast } from '@/components/Toaster';
+import LayersSelector, { LayerChoice } from '@/components/Form/LayersSelector';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 
 // DB
 import { getOemOffset } from '@/db/offsets';

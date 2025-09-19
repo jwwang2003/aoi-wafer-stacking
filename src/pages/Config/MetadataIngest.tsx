@@ -21,16 +21,16 @@ import { deleteAllFolderIndexes } from '@/db/folderIndex';
 // Cache
 import { resetSessionFileIndexCache, resetSessionFolderIndexCache } from '@/utils/fs';
 // Components
-import RawWaferSummary from '@/components/RawWaferSummary';
+import RawWaferSummary from '@/components/Card/RawWaferSummary';
 // Utils
 import { processNSyncExcelDataWithStats, processNSyncWaferDataWithStats } from '@/utils/wafer';
 // Types
 import { ExcelMetadata, WaferFileMetadata } from '@/types/wafer';
 import { ConfigStepperState } from '@/types/stepper';
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import { AutoTriggers } from '@/types/preferences';
-import AutoTrigger from '@/components/AutoTriggerSwitch';
-import { infoToast } from '@/components/Toaster';
+import AutoTrigger from '@/components/UI/AutoTriggerSwitch';
+import { infoToast } from '@/components/UI/Toaster';
 import { IngestReport } from '@/types/ingest';
 
 export default function Preview() {

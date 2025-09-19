@@ -15,7 +15,7 @@ import {
 import { useMantineTheme } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconDatabase, IconDeviceFloppy, IconEraser, IconTrash } from '@tabler/icons-react';
-import { errorToast } from '@/components/Toaster';
+import { errorToast } from '@/components/UI/Toaster';
 import { useAppSelector } from '@/hooks';
 import { AuthRole } from '@/types/auth';
 import { IS_DEV } from '@/env';

@@ -10,7 +10,7 @@ import {
 import { useMemo, useState } from 'react';
 import ProductViewer from '@/components/Navigator/ProductViewer';
 import JobManager from '@/components/JobManager';
-import LayersSelector from '@/components/LayersSelector';
+import LayersSelector from '@/components/Form/LayersSelector';
 import ComingSoon from '../ComingSoon';
 
 import { appDataDir, join, basename } from '@tauri-apps/api/path';

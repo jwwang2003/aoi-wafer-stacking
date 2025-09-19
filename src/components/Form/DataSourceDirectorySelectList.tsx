@@ -14,7 +14,7 @@ import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 import { stat } from '@tauri-apps/plugin-fs';
 import { IS_DEV } from '@/env';
 import { AuthRole } from '@/types/auth';
-import { errorToast } from '@/components/Toaster';
+import { errorToast } from '@/components/UI/Toaster';
 
 interface DirectorySelectListProps {
     type: DataSourceType;

@@ -23,10 +23,10 @@ import {
 
 import { DataSourceRegex, DataSourceType } from '@/types/dataSource';
 import { AutoTriggers } from '@/types/preferences';
-import AutoTriggerSwitch from '@/components/AutoTriggerSwitch';
+import AutoTriggerSwitch from '@/components/UI/AutoTriggerSwitch';
 import { IS_DEV } from '@/env';
 import { AuthRole } from '@/types/auth';
-import { errorToast } from '@/components/Toaster';
+import { errorToast } from '@/components/UI/Toaster';
 
 export function SubfolderSelectorSection({ title, type }: { title: string, type: DataSourceType }) {
     return (

@@ -23,7 +23,7 @@ import { PathPicker, JsonCode } from '@/components';
 import { appDataDir, resolve } from '@tauri-apps/api/path';
 import { DB_FILENAME } from '@/constants';
 import { prepPreferenceWriteOut } from '@/utils/helper';
-import { infoToast, errorToast } from '@/components/Toaster';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 import { norm } from '@/utils/fs';
 import { useNavigate } from 'react-router-dom';
 import { AutoTriggers } from '@/types/preferences';

@@ -11,7 +11,7 @@ import { AppDispatch } from '@/store';
 import { clearJob, setJob } from '@/slices/job';
 import type { OemProductMapRow, WaferMapRow } from '@/db/types';
 
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import SubstratePane from '@/components/Substrate';
 
 import { ExcelType } from '@/types/wafer';

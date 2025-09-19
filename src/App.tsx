@@ -9,8 +9,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ToastContainer } from 'react-toastify';
 
 // Components
-import { infoToast } from '@/components/Toaster';
-import { SidebarButtonGroup } from '@/components/SidebarButton';
+import { infoToast } from '@/components/UI/Toaster';
+import { SidebarButtonGroup } from '@/components/UI/SidebarButton';
 import AuthModal from '@/auth/AuthModal';
 
 // UTILS
