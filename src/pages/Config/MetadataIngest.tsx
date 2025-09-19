@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Title, Stack, Button, Group, Tooltip, Divider, Indicator, SegmentedControl,
-    Text, Checkbox, Pagination, Select
+    Text, Checkbox, Pagination, Select, Modal, ScrollArea, Table
 } from '@mantine/core';
 import { IconLoader, IconReload } from '@tabler/icons-react';
 
@@ -15,6 +15,7 @@ import { fetchWaferMetadata } from '@/slices/waferMetadataSlice';
 import { advanceStepper } from '@/slices/preferencesSlice';
 // DB
 import { getDb } from '@/db';
+import { getTriplesBySubIds } from '@/db/spreadSheet';
 import { deleteAllFileIndexes } from '@/db/fileIndex';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
 // Cache
@@ -22,7 +23,7 @@ import { resetSessionFileIndexCache, resetSessionFolderIndexCache } from '@/util
 // Components
 import RawWaferSummary from '@/components/RawWaferSummary';
 // Utils
-import { processNSyncExcelData, processNSyncWaferData } from '@/utils/wafer';
+import { processNSyncExcelDataWithStats, processNSyncWaferDataWithStats } from '@/utils/wafer';
 // Types
 import { ExcelMetadata, WaferFileMetadata } from '@/types/wafer';
 import { ConfigStepperState } from '@/types/stepper';
@@ -30,6 +31,7 @@ import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataC
 import { AutoTriggers } from '@/types/preferences';
 import AutoTrigger from '@/components/AutoTriggerSwitch';
 import { infoToast } from '@/components/Toaster';
+import { IngestReport } from '@/types/ingest';
 
 export default function Preview() {
     const dispatch = useDispatch<AppDispatch>();
@@ -43,6 +45,43 @@ export default function Preview() {
 
     const [db, setDb] = useState<Database | null>(null);
     const [loading, setLoading] = useState(false);
+    const [ingestReport, setIngestReport] = useState<IngestReport | null>(null);
+    const [detailOpen, setDetailOpen] = useState(false);
+    const [detailTitle, setDetailTitle] = useState<string>('');
+    const [detailHeaders, setDetailHeaders] = useState<string[]>([]);
+    const [detailRows, setDetailRows] = useState<string[][]>([]);
+
+    const openDetailsTable = (title: string, headers: string[], rows: string[][]) => {
+        setDetailTitle(title);
+        setDetailHeaders(headers);
+        setDetailRows(rows);
+        setDetailOpen(true);
+    };
+
+    // Build table with (sub_id, oem_product_id, lot_id, wafer_id)
+    const showSubIdTable = async (title: string, ids: string[]) => {
+        if (!ids?.length) {
+            openDetailsTable(title, ['衬底ID', 'OEM产品', '批次', '片号'], []);
+            return;
+        }
+        try {
+            const triples = await getTriplesBySubIds(ids);
+            const byId = new Map(triples.map(r => [r.sub_id, r] as const));
+            const rows = ids.map(id => {
+                const t = byId.get(id);
+                return [
+                    id,
+                    t?.oem_product_id ?? '',
+                    t?.lot_id ?? '',
+                    t?.wafer_id ?? '',
+                ];
+            });
+            openDetailsTable(title, ['衬底ID', 'OEM产品', '批次', '片号'], rows);
+        } catch {
+            // Fallback to ID only
+            openDetailsTable(title, ['衬底ID'], ids.map(id => [id]));
+        }
+    };
 
     // Write-throuch session cache
     const [ignoreSessionCache, setIgnoreSessionCache] = useState<boolean>(false);
@@ -118,8 +157,17 @@ export default function Preview() {
             let sum = 0;
 
             // 2) batch‐upsert in one transaction
-            sum += await processNSyncExcelData(excelRecords);
-            sum += await processNSyncWaferData(waferRecords);
+            const excelStats = await processNSyncExcelDataWithStats(excelRecords);
+            const waferStats = await processNSyncWaferDataWithStats(waferRecords);
+            sum += excelStats.productDefects.inserted + excelStats.productDefects.updated;
+            sum += excelStats.substrateDefects.inserted + excelStats.substrateDefects.updated;
+            sum += waferStats.inserted + waferStats.updated;
+
+            setIngestReport({
+                productDefects: excelStats.productDefects,
+                substrateDefects: excelStats.substrateDefects,
+                waferMaps: waferStats,
+            });
 
             if (sum === 0) {
                 infoToast({
@@ -131,8 +179,9 @@ export default function Preview() {
                     title: '数据摄取结果',
                     message: `数据库已更新，共写入 ${sum} 条记录`,
                     lines: [
-                        { label: 'Excel', value: excelRecords.length },
-                        { label: 'Wafer', value: waferRecords.length },
+                        { label: 'Excel(产品缺陷)', value: excelStats.productDefects.unique },
+                        { label: 'Excel(衬底缺陷)', value: excelStats.substrateDefects.unique },
+                        { label: 'Wafer', value: waferStats.unique },
                     ],
                 });
             }
@@ -260,55 +309,225 @@ export default function Preview() {
 
             <Divider />
 
+            {/* Duplicates/details modal */}
+            <Modal opened={detailOpen} onClose={() => setDetailOpen(false)} title={detailTitle} size="lg">
+                <ScrollArea h={420} type="auto" offsetScrollbars>
+                    {detailRows.length ? (
+                        <Table striped highlightOnHover withTableBorder withColumnBorders stickyHeader>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    {detailHeaders.map((h) => (
+                                        <Table.Th key={h}>{h}</Table.Th>
+                                    ))}
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {detailRows.map((r, i) => (
+                                    <Table.Tr key={i}>
+                                        {r.map((c, j) => (
+                                            <Table.Td key={j} style={{ wordBreak: 'break-all' }}>{c}</Table.Td>
+                                        ))}
+                                    </Table.Tr>
+                                ))}
+                            </Table.Tbody>
+                        </Table>
+                    ) : (
+                        <Text size="sm" c="dimmed">暂无数据</Text>
+                    )}
+                </ScrollArea>
+            </Modal>
+
             {total ? (
-                <>
-                    <Group justify="space-between" align="center">
-                        <Title order={3}>新数据</Title>
-                        <Group gap="sm" align="center">
-                            <SegmentedControl
-                                value={kind}
-                                onChange={(v) => setKind(v as typeof kind)}
-                                data={[
-                                    { label: '全部', value: 'all' },
-                                    { label: '衬底', value: 'excel' },
-                                    { label: 'Wafer', value: 'wafer' },
-                                ]}
-                            />
-                            <Select
-                                w={120}
-                                value={String(pageSize)}
-                                onChange={(v) => setPageSize(Number(v ?? 20))}
-                                data={['10', '20', '50', '100']}
-                                label="每页"
-                            />
+                <Group align="flex-start" wrap="nowrap" gap="xl">
+                    <Stack flex={1} style={{ minWidth: 0 }}>
+                        <Group justify="space-between" align="center">
+                            <Title order={3}>新数据</Title>
+                            <Group gap="sm" align="center">
+                                <SegmentedControl
+                                    value={kind}
+                                    onChange={(v) => setKind(v as typeof kind)}
+                                    data={[
+                                        { label: '全部', value: 'all' },
+                                        { label: '衬底', value: 'excel' },
+                                        { label: 'Wafer', value: 'wafer' },
+                                    ]}
+                                />
+                            </Group>
                         </Group>
-                    </Group>
 
-                    <Group justify="space-between" align="center" mt="xs">
-                        <Text c="dimmed" size="sm">
-                            显示 {total ? start + 1 : 0}-{end} / {total}
-                        </Text>
-                        <Pagination total={totalPages} value={page} onChange={setPage} />
-                    </Group>
+                        <Group justify="space-between" align="center" mt="xs">
+                            <Text c="dimmed" size="sm">
+                                显示 {total ? start + 1 : 0}-{end} / {total}
+                            </Text>
+                            <Group gap="sm" align="center">
+                                <Select
+                                    w={120}
+                                    value={String(pageSize)}
+                                    onChange={(v) => setPageSize(Number(v ?? 20))}
+                                    data={['10', '20', '50', '100']}
+                                    label="每页"
+                                />
+                                <Pagination total={totalPages} value={page} onChange={setPage} />
+                            </Group>
+                        </Group>
 
-                    {/* Page content */}
-                    <Stack mt="sm">
-                        {pageItems.map((r) =>
-                            'type' in r ? (
-                                <ExcelMetadataCard key={r.filePath} data={r} onClick={() => open(r.filePath)} />
-                            ) : (
-                                <WaferFileMetadataCard key={r.filePath} data={r} />
-                            )
-                        )}
+                        {/* Page content */}
+                        <Stack mt="sm">
+                            {pageItems.map((r) =>
+                                'type' in r ? (
+                                    <ExcelMetadataCard key={r.filePath} data={r} onClick={() => open(r.filePath)} />
+                                ) : (
+                                    <WaferFileMetadataCard key={r.filePath} data={r} />
+                                )
+                            )}
+                        </Stack>
+
+                        {/* Pagination moved to top; bottom pager removed per request */}
                     </Stack>
 
-                    <Group justify="space-between" align="center" mt="md">
-                        <Text c="dimmed" size="sm">
-                            显示 {total ? start + 1 : 0}-{end} / {total}
-                        </Text>
-                        <Pagination total={totalPages} value={page} onChange={setPage} />
-                    </Group>
-                </>
+                    {/* Right-side status panel */}
+                    <Stack w={360} miw={280} p="sm" style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 8 }}>
+                        <Title order={3}>状态</Title>
+                        {ingestReport ? (
+                            <>
+                                <Text fw={600}>产品缺陷 (Excel)</Text>
+                                <Group gap={8}>
+                                    <Text size="sm" c="dimmed">输入: {ingestReport.productDefects?.input ?? 0}，唯一: {ingestReport.productDefects?.unique ?? 0}，重复: {ingestReport.productDefects?.duplicates ?? 0}</Text>
+                                    {(ingestReport.productDefects?.duplicates ?? 0) > 0 && (
+                                        <Button
+                                            size="xs"
+                                            variant="subtle"
+                                            onClick={() => openDetailsTable(
+                                                '重复的产品缺陷键',
+                                                ['OEM产品', '批次', '片号'],
+                                                (ingestReport.productDefects?.duplicateKeys ?? []).map(k => [k.oem_product_id, k.lot_id, k.wafer_id])
+                                            )}
+                                        >查看</Button>
+                                    )}
+                                </Group>
+                                <Text size="sm">已存在: {ingestReport.productDefects?.existing ?? 0}</Text>
+                                <Text size="sm">插入: {ingestReport.productDefects?.inserted ?? 0}</Text>
+                                <Text size="sm">更新: {ingestReport.productDefects?.updated ?? 0}</Text>
+                                {Boolean(ingestReport.productDefects && ((ingestReport.productDefects.insertedKeys?.length ?? 0) || (ingestReport.productDefects.updatedKeys?.length ?? 0))) && (
+                                    <Stack gap={4} mt={6}>
+                                        {(ingestReport.productDefects?.insertedKeys?.length ?? 0) > 0 && (
+                                            <Group gap={6}>
+                                                <Text size="xs" c="dimmed">插入条目示例: {(ingestReport.productDefects?.insertedKeys ?? []).slice(0, 5).map(k => `${k.oem_product_id}|${k.lot_id}|${k.wafer_id}`).join(', ')}{(ingestReport.productDefects?.insertedKeys?.length ?? 0) > 5 ? ' …' : ''}</Text>
+                                                <Button size="xs" variant="subtle" onClick={() => openDetailsTable(
+                                                    '所有插入（产品缺陷）',
+                                                    ['OEM产品', '批次', '片号'],
+                                                    (ingestReport.productDefects?.insertedKeys ?? []).map(k => [k.oem_product_id, k.lot_id, k.wafer_id])
+                                                )}>更多</Button>
+                                            </Group>
+                                        )}
+                                        {(ingestReport.productDefects?.updatedKeys?.length ?? 0) > 0 && (
+                                            <Group gap={6}>
+                                                <Text size="xs" c="dimmed">更新条目示例: {(ingestReport.productDefects?.updatedKeys ?? []).slice(0, 5).map(k => `${k.oem_product_id}|${k.lot_id}|${k.wafer_id}`).join(', ')}{(ingestReport.productDefects?.updatedKeys?.length ?? 0) > 5 ? ' …' : ''}</Text>
+                                                <Button size="xs" variant="subtle" onClick={() => openDetailsTable(
+                                                    '所有更新（产品缺陷）',
+                                                    ['OEM产品', '批次', '片号'],
+                                                    (ingestReport.productDefects?.updatedKeys ?? []).map(k => [k.oem_product_id, k.lot_id, k.wafer_id])
+                                                )}>更多</Button>
+                                            </Group>
+                                        )}
+                                    </Stack>
+                                )}
+
+                                <Divider my="sm" />
+
+                                <Text fw={600}>衬底缺陷 (Excel)</Text>
+                                <Group gap={8}>
+                                    <Text size="sm" c="dimmed">输入: {ingestReport.substrateDefects?.input ?? 0}，唯一: {ingestReport.substrateDefects?.unique ?? 0}，重复: {ingestReport.substrateDefects?.duplicates ?? 0}</Text>
+                                    {(ingestReport.substrateDefects?.duplicates ?? 0) > 0 && (
+                                        <Button
+                                            size="xs"
+                                            variant="subtle"
+                                            onClick={() => showSubIdTable('重复的衬底ID', ingestReport.substrateDefects?.duplicateIds ?? [])}
+                                        >查看</Button>
+                                    )}
+                                </Group>
+                                <Text size="sm">已存在: {ingestReport.substrateDefects?.existing ?? 0}</Text>
+                                <Text size="sm">插入: {ingestReport.substrateDefects?.inserted ?? 0}</Text>
+                                <Text size="sm">更新: {ingestReport.substrateDefects?.updated ?? 0}</Text>
+                                {Boolean(ingestReport.substrateDefects && ((ingestReport.substrateDefects.insertedIds?.length ?? 0) || (ingestReport.substrateDefects.updatedIds?.length ?? 0))) && (
+                                    <Stack gap={4} mt={6}>
+                                        {(ingestReport.substrateDefects?.insertedIds?.length ?? 0) > 0 && (
+                                            <Group gap={6}>
+                                                <Text size="xs" c="dimmed">插入ID示例: {(ingestReport.substrateDefects?.insertedIds ?? []).slice(0, 5).join(', ')}{(ingestReport.substrateDefects?.insertedIds?.length ?? 0) > 5 ? ' …' : ''}</Text>
+                                                <Button size="xs" variant="subtle" onClick={() => showSubIdTable('所有插入（衬底缺陷）', ingestReport.substrateDefects?.insertedIds ?? [])}>更多</Button>
+                                            </Group>
+                                        )}
+                                        {(ingestReport.substrateDefects?.updatedIds?.length ?? 0) > 0 && (
+                                            <Group gap={6}>
+                                                <Text size="xs" c="dimmed">更新ID示例: {(ingestReport.substrateDefects?.updatedIds ?? []).slice(0, 5).join(', ')}{(ingestReport.substrateDefects?.updatedIds?.length ?? 0) > 5 ? ' …' : ''}</Text>
+                                                <Button size="xs" variant="subtle" onClick={() => showSubIdTable('所有更新（衬底缺陷）', ingestReport.substrateDefects?.updatedIds ?? [])}>更多</Button>
+                                            </Group>
+                                        )}
+                                    </Stack>
+                                )}
+
+                                <Divider my="sm" />
+
+                                <Text fw={600}>Wafer 地图</Text>
+                                <Group gap={8}>
+                                    <Text size="sm" c="dimmed">输入: {ingestReport.waferMaps?.input ?? 0}，唯一: {ingestReport.waferMaps?.unique ?? 0}，重复: {ingestReport.waferMaps?.duplicates ?? 0}</Text>
+                                    {(ingestReport.waferMaps?.duplicates ?? 0) > 0 && (
+                                        <Button
+                                            size="xs"
+                                            variant="subtle"
+                                            onClick={() => openDetailsTable(
+                                                '重复的Wafer文件',
+                                                ['文件名', '路径'],
+                                                (ingestReport.waferMaps?.duplicateFiles ?? []).map(p => {
+                                                    const parts = p.split(/\\\\|\//);
+                                                    const name = parts[parts.length - 1] ?? p;
+                                                    return [name, p];
+                                                })
+                                            )}
+                                        >查看</Button>
+                                    )}
+                                </Group>
+                                <Text size="sm">已存在: {ingestReport.waferMaps?.existing ?? 0}</Text>
+                                <Text size="sm">插入: {ingestReport.waferMaps?.inserted ?? 0}</Text>
+                                <Text size="sm">更新: {ingestReport.waferMaps?.updated ?? 0}</Text>
+                                {Boolean(ingestReport.waferMaps && ((ingestReport.waferMaps.insertedFiles?.length ?? 0) || (ingestReport.waferMaps.updatedFiles?.length ?? 0))) && (
+                                    <Stack gap={4} mt={6}>
+                                        {(ingestReport.waferMaps?.insertedFiles?.length ?? 0) > 0 && (
+                                            <Group gap={6}>
+                                                <Text size="xs" c="dimmed">插入文件示例: {(ingestReport.waferMaps?.insertedFiles ?? []).slice(0, 5).map(p => (p.split(/\\\\|\//).pop() ?? p)).join(', ')}{(ingestReport.waferMaps?.insertedFiles?.length ?? 0) > 5 ? ' …' : ''}</Text>
+                                                <Button size="xs" variant="subtle" onClick={() => openDetailsTable(
+                                                    '所有插入（Wafer）',
+                                                    ['文件名', '路径'],
+                                                    (ingestReport.waferMaps?.insertedFiles ?? []).map(p => {
+                                                        const parts = p.split(/\\\\|\//);
+                                                        const name = parts[parts.length - 1] ?? p;
+                                                        return [name, p];
+                                                    })
+                                                )}>更多</Button>
+                                            </Group>
+                                        )}
+                                        {(ingestReport.waferMaps?.updatedFiles?.length ?? 0) > 0 && (
+                                            <Group gap={6}>
+                                                <Text size="xs" c="dimmed">更新文件示例: {(ingestReport.waferMaps?.updatedFiles ?? []).slice(0, 5).map(p => (p.split(/\\\\|\//).pop() ?? p)).join(', ')}{(ingestReport.waferMaps?.updatedFiles?.length ?? 0) > 5 ? ' …' : ''}</Text>
+                                                <Button size="xs" variant="subtle" onClick={() => openDetailsTable(
+                                                    '所有更新（Wafer）',
+                                                    ['文件名', '路径'],
+                                                    (ingestReport.waferMaps?.updatedFiles ?? []).map(p => {
+                                                        const parts = p.split(/\\\\|\//);
+                                                        const name = parts[parts.length - 1] ?? p;
+                                                        return [name, p];
+                                                    })
+                                                )}>更多</Button>
+                                            </Group>
+                                        )}
+                                    </Stack>
+                                )}
+                            </>
+                        ) : (
+                            <Text c="dimmed">尚未同步，执行“同步数据库”后显示。</Text>
+                        )}
+                    </Stack>
+                </Group>
             ) : (
                 <Text>暂无新数据</Text>
             )}

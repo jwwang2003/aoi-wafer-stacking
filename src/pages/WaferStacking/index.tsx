@@ -156,7 +156,8 @@ export default function WaferStacking() {
             } = jobItem;
 
             let currentSubstrateOffset = { x: 0, y: 0 };
-            let currentDieSize = { x: 0, y: 0 };
+            // Default to 1mm x 1mm when no DB record exists
+            let currentDieSize = { x: 1, y: 1 };
             if (oemProductId) {
                 try {
                     const offset = await getOemOffset(oemProductId);

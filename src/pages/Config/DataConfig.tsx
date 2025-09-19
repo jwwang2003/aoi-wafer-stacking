@@ -7,8 +7,7 @@ import {
     setRegexPattern,
     setRootPath,
     revalidateDataSource,
-    scanDataSourceFolders,
-    removeAllDataSourcePaths
+    scanDataSourceFolders
 } from '@/slices/dataSourceConfigSlice';
 
 import {
@@ -23,9 +22,11 @@ import {
 } from '@/components';
 
 import { DataSourceRegex, DataSourceType } from '@/types/dataSource';
-import { resetFolders } from '@/slices/dataSourceStateSlice';
 import { AutoTriggers } from '@/types/preferences';
 import AutoTriggerSwitch from '@/components/AutoTriggerSwitch';
+import { IS_DEV } from '@/env';
+import { AuthRole } from '@/types/auth';
+import { errorToast } from '@/components/Toaster';
 
 export function SubfolderSelectorSection({ title, type }: { title: string, type: DataSourceType }) {
     return (
@@ -42,12 +43,18 @@ export default function DataConfigSubpage() {
     const dispatch = useAppDispatch();
 
     const autoTrigger = useAppSelector(s => s.preferences.autoTriggers.folderDetection);
+    const role = useAppSelector(s => s.auth.role);
+    const readOnly = !IS_DEV && role !== AuthRole.Admin;
 
     const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
     const { rootPath, regex: regexPatterns } = dataSourceConfig;
 
     // Redux edit handlers
     const handleRegexChange = (newPattern: string, type: keyof DataSourceRegex) => {
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下修改子目录正则需要管理员权限。' });
+            return;
+        }
         dispatch(setRegexPattern({ type, regex: newPattern }));
     };
 
@@ -68,11 +75,21 @@ export default function DataConfigSubpage() {
     // =========================================================================
     // NOTE: METHODS
     // =========================================================================
-    const handleAutoFolderRecognition = async () => await dispatch(scanDataSourceFolders());
+    const handleAutoFolderRecognition = async () => {
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下识别子目录会修改数据源，需要管理员权限。' });
+            return;
+        }
+        await dispatch(scanDataSourceFolders());
+    };
 
     const handleRootFolderChange = async (u: string) => {
-        await dispatch(removeAllDataSourcePaths());
-        await dispatch(resetFolders());
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下修改根目录需要管理员权限。' });
+            return;
+        }
+        // Do not clear existing folders when setting a new root.
+        // Preserve previously configured folders and simply update the root path.
         await dispatch(setRootPath(u));
     }
 
@@ -94,7 +111,7 @@ export default function DataConfigSubpage() {
             {/* Section: Root Directory */}
             <Stack align="stretch" gap="md">
                 <Title order={2}>根目录选择</Title>
-                <PathPicker label="根目录" value={rootPath} onChange={handleRootFolderChange} />
+                <PathPicker label="根目录" value={rootPath} onChange={handleRootFolderChange} disabled={readOnly} />
 
                 <Group justify="flex-start">
                     <Chip.Group
@@ -111,10 +128,11 @@ export default function DataConfigSubpage() {
                     <Button
                         leftSection={<IconScanEye size={18} />}
                         onClick={handleAutoFolderRecognition}
+                        disabled={readOnly}
                     >
                         触发子目录识别
                     </Button>
-                    <AutoTriggerSwitch type={AutoTriggers.folderDetection} />
+                    <AutoTriggerSwitch type={AutoTriggers.folderDetection} disabled={readOnly} />
                 </Group>
             </Stack>
 
@@ -123,14 +141,15 @@ export default function DataConfigSubpage() {
                 <Stack align="stretch" gap="md">
                     <Title order={3}>子目录自动识别配置</Title>
                     <Stack align="stretch" gap="md">
-                        {regexConfig.map(({ label, key }) =>
+                        {regexConfig.map(({ label, key }) => (
                             <RegexInput
                                 key={key}
                                 label={label}
                                 defaultRegex={regexPatterns[key]}
                                 onValidChange={(r) => handleRegexChange(r, key)}
+                                disabled={readOnly}
                             />
-                        )}
+                        ))}
                     </Stack>
                 </Stack>
             )}

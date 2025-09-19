@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
 
-import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult } from '@/types/ipc';
+import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
 
 import { colorMap } from './constants';
 
@@ -208,17 +208,15 @@ export default function SubstrateRenderer({
     }, [zoom]);
 
     // Active defects: null or missing selectedSheetId means render all sheets
-    const activeDefects = useMemo(() => {
-        if (!sheetsData) return [] as { x: number; y: number; w: number; h: number; class: string }[];
-        if (!selectedSheetId || !(sheetsData as any)[selectedSheetId]) {
-            const all: { x: number; y: number; w: number; h: number; class: string }[] = [];
-            for (const key of Object.keys(sheetsData as any)) {
-                const arr = (sheetsData as any)[key] as typeof all;
-                if (Array.isArray(arr)) all.push(...arr);
-            }
-            return all;
+    const activeDefects = useMemo<SubstrateDefectRecord[]>(() => {
+        if (!sheetsData) return [];
+        // No sheet selected → combine all records
+        if (!selectedSheetId) {
+            const lists = Object.values(sheetsData) as SubstrateDefectRecord[][];
+            return lists.flat();
         }
-        return (sheetsData as any)[selectedSheetId] as { x: number; y: number; w: number; h: number; class: string }[];
+        const arr = sheetsData[selectedSheetId];
+        return Array.isArray(arr) ? arr : [];
     }, [selectedSheetId, sheetsData]);
 
     // Rebuild scene on data changes

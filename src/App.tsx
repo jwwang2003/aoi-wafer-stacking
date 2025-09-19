@@ -15,6 +15,8 @@ import AuthModal from '@/auth/AuthModal';
 
 // UTILS
 import { initialize } from '@/utils/init';
+import { IS_PROD, IS_DEV } from '@/env';
+import { setSqlDebugLogging } from '@/db';
 import { warmIndexCaches } from '@/utils/fs';
 import { isAdmin, isPrivileged } from '@/utils/auth';
 import { initConsoleInterceptor } from '@/utils/log';   // debugging...
@@ -79,7 +81,7 @@ export default function App() {
     useEffect(() => {
         if (mounted) {
             infoToast({ title: '欢迎使用' });
-            console.log('Hello, world!');
+            console.info('%cHello, world!', 'color:#2563eb');
         }
 
         if (!mounted) {
@@ -96,23 +98,38 @@ export default function App() {
     useEffect(() => {
         const runInit = async () => {
             try {
+                // Log environment once at first React init
+                // Vite flags: import.meta.env.MODE and import.meta.env.PROD
+                console.info(`[Env] MODE=${import.meta.env.MODE} | PROD=${String(import.meta.env.PROD)} | IS_PROD=${String(IS_PROD)} | IS_DEV=${String(IS_DEV)}`);
                 await initConsoleInterceptor();
 
-                console.log('Initializing...');
+                console.info('%cInitializing...', 'color:#2563eb');
                 console.time('initialize');
                 // Initializes the configuration folder structure & initializes the database
                 await initialize();
                 const preferences: PreferencesState = await dispatch(initPreferences()).unwrap();
-                console.log('%cInitialized preferences!', 'color: orange', preferences);
+                // Apply SQL debug flag to DB logger
+                setSqlDebugLogging(preferences.sqlDebug);
+                console.info('%cInitialized preferences!', 'color:#22c55e; font-weight:600', preferences);
                 const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig()).unwrap();
-                console.log('%cInitialized dataSourceConfig!', 'color: orange', dataSourceConfig);
+                console.info('%cInitialized dataSourceConfig!', 'color:#22c55e; font-weight:600', dataSourceConfig);
                 const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
-                console.log('%cInitialized dataSourceState!', 'color: orange', dataSourceState);
+                console.info('%cInitialized dataSourceState!', 'color:#22c55e; font-weight:600', dataSourceState);
+                
+                const logJson = (label: string, obj: unknown) => {
+                    const pretty = JSON.stringify(obj, null, 2);
+                    const indented = pretty.split('\n').map(l => `  ${l}`).join('\n');
+                    // Debug-level, colored header + colored body
+                    console.debug(
+                        `%c📄 ${label}%c\n${indented}`,
+                        'color:black',
+                        'color:black'
+                    );
+                };
+                logJson('Loaded preferences', preferences);
+                logJson('Loaded dataSourceConfig', dataSourceConfig);
 
-                console.debug('%cLoaded preferences:', 'color: lime; background: black', JSON.stringify(preferences, null, 2));
-                console.debug('%cLoaded dataSourceConfig:', 'color: lime; background: black', JSON.stringify(dataSourceConfig, null, 2));
-
-                console.log('%cInitialization complete!', 'color: blue');
+                console.info('%cInitialization complete!', 'color:#2563eb; font-weight:600');
                 console.timeEnd('initialize');
 
                 // Warm-up the index caches for folders and files

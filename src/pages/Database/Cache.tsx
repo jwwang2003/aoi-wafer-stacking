@@ -86,9 +86,8 @@ async function clearFolderCache() {
 }
 
 async function clearAllCaches() {
-    const db = await getDb();
-    await db.execute('DELETE FROM file_index');
-    await db.execute('DELETE FROM folder_index');
+    await deleteAllFileIndexes();
+    await deleteAllFolderIndexes();
 }
 
 //==============================================================================

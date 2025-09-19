@@ -1,4 +1,4 @@
-// NOTE: that these paths are all relative to the root folder
+// NOTE: Paths stored in config are ABSOLUTE paths.
 
 import { FileInfo } from '@tauri-apps/plugin-fs';
 
@@ -50,12 +50,9 @@ export type FolderGroupsState = {
     [K in DataSourceType]: Folder[];
 }
 
-/**
- * The path of the folder should be relative to the root path.
- */
 export interface Folder {
     id: string;
-    path: string;           // NOTE: RELATIVE PATH
+    path: string;           // ABSOLUTE PATH
     type: DataSourceType;
 
     info?: FileInfo;

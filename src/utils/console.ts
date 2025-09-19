@@ -19,34 +19,29 @@ export function logCacheReport({
     const hitRate = processed ? numCached / processed : 0;
     const missRate = processed ? numRead / processed : 0;
 
-    const header =
-        `📦 ${label}  |  considered: ${fmtN(considered)}  |  processed: ${fmtN(processed)}  |  ` +
-        `hits: ${fmtN(numCached)} (${fmtP(hitRate)})  |  misses: ${fmtN(numRead)} (${fmtP(missRate)})` +
-        (durationMs != null ? `  |  ⏱ ${fmtN(Math.round(durationMs))} ms` : '');
+    const headerLeft = `📦 ${label}`;
+    const headerRight =
+        `considered: ${fmtN(considered)} | processed: ${fmtN(processed)} | ` +
+        `hits: ${fmtN(numCached)} (${fmtP(hitRate)}) | misses: ${fmtN(numRead)} (${fmtP(missRate)})` +
+        (durationMs != null ? ` | ⏱ ${fmtN(Math.round(durationMs))} ms` : '');
 
-    console.groupCollapsed(header);
-
-    console.table([{
-        label,
-        considered,
-        processed,
-        hits_cached: numCached,
-        misses_read: numRead,
-        hit_rate: fmtP(hitRate),
-        miss_rate: fmtP(missRate),
-        duration_ms: durationMs ?? null,
-    }]);
+    // Pretty, single-line info with subtle color accents
+    console.info(
+        `%c${headerLeft}%c  ${headerRight}`,
+        'color:#2563eb; font-weight:600', // blue label
+        'color:#334155' // slate details
+    );
 
     if (Array.isArray(dirs) && dirs.length) {
         const max = 10;
         const sample = dirs.slice(0, max);
         const more = dirs.length - sample.length;
-        console.log(
-            `Dirs sample (${fmtN(sample.length)}${more > 0 ? ` of ${fmtN(dirs.length)}` : ''}):`,
+        console.debug(
+            `%c  sample%c ${fmtN(sample.length)}${more > 0 ? ` of ${fmtN(dirs.length)}` : ''}: %o %c${more > 0 ? `…(+${fmtN(more)} more)` : ''}`,
+            'color:#64748b',
+            'color:#0f766e',
             sample,
-            more > 0 ? `…(+${fmtN(more)} more)` : ''
+            'color:#64748b'
         );
     }
-
-    console.groupEnd();
 }

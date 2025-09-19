@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { resolve } from '@tauri-apps/api/path';
+// import { resolve } from '@tauri-apps/api/path';
 
 // IPC
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
@@ -11,7 +11,7 @@ import { norm } from '@/utils/fs';
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { RootState } from '@/store';
 
-import type { DataSourceType, Folder, FolderGroupsState } from '@/types/dataSource';
+import { DataSourceType, Folder, FolderGroupsState } from '@/types/dataSource';
 import type { DirResult } from '@/types/ipc';
 import { initialDataSourceState as initialState } from '@/constants/default';
 
@@ -36,7 +36,7 @@ export const initDataSourceState = createAsyncThunk<
     { state: RootState }
 >('dataSourceState/init', async (_, thunkAPI) => {
     const { dataSourceConfig } = thunkAPI.getState();
-    const { rootPath, paths } = dataSourceConfig;
+    const { paths } = dataSourceConfig;
 
     const result: FolderGroupsState = { ...initialState };
 
@@ -45,13 +45,12 @@ export const initDataSourceState = createAsyncThunk<
         if (type === 'lastModified') continue;
         const typed = type as DataSourceType;
 
-        const relativePaths = paths[typed];
+        const absolutePaths = paths[typed];
         const resolved: Folder[] = await Promise.all(
-            relativePaths.map(async (relPath): Promise<Folder> => {
-                const absPath = norm(await resolve(rootPath, relPath));
+            absolutePaths.map(async (absPath): Promise<Folder> => {
                 return {
                     id: uuidv4(),
-                    path: absPath,
+                    path: norm(absPath),
                     type: typed,
                     error: false,
                 };
@@ -115,7 +114,7 @@ const dataSourceStateSlice = createSlice({
         addFolder: (state, action: PayloadAction<{ type: DataSourceType; path: string }>) => {
             const { type, path } = action.payload;
             const exists = state[type].some((f) => f.path === path);
-            console.log(type, path);
+            console.debug('%c[dataSourceState] addFolder', 'color:#6b7280', type, path);
             if (!exists) {
                 state[type].push({
                     id: uuidv4(),           // they also have an arbitrary ID value
@@ -125,7 +124,7 @@ const dataSourceStateSlice = createSlice({
                 });
             }
             state[type] = sortFoldersByName(state[type]);
-            console.log(state[type]);
+            console.debug('%c[dataSourceState] folders updated', 'color:#6b7280', state[type]);
         },
         /**
          * Removes folder by its path (string match).
@@ -149,8 +148,41 @@ const dataSourceStateSlice = createSlice({
         },
     },
     extraReducers: (builder) => {
-        builder.addCase(refreshFolderStatuses.fulfilled, (_state, action) => {
-            return action.payload;
+        builder.addCase(refreshFolderStatuses.fulfilled, (state, action) => {
+            const incoming = action.payload;
+
+            // Merge incoming status updates into current state by path, per type
+            const types: DataSourceType[] = [DataSourceType.Substrate, DataSourceType.FabCp, DataSourceType.CpProber, DataSourceType.Wlbi, DataSourceType.Aoi];
+            for (const type of types) {
+                const current = state[type];
+                const updates = incoming[type];
+
+                // Build a lookup of updates by normalized path
+                const updateMap = new Map<string, typeof updates[number]>(
+                    updates.map(f => [norm(f.path), f])
+                );
+
+                const merged = current.map(f => {
+                    const upd = updateMap.get(norm(f.path));
+                    if (!upd) return f; // keep newly added items not present in payload
+                    return {
+                        ...f,
+                        info: upd.info,
+                        error: upd.error,
+                    };
+                });
+
+                // Include any entries that exist in payload but not yet in state (unlikely)
+                const currentPaths = new Set(merged.map(f => norm(f.path)));
+                for (const f of updates) {
+                    const p = norm(f.path);
+                    if (!currentPaths.has(p)) {
+                        merged.push({ ...f, path: p });
+                    }
+                }
+
+                state[type] = sortFoldersByName(merged);
+            }
         });
         builder.addCase(initDataSourceState.fulfilled, (_state, action) => {
             return action.payload;

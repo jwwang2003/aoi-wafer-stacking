@@ -5,3 +5,4 @@ export { default as DataSourceDirectorySelectList } from './DataSourceDirectoryS
 export { default as RegexInput } from './RegexInput';
 export { default as LastSaved } from './LastSaved';
 export { default as FlowStepper } from './FlowStepper';
+export { default as JsonCode } from './JsonCode';

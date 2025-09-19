@@ -1,7 +1,8 @@
 import { listDirs, listFiles, join, match, nameFromPath } from './fs';
 import { logCacheReport } from './console';
-import { upsertManyWaferMaps } from '@/db/wafermaps';
+import { upsertManyWaferMaps, upsertManyWaferMapsWithStats } from '@/db/wafermaps';
 import { ExcelMetadata, ExcelType, WaferFileMetadata } from '@/types/wafer';
+import { ProductDefectIngestStats, SubstrateDefectIngestStats, WaferMapIngestStats } from '@/types/ingest';
 
 type FolderStep = {
     name: RegExp;
@@ -122,6 +123,7 @@ async function getSpreadsheetApis() {
         invokeParseProductXls: waferApi.invokeParseProductXls,
         maintainOemMapping: sheetDb.maintainOemMapping,
         upsertManyProductDefectMaps: sheetDb.upsertManyProductDefectMaps,
+        upsertManyProductDefectMapsWithStats: sheetDb.upsertManyProductDefectMapsWithStats,
         upsertSubstrateDefect: sheetDb.upsertSubstrateDefect,
     };
 }
@@ -169,7 +171,7 @@ export async function processNSyncExcelData(data: ExcelMetadata[]): Promise<numb
                         }))
                 );
                 sum += dbResult.tot;
-                console.log({ dbResult });
+                console.debug('%c[excel] upsert OEM mapping', 'color:#6b7280', { dbResult });
                 break;
             }
             case ExcelType.Product: {
@@ -187,9 +189,9 @@ export async function processNSyncExcelData(data: ExcelMetadata[]): Promise<numb
                         }))
                 );
                 sum += dbResult;
-                console.log({
+                console.debug('%c[excel] upsert product defect maps', 'color:#6b7280', {
                     dbResult,
-                    r: [dbResult, results.length],
+                    inputCount: results.length,
                     sanityCheck: Boolean(dbResult === results.length),
                 });
                 break;
@@ -201,7 +203,7 @@ export async function processNSyncExcelData(data: ExcelMetadata[]): Promise<numb
                     file_path: d.filePath,
                 });
                 if (dbResult) sum += 1;
-                console.log({ dbResult });
+                console.debug('%c[excel] upsert substrate defect', 'color:#6b7280', { dbResult });
                 break;
             }
         }
@@ -233,12 +235,172 @@ export async function processNSyncWaferData(records: WaferFileMetadata[]): Promi
                 file_path: r.filePath,
             }))
         );
-        console.log({ dbResult });
+        console.debug('%c[wafer] upsert wafer maps', 'color:#6b7280', { dbResult });
         return dbResult;
     } catch (err) {
         const msg = `[${name}] ${err instanceof Error ? err.message : String(err)}`;
         console.error(msg);
         throw err;
+    } finally {
+        console.groupEnd();
+    }
+}
+
+/**
+ * Detailed ingest with statistics, to drive UI status. Keeps original ingest logic but
+ * returns insert/update/duplicate counts and keys.
+ */
+export async function processNSyncExcelDataWithStats(data: ExcelMetadata[]): Promise<{
+    productDefects: ProductDefectIngestStats;
+    substrateDefects: SubstrateDefectIngestStats;
+}> {
+    const name = 'Proc. N. Sync. Excel Data (stats)';
+    const typeOrder: Record<ExcelType, number> = {
+        [ExcelType.Mapping]: 0,
+        [ExcelType.Product]: 1,
+        [ExcelType.DefectList]: 2,
+    };
+    const sorted = [...data].sort((a, b) => (typeOrder[a.type] ?? 99) - (typeOrder[b.type] ?? 99));
+
+    console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
+
+    const {
+        invokeParseProductMappingXls,
+        invokeParseProductXls,
+        maintainOemMapping,
+        upsertManyProductDefectMapsWithStats,
+        upsertSubstrateDefect,
+    } = await getSpreadsheetApis();
+
+    // Product defect maps aggregation
+    const productInputs: Array<{ oem_product_id: string; lot_id: string; wafer_id: string; sub_id: string; file_path: string } > = [];
+    // Substrate defects aggregation (DefectList)
+    const substrateIds: Array<{ sub_id: string; file_path: string }> = [];
+
+    for (const d of sorted) {
+        console.groupCollapsed(`%c[${d.type}]`, 'color: lightgreen;');
+        switch (d.type) {
+            case ExcelType.Mapping: {
+                // Still perform mapping maintenance; we won't compute insert vs update for mapping for now
+                const xls = await invokeParseProductMappingXls(d.filePath);
+                const pairs = Object.values(xls).flat().filter(r => r.oemId && r.productId).map(r => ({
+                    oem_product_id: r.oemId,
+                    product_id: r.productId,
+                }));
+                await maintainOemMapping(pairs);
+                break;
+            }
+            case ExcelType.Product: {
+                const xls = await invokeParseProductXls(d.filePath);
+                const results = Object.values(xls).flat();
+                for (const r of results) {
+                    if (!r.productId) continue;
+                    productInputs.push({
+                        oem_product_id: r.productId,   // productId in XLS == OEM product id
+                        lot_id: r.batchId,
+                        wafer_id: r.waferId,
+                        sub_id: r.subId,
+                        file_path: d.filePath,
+                    });
+                }
+                break;
+            }
+            case ExcelType.DefectList: {
+                if (d.id) substrateIds.push({ sub_id: d.id, file_path: d.filePath });
+                break;
+            }
+        }
+        console.groupEnd();
+    }
+
+    // Run product defects upsert with stats
+    const pdStatsRaw = await upsertManyProductDefectMapsWithStats(productInputs);
+    const productDefects: ProductDefectIngestStats = {
+        input: productInputs.length,
+        unique: pdStatsRaw.unique,
+        duplicates: pdStatsRaw.duplicates,
+        duplicateKeys: pdStatsRaw.duplicateKeys,
+        existing: pdStatsRaw.existing,
+        inserted: pdStatsRaw.insertedKeys.length,
+        updated: pdStatsRaw.updatedKeys.length,
+        insertedKeys: pdStatsRaw.insertedKeys,
+        updatedKeys: pdStatsRaw.updatedKeys,
+    };
+
+    // Substrate defects: compute existing vs inserted, then upsert one-by-one (rarely huge)
+    const subIdMap = new Map<string, string>();
+    let substrateDuplicates = 0;
+    const dupSubIds = new Set<string>();
+    for (const s of substrateIds) {
+        if (subIdMap.has(s.sub_id)) { substrateDuplicates += 1; dupSubIds.add(s.sub_id); }
+        subIdMap.set(s.sub_id, s.file_path);
+    }
+    const uniqueSubIds = Array.from(subIdMap.keys());
+
+    // Query existing
+    const db = await (await import('@/db')).getDb();
+    const existingSubIdSet = new Set<string>();
+    const CHUNK = 300;
+    for (let i = 0; i < uniqueSubIds.length; i += CHUNK) {
+        const batch = uniqueSubIds.slice(i, i + CHUNK);
+        const placeholders = batch.map(() => '?').join(',');
+        const found = await db.select<{ sub_id: string }[]>(`SELECT sub_id FROM substrate_defect WHERE sub_id IN (${placeholders})`, batch);
+        for (const f of found) existingSubIdSet.add(f.sub_id);
+    }
+
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
+    for (const sid of uniqueSubIds) (existingSubIdSet.has(sid) ? updatedIds : insertedIds).push(sid);
+
+    // Perform actual upserts
+    for (const sid of uniqueSubIds) await upsertSubstrateDefect({ sub_id: sid, file_path: subIdMap.get(sid)! });
+
+    const substrateDefects: SubstrateDefectIngestStats = {
+        input: substrateIds.length,
+        unique: uniqueSubIds.length,
+        duplicates: substrateDuplicates,
+        duplicateIds: Array.from(dupSubIds),
+        existing: existingSubIdSet.size,
+        inserted: insertedIds.length,
+        updated: updatedIds.length,
+        insertedIds,
+        updatedIds,
+    };
+
+    console.groupEnd();
+
+    return { productDefects, substrateDefects };
+}
+
+export async function processNSyncWaferDataWithStats(records: WaferFileMetadata[]): Promise<WaferMapIngestStats> {
+    const name = 'Proc. N. Sync. Wafer Data (stats)';
+    console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
+    try {
+        const dbResult = await upsertManyWaferMapsWithStats(
+            records.map(r => ({
+                product_id: r.productModel,
+                batch_id: r.batch,
+                wafer_id: Number(r.waferId),
+                stage: r.stage,
+                sub_stage: String(r.processSubStage ?? 0),
+                retest_count: r.retestCount ?? 0,
+                time: Number(r.time ?? 0),
+                file_path: r.filePath,
+            }))
+        );
+        const stats: WaferMapIngestStats = {
+            input: records.length,
+            unique: dbResult.unique,
+            duplicates: dbResult.duplicates,
+            duplicateFiles: dbResult.duplicateFiles,
+            existing: dbResult.existing,
+            inserted: dbResult.insertedFiles.length,
+            updated: dbResult.updatedFiles.length,
+            insertedFiles: dbResult.insertedFiles,
+            updatedFiles: dbResult.updatedFiles,
+        };
+        console.debug('%c[wafer] upsert wafer maps (stats)', 'color:#6b7280', { stats });
+        return stats;
     } finally {
         console.groupEnd();
     }

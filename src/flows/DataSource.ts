@@ -52,14 +52,8 @@ export const DataSources: DataSourceFlowItem[] = [
 
 // Refer to types/Stepper.ts
 export const DataSourceFlowSteps = [
-    // StepperModuleState.ConfigInfo
     { label: '1. 配置信息', description: '读取配置信息' },
-    // StepperModuleState.RootDirectory
-    { label: '2. 根目录', description: '根目录路径有效' },
-    // StepperModuleState.Subdirectories
-    { label: '3. 子目录', description: '读取子目录的Maps' },
-    // StepperModuleState.Metadata
-    { label: '4. 加载', description: '读取元数据' },
-    // StepperModuleState.Database
-    { label: '5. 数据库', description: '维护数据库' },
+    { label: '2. 子目录', description: '读取子目录的Maps' },
+    { label: '3. 加载', description: '读取元数据' },
+    { label: '4. 数据库', description: '维护数据库' },
 ];

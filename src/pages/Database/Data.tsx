@@ -1,4 +1,4 @@
-import { Container, Group, Stack, SegmentedControl, Button, Text, Paper, useMantineTheme } from '@mantine/core';
+import { Container, Group, Stack, SegmentedControl, Button, Text, Paper, useMantineTheme, Switch } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
     Routes,
@@ -21,6 +21,9 @@ import { resetSpreadSheetData } from '@/db/spreadSheet';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
 import { deleteAllWaferMaps } from '@/db/wafermaps';
 import { warmIndexCaches } from '@/utils/fs';
+import { useAppDispatch, useAppSelector } from '@/hooks';
+import { setSqlDebug } from '@/slices/preferencesSlice';
+import { setSqlDebugLogging } from '@/db';
 
 const subpageOptions = [
     { label: '快速预览', value: 'browse' },
@@ -97,6 +100,8 @@ async function getDbAbsolutePath() {
 
 /** “更多” subpage implementation */
 function MorePage() {
+    const dispatch = useAppDispatch();
+    const sqlDebug = useAppSelector(s => s.preferences.sqlDebug);
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
     const [err, setErr] = useState<string | null>(null);
@@ -144,6 +149,17 @@ function MorePage() {
         <Stack>
             <Paper withBorder p="md" radius="md">
                 <Stack gap="sm">
+                    <Group>
+                        <Switch
+                            checked={sqlDebug}
+                            label="输出 SQL 调试日志"
+                            onChange={(e) => {
+                                const on = e.currentTarget.checked;
+                                dispatch(setSqlDebug(on));
+                                setSqlDebugLogging(on);
+                            }}
+                        />
+                    </Group>
                     {/* <Text c="dimmed" size="sm">
                         工具与设置
                     </Text>

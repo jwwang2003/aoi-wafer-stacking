@@ -3,13 +3,13 @@
 // of how structured SQL databases are.
 
 export type FileIndexRow = {
-    file_path: string;     // relative path
+    file_path: string;     // absolute path
     last_mtime: number;    // epoch millis
     file_hash?: string | null;
 };
 
 export type FolderIndexRow = {
-    folder_path: string;   // relative path
+    folder_path: string;   // absolute path
     last_mtime: number;    // epoch millis
 };
 

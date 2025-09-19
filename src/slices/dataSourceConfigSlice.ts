@@ -1,8 +1,6 @@
 /**
- * The data source paths config slice only keeps track of the path strings
- * relative to the root folder. It does not track the state of the folder, such
- * as whether is exists or not. To track the status of a data source folder, we
- * refer to the data source state slice.
+ * Data source config slice keeps track of ABSOLUTE folder paths per type.
+ * It does not track folder existence or metadata; that lives in dataSourceState.
  */
 
 import { createAsyncThunk } from '@reduxjs/toolkit';
@@ -22,9 +20,9 @@ import { advanceStepper, setStepper } from './preferencesSlice';
 import { addFolder } from './dataSourceStateSlice';
 
 // UTILS
-import { arraysAreEqual, getRelativePath, getSubfolders, sortBySubfolderName } from '@/utils/fs';
+import { arraysAreEqual, getSubfolders, sortBySubfolderName, norm } from '@/utils/fs';
 import { autoRecognizeFoldersByType } from '@/utils/dataSource';
-import { isDataSourcePathsValid, isDataSourceRootValid, isValidDataSourceConfig } from '@/utils/validators';
+import { isDataSourcePathsValid, isValidDataSourceConfig } from '@/utils/validators';
 import { mergeDefinedKeys } from '@/utils/helper';
 
 import { baseDir, DATA_SOURCE_CONFIG_FILENAME } from '@/constants';
@@ -55,8 +53,8 @@ export const initDataSourceConfig = createAsyncThunk<
                 );
                 parsed = JSON.parse(raw);
             } catch (err: unknown) {
-                console.debug(`[${name}] assuming file DNE`, err);
-                console.debug('Creating data source config file...');
+                console.debug(`%c[${name}] assuming file DNE`, 'color:#6b7280', err);
+                console.info('%cCreating data source config file...', 'color:#2563eb');
                 if (!await init_data_source_config()) {
                     console.error(`[${name}] failed!`);
                     return config;
@@ -68,17 +66,11 @@ export const initDataSourceConfig = createAsyncThunk<
             if (isValidDataSourceConfig(parsed)) {
                 config = mergeDefinedKeys(config, parsed);
             } else {
-                console.warn('[DATA SOURCE CONF. validation] invalid config structure, using defaults');
+                console.warn('%c[DATA SOURCE CONF. validation] invalid config structure, using defaults', 'color:#b45309');
             }
 
-            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
-
-            if (config.rootPath && await isDataSourceRootValid(config)) {
-                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
-            } else {
-                await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
-                return config;
-            }
+            // No separate root directory step; proceed to subdirectories stage
+            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
 
             if (config.paths && isDataSourcePathsValid(config.paths)) {
                 await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Metadata));
@@ -123,20 +115,14 @@ export const revalidateDataSource = createAsyncThunk<
             return { valid: false, dataSourceConfig: defaultConfig };
 
         const merged = mergeDefinedKeys(defaultConfig, parsed);
-        console.log(merged);
+        
         if (!isValidDataSourceConfig(merged))
             return { valid: false, dataSourceConfig: defaultConfig };
 
         const config = dataSourceConfig;
 
-        await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
-
-        if (config.rootPath && await isDataSourceRootValid(config)) {
+            // No separate root directory step; proceed to subdirectories stage
             await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
-        } else {
-            await thunkAPI.dispatch(setStepper(ConfigStepperState.RootDirectory));
-            return { valid: true, dataSourceConfig: config };
-        }
 
         if (config.paths && isDataSourcePathsValid(config.paths)) {
             await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Metadata));
@@ -239,29 +225,31 @@ const dataSourceSlice = createSlice({
         setRootPath(state, action: PayloadAction<string>) {
             state.rootPath = action.payload;
         },
+        /** Reset entire dataSourceConfig to default initial state. */
+        resetDataSourceConfigToDefault() {
+            return { ...initialState };
+        },
 
         // —— Data source paths reducers ——
-        // WARN: all paths stored here should be relative to the root folder path
+        // All paths stored here are ABSOLUTE paths in the system
         setDataSourcePaths(state, action: PayloadAction<{ type: DataSourceType, paths: string[] }>) {
             const { type, paths } = action.payload;
-            const relativePaths = paths.map(p => getRelativePath(state.rootPath, p));
-            const sortedPaths = sortBySubfolderName(relativePaths);
-            if (!arraysAreEqual(state.paths[type], paths)) {
-                state.paths[type] = sortedPaths;
-            }
+            const normalized = paths.map(p => norm(p));
+            const sortedPaths = sortBySubfolderName(normalized);
+            if (!arraysAreEqual(state.paths[type], sortedPaths)) state.paths[type] = sortedPaths;
         },
         addDataSourcePath(state, action: PayloadAction<{ type: DataSourceType, path: string }>) {
             const { type, path } = action.payload;
-            const relativePath = getRelativePath(state.rootPath, path);
-            if (!state.paths[type].includes(relativePath)) {
-                state.paths[type].push(relativePath);
+            const absPath = norm(path);
+            if (!state.paths[type].includes(absPath)) {
+                state.paths[type].push(absPath);
                 state.paths[type] = sortBySubfolderName(state.paths[type]);
             }
         },
         removeDataSourcePath(state, action: PayloadAction<{ type: DataSourceType, path: string }>) {
             const { type, path } = action.payload;
-            const relativePath = getRelativePath(state.rootPath, path);
-            state.paths[type] = state.paths[type].filter(p => p != relativePath);
+            const absPath = norm(path);
+            state.paths[type] = state.paths[type].filter(p => p !== absPath);
         },
         removeAllDataSourcePaths(state) {
             for (const type of Object.values(['substrate', 'fabCp', 'cpProber', 'wlbi', 'aoi'] as DataSourceType[])) {
@@ -300,6 +288,7 @@ const dataSourceSlice = createSlice({
 
 export const {
     setRootPath,
+    resetDataSourceConfigToDefault,
     setDataSourcePaths,
     addDataSourcePath,
     removeDataSourcePath,

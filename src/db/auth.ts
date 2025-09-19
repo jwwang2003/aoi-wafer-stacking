@@ -53,7 +53,6 @@ export async function isAdminPasswordDefault(): Promise<boolean> {
 export async function updateAdminPassword(newPassword: string): Promise<number> {
   const db = await getDb();
   const res = await db.execute('UPDATE auth SET password = ? WHERE username = ? AND role = ?', [newPassword, 'admin', AuthRole.Admin]);
-  // @ts-expect-error plugin type may not declare rowsAffected
   return res?.rowsAffected ?? 0;
 }
 
@@ -104,7 +103,6 @@ export async function createUser(username: string, password: string): Promise<nu
     'INSERT OR IGNORE INTO auth (username, role, password) VALUES (?, ?, ?)',
     [username, AuthRole.User, password]
   );
-  // @ts-expect-error plugin type may not declare rowsAffected
   return res?.rowsAffected ?? 0;
 }
 
@@ -115,7 +113,6 @@ export async function updateUserPassword(username: string, newPassword: string):
     'UPDATE auth SET password = ? WHERE username = ? AND role = ?',
     [newPassword, username, AuthRole.User]
   );
-  // @ts-expect-error plugin type may not declare rowsAffected
   return res?.rowsAffected ?? 0;
 }
 
@@ -126,6 +123,5 @@ export async function deleteUser(username: string): Promise<number> {
     'DELETE FROM auth WHERE username = ? AND role = ?',
     [username, AuthRole.User]
   );
-  // @ts-expect-error plugin type may not declare rowsAffected
   return res?.rowsAffected ?? 0;
 }

@@ -7,11 +7,14 @@ import { addFolder, removeFolder } from '@/slices/dataSourceStateSlice';
 import type { DirResult } from '@/types/ipc';
 import type { DataSourceType } from '@/types/dataSource';
 import { addDataSourcePath, removeDataSourcePath } from '@/slices/dataSourceConfigSlice';
-import { getRelativePath, norm } from '@/utils/fs';
+import { norm } from '@/utils/fs';
 import { deleteFolderIndexByPath, upsertOneFolderIndex } from '@/db/folderIndex';
 import { basename } from '@tauri-apps/api/path';
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
 import { stat } from '@tauri-apps/plugin-fs';
+import { IS_DEV } from '@/env';
+import { AuthRole } from '@/types/auth';
+import { errorToast } from '@/components/Toaster';
 
 interface DirectorySelectListProps {
     type: DataSourceType;
@@ -19,12 +22,17 @@ interface DirectorySelectListProps {
 
 export default function DirectorySelectList({ type }: DirectorySelectListProps) {
     const dispatch = useAppDispatch();
-    const rootPath = useAppSelector((state) => state.dataSourceConfig.rootPath);
     const folders = useAppSelector((state) => state.dataSourceState[type]);             // internal (system abs path)
-    const paths = useAppSelector((state) => state.dataSourceConfig.paths[type]);        // config file (relative path)
+    const paths = useAppSelector((state) => state.dataSourceConfig.paths[type]);        // config file (absolute path)
+    const role = useAppSelector(s => s.auth.role);
+    const readOnly = !IS_DEV && role !== AuthRole.Admin;
     const [selected, setSelected] = useState<string[]>([]);
 
     const handleAdd = async () => {
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下添加目录需要管理员权限。' });
+            return;
+        }
         try {
             const result = await open({
                 directory: true,
@@ -38,11 +46,10 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
             for (const folder of responses) {
                 if (folder.exists) {
-                    const absPath = folder.path;
-                    const relPath = getRelativePath(rootPath, folder.path);
-                    if (paths.includes(relPath)) continue;
-                    await dispatch(addDataSourcePath({ type, path: norm(relPath) }));
-                    await dispatch(addFolder({ type, path: norm(absPath) }));
+                    const absPath = norm(folder.path);
+                    if (paths.includes(absPath)) continue;
+                    await dispatch(addDataSourcePath({ type, path: absPath }));
+                    await dispatch(addFolder({ type, path: absPath }));
                 }
             }
         } catch (e: unknown) {
@@ -51,6 +58,10 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
     };
 
     const deleteAction = async (path: string) => {
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下删除目录需要管理员权限。' });
+            return;
+        }
         // path is abs. path
         const name = await basename(path);
         await dispatch(removeDataSourcePath({ type, path }));
@@ -60,6 +71,10 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
     }
 
     const handleRemoveSelected = async () => {
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下删除目录需要管理员权限。' });
+            return;
+        }
         for (const path of selected) {
             await deleteAction(norm(path));
         }
@@ -67,6 +82,10 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
     };
 
     const handleModify = async (oldPath: string) => {
+        if (readOnly) {
+            errorToast({ title: '需要管理员权限', message: '生产环境下修改目录需要管理员权限。' });
+            return;
+        }
         try {
             const result = await open({
                 directory: true,
@@ -76,15 +95,12 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
             if (!result) return;
 
             const newPath = Array.isArray(result) ? result[0] : result;
-            const rel = newPath.startsWith(rootPath)
-                ? newPath.slice(rootPath.length).replace(/^[/\\]/, '')
-                : newPath;
-
-            if (rel === oldPath) return;
+            const abs = norm(newPath);
+            if (abs === oldPath) return;
             await dispatch(removeFolder({ type, path: oldPath }));
             const { mtime } = await stat(newPath);
-            await upsertOneFolderIndex({ folder_path: newPath, last_mtime: Number(mtime) });
-            await dispatch(addFolder({ type, path: newPath }));
+            await upsertOneFolderIndex({ folder_path: abs, last_mtime: Number(mtime) });
+            await dispatch(addFolder({ type, path: abs }));
             setSelected((s) => s.filter((x) => x !== oldPath));
         } catch (e: unknown) {
             console.error('修改目录失败', e);
@@ -149,6 +165,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                                             variant="light"
                                             size="sm"             // sm, md, lg… consistent square size
                                             onClick={() => handleModify(path)}
+                                            disabled={readOnly}
                                         >
                                             <IconEdit size={16} />
                                         </ActionIcon>
@@ -157,6 +174,7 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
                                             variant="light"
                                             color="red"
                                             size="sm"
+                                            disabled={readOnly}
                                             onClick={async () => {
                                                 await deleteAction(norm(path));
                                                 setSelected((s) => s.filter((x) => x !== path));
@@ -201,13 +219,13 @@ export default function DirectorySelectList({ type }: DirectorySelectListProps) 
 
 
             <Group mt="md" justify="flex-start">
-                <Button leftSection={<IconPlus size={16} />} onClick={handleAdd}>
+                <Button leftSection={<IconPlus size={16} />} onClick={handleAdd} disabled={readOnly}>
                     添加
                 </Button>
                 <Button
                     leftSection={<IconTrash size={16} />}
                     color="red"
-                    disabled={selected.length === 0}
+                    disabled={selected.length === 0 || readOnly}
                     onClick={handleRemoveSelected}
                 >
                     删除所选
