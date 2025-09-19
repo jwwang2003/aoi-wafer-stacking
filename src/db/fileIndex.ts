@@ -3,11 +3,13 @@ import { FileIndexRow } from './types';
 import { resetSessionFileIndexCache } from '@/utils/fs';
 
 const TABLE = 'file_index';
+type ExecResult = { rowsAffected?: number } | void | null | undefined;
+const rowsAffected = (res: ExecResult): number => (res && typeof res === 'object' && 'rowsAffected' in res ? (res as { rowsAffected?: number }).rowsAffected ?? 0 : 0);
 
 /**
  * Retrieves a single file index record by its path.
  *
- * @param file_path - The relative file path to look up.
+ * @param file_path - The absolute file path to look up.
  * @returns The matching `FileIndexRow` if found, otherwise `null`.
  */
 export async function getFileIndexByPath(file_path: string): Promise<FileIndexRow | null> {
@@ -22,7 +24,7 @@ export async function getFileIndexByPath(file_path: string): Promise<FileIndexRo
 /**
  * Retrieves multiple file index records by their paths.
  *
- * @param paths - An array of relative file paths.
+ * @param paths - An array of absolute file paths.
  * @returns A `Map` keyed by `file_path` containing the matching `FileIndexRow` entries.
  *          If `paths` is empty, an empty map is returned.
  */
@@ -115,7 +117,7 @@ ON CONFLICT(file_path) DO UPDATE SET
 /**
  * Deletes a single file index record by its path.
  *
- * @param file_path - The relative file path to delete.
+ * @param file_path - The absolute file path to delete.
  */
 export async function deleteFileIndexByPath(file_path: string): Promise<void> {
     const db = await getDb();
@@ -128,7 +130,7 @@ export async function deleteFileIndexByPath(file_path: string): Promise<void> {
 /**
  * Deletes multiple file index records by their paths.
  *
- * @param file_paths - Array of relative file paths to delete.
+ * @param file_paths - Array of absolute file paths to delete.
  */
 export async function deleteFileIndexesByPaths(file_paths: string[], batchSize = 500): Promise<void> {
     if (!file_paths.length) return;
@@ -154,5 +156,5 @@ export async function deleteAllFileIndexes(vacuumAfter = false): Promise<number>
     const res = await db.execute(`DELETE FROM ${TABLE}`);
     if (vacuumAfter) await vacuum();
     await resetSessionFileIndexCache();
-    return (res as any)?.rowsAffected ?? 0;
+    return rowsAffected(res);
 }

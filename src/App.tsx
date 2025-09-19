@@ -1,27 +1,40 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { Routes, Route, useLocation, Link } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from './store';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from './store';
 
-import { Box, Flex, Button, Tooltip } from '@mantine/core';
+import { IconLock, IconLockOpen } from '@tabler/icons-react';
+import { Box, Button, Tooltip, Loader, Text } from '@mantine/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ToastContainer } from 'react-toastify';
 
 // Components
-import { infoToast } from '@/components/Toaster';
+import { infoToast } from '@/components/UI/Toaster';
+import { SidebarButtonGroup } from '@/components/UI/SidebarButton';
+import AuthModal from '@/auth/AuthModal';
+
 // UTILS
 import { initialize } from '@/utils/init';
-import { initConsoleInterceptor } from '@/utils/log';
+import { IS_PROD, IS_DEV } from '@/env';
+import { setSqlDebugLogging } from '@/db';
 import { warmIndexCaches } from '@/utils/fs';
+import { isAdmin, isPrivileged } from '@/utils/auth';
+import { initConsoleInterceptor } from '@/utils/log';   // debugging...
 
+// REDUX
 import { initPreferences } from '@/slices/preferencesSlice';
 import { initDataSourceConfig } from '@/slices/dataSourceConfigSlice';
 import { initDataSourceState, refreshFolderStatuses } from '@/slices/dataSourceStateSlice';
+import { initAuth, loginWithRole, switchToGuest, checkAdminDefaultPassword, setAdminPassword } from '@/slices/authSlice';
 
+// TYPES
 import { DataSourceConfigState, FolderGroups } from '@/types/dataSource';
 import { PreferencesState } from '@/types/preferences';
+import { AuthRole, AuthRoleName } from '@/types/auth';
 
-import { menuItems } from '@/constants/MenuItems';
+// Routing
+import MenuItems from '@/MenuItems';
+
 
 // Small helper function
 function getTopLevelPath(pathname: string): string {
@@ -44,12 +57,28 @@ export function AnimatedRoutes() {
                 style={{ flex: 1, overflow: 'auto' }}
             >
                 {/* The app router is located here! */}
-                <Routes location={location}>
-                    {menuItems.map(({ path, component: Component }) => (
-                        <Route key={path} path={path + '/*'} element={<Component />} />
-                    ))}
-                    <Route path="*" element={<div>未找到内容</div>} />
-                </Routes>
+                <Suspense
+                    fallback={
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100%'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <Loader color="teal" size="sm" />
+                                <Text c="dimmed">正在载入页面…</Text>
+                            </div>
+                        </div>
+                    }
+                >
+                    <Routes location={location}>
+                        {MenuItems.map(({ path, component: Component }) => (
+                            <Route key={path} path={path + '/*'} element={<Component />} />
+                        ))}
+                        <Route path="*" element={<div>未找到内容</div>} />
+                    </Routes>
+                </Suspense>
             </motion.div>
         </AnimatePresence>
     );
@@ -58,6 +87,9 @@ export function AnimatedRoutes() {
 export default function App() {
     const [mounted, setMounted] = useState<boolean>(false);
     const [hovered, setHovered] = useState<string | null>(null);
+    const [authOpen, setAuthOpen] = useState(false);
+    const authRole = useSelector((s: RootState) => s.auth.role);
+    const adminDefault = useSelector((s: RootState) => s.auth.adminDefaultPassword);
     const location = useLocation();
     const dispatch = useDispatch<AppDispatch>();
 
@@ -65,7 +97,7 @@ export default function App() {
     useEffect(() => {
         if (mounted) {
             infoToast({ title: '欢迎使用' });
-            console.log('Hello, world!');
+            console.info('%cHello, world!', 'color:#2563eb');
         }
 
         if (!mounted) {
@@ -73,30 +105,54 @@ export default function App() {
         }
     }, []);
 
+    // Sidebar items filtered by permissions (admin-only item hidden for non-admins)
+    const filteredMenu = useMemo(
+        () => MenuItems.filter(mi => mi.value !== 'admin' || authRole === AuthRole.Admin),
+        [authRole]
+    );
+
     useEffect(() => {
         const runInit = async () => {
             try {
+                // Log environment once at first React init
+                // Vite flags: import.meta.env.MODE and import.meta.env.PROD
+                console.info(`[Env] MODE=${import.meta.env.MODE} | PROD=${String(import.meta.env.PROD)} | IS_PROD=${String(IS_PROD)} | IS_DEV=${String(IS_DEV)}`);
                 await initConsoleInterceptor();
 
-                console.log('Initializing...');
+                console.info('%cInitializing...', 'color:#2563eb');
                 console.time('initialize');
                 // Initializes the configuration folder structure & initializes the database
                 await initialize();
                 const preferences: PreferencesState = await dispatch(initPreferences()).unwrap();
-                console.log('%cInitialized preferences!', 'color: orange', preferences);
+                // Apply SQL debug flag to DB logger
+                setSqlDebugLogging(preferences.sqlDebug);
+                console.info('%cInitialized preferences!', 'color:#22c55e; font-weight:600', preferences);
                 const dataSourceConfig: DataSourceConfigState = await dispatch(initDataSourceConfig()).unwrap();
-                console.log('%cInitialized dataSourceConfig!', 'color: orange', dataSourceConfig);
+                console.info('%cInitialized dataSourceConfig!', 'color:#22c55e; font-weight:600', dataSourceConfig);
                 const dataSourceState: FolderGroups = await dispatch(initDataSourceState()).unwrap();
-                console.log('%cInitialized dataSourceState!', 'color: orange', dataSourceState);
+                console.info('%cInitialized dataSourceState!', 'color:#22c55e; font-weight:600', dataSourceState);
+                
+                const logJson = (label: string, obj: unknown) => {
+                    const pretty = JSON.stringify(obj, null, 2);
+                    const indented = pretty.split('\n').map(l => `  ${l}`).join('\n');
+                    // Debug-level, colored header + colored body
+                    console.debug(
+                        `%c📄 ${label}%c\n${indented}`,
+                        'color:black',
+                        'color:black'
+                    );
+                };
+                logJson('Loaded preferences', preferences);
+                logJson('Loaded dataSourceConfig', dataSourceConfig);
 
-                console.debug('%cLoaded preferences:', 'color: lime; background: black', JSON.stringify(preferences, null, 2));
-                console.debug('%cLoaded dataSourceConfig:', 'color: lime; background: black', JSON.stringify(dataSourceConfig, null, 2));
-
-                console.log('%cInitialization complete!', 'color: blue');
+                console.info('%cInitialization complete!', 'color:#2563eb; font-weight:600');
                 console.timeEnd('initialize');
 
                 // Warm-up the index caches for folders and files
                 await warmIndexCaches();
+
+                // Initialize Redux-only auth state
+                try { await dispatch(initAuth()).unwrap(); } catch (err) { console.error('Auth init failed', err); }
 
                 // Constantly check for a change in the folder status of the root folder
                 // TODO: Change this pooling method into a event based method!
@@ -121,6 +177,18 @@ export default function App() {
         }
     }, []);
 
+    const loginTooltip = useMemo(() => {
+        if (authRole === AuthRole.Guest) {
+            return `登录为${AuthRoleName[AuthRole.Admin]}或${AuthRoleName[AuthRole.User]}`;
+        }
+        return `已是${AuthRoleName[authRole]} (点击切换为${AuthRoleName[AuthRole.Guest]})`;
+    }, [authRole]);
+
+    const loginAriaLabel = useMemo(() => {
+        if (authRole === AuthRole.Guest) return '进入登录模式';
+        return `退出${AuthRoleName[authRole]}`;
+    }, [authRole]);
+
     return (
         <div style={{ position: 'relative', height: '100vh', display: 'flex', overflow: 'hidden' }}>
             {/* Sidebar */}
@@ -137,125 +205,63 @@ export default function App() {
                 }}
             >
                 {/* Top Buttons */}
-                <SidebarButtonGroup items={menuItems.slice(0, 5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
-                {/* Bottom Buttons */}
-                <SidebarButtonGroup items={menuItems.slice(5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
-            </Box>
-            {/* Main content */}
-            <AnimatedRoutes />
-            <ToastContainer />
-        </div>
-    );
-}
-
-type Item = { icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; label: string; path: string };
-
-interface SidebarButtonGroupInterface {
-    items: Item[];
-    hovered: string | null;
-    setHovered: (path: string | null) => void;
-    currentPath: string;
-}
-
-function SidebarButtonGroup({ items, hovered, setHovered, currentPath }: SidebarButtonGroupInterface) {
-    // index that is currently tabbable
-    const activeIndexFromRoute = useMemo(() => {
-        const idx = items.findIndex(({ path }) =>
-            path === '/'
-                ? currentPath === '/'
-                : currentPath === path || currentPath.startsWith(path + '/')
-        );
-        return idx >= 0 ? idx : 0;
-    }, [items, currentPath]);
-
-    const [focusIndex, setFocusIndex] = useState<number>(activeIndexFromRoute);
-
-    // keep roving focus in sync with route changes
-    useEffect(() => setFocusIndex(activeIndexFromRoute), [activeIndexFromRoute]);
-
-    // refs to focus the underlying buttons/anchors
-    const refs = useRef<(HTMLButtonElement | HTMLAnchorElement | null)[]>([]);
-    refs.current = items.map((_, i) => refs.current[i] ?? null);
-
-    const moveFocus = (next: number) => {
-        const clamped = Math.max(0, Math.min(items.length - 1, next));
-        setFocusIndex(clamped);
-        const el = refs.current[clamped];
-        if (el) el.focus();
-    };
-
-    const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        // ignore when modifier keys held
-        if (e.altKey || e.ctrlKey || e.metaKey) return;
-
-        switch (e.key) {
-            case 'ArrowUp':
-                e.preventDefault();
-                moveFocus(focusIndex - 1);
-                break;
-            case 'ArrowDown':
-                e.preventDefault();
-                moveFocus(focusIndex + 1);
-                break;
-            case 'Home':
-                e.preventDefault();
-                moveFocus(0);
-                break;
-            case 'End':
-                e.preventDefault();
-                moveFocus(items.length - 1);
-                break;
-            default:
-                break;
-        }
-    };
-
-    return (
-        <Flex
-            direction="column"
-            align="center"
-            gap="md"
-            role="toolbar"
-            aria-label="Sidebar navigation"
-            aria-orientation="vertical"
-            onKeyDown={onKeyDown}
-        >
-            {items.map(({ icon: Icon, label, path }, i) => {
-                const isHovered = hovered === path;
-                const isActive =
-                    path === '/'
-                        ? currentPath === '/'
-                        : currentPath === path || currentPath.startsWith(path + '/');
-
-                return (
-                    <Tooltip key={path} label={label} position="right">
+                <SidebarButtonGroup items={filteredMenu.slice(0, 5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
+                {/* Bottom Buttons + Auth */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+                    <SidebarButtonGroup items={filteredMenu.slice(5)} hovered={hovered} setHovered={setHovered} currentPath={location.pathname} />
+                    {/* Auth toggle button */}
+                    <Tooltip label={loginTooltip} position="right">
                         <Button
-                            component={Link}
-                            to={path}
-                            aria-label={label}
-                            // announce current page to ATs when applicable
-                            aria-current={isActive ? 'page' : undefined}
-                            // roving tabindex: only one is 0, others -1
-                            tabIndex={i === focusIndex ? 0 : -1}
-                            // update roving index if the user clicks or tabs into an item
-                            onFocus={() => setFocusIndex(i)}
-                            ref={(el) => { refs.current[i] = el; }}
-                            variant={isActive ? 'filled' : 'outline'}
-                            onMouseEnter={() => setHovered(path)}
+                            aria-label={loginAriaLabel}
+                            tabIndex={0}
+                            variant={isPrivileged(authRole) ? 'filled' : 'outline'}
+                            color={isAdmin(authRole) ? 'lightgreen' : ''}
+                            onMouseEnter={() => setHovered('/__auth')}
                             onMouseLeave={() => setHovered(null)}
+                            onClick={() => {
+                                if (isPrivileged(authRole)) {
+                                    dispatch(switchToGuest());
+                                } else {
+                                    // Check if admin password is default before opening modal
+                                    dispatch(checkAdminDefaultPassword()).finally(() => setAuthOpen(true));
+                                }
+                            }}
                             style={{
                                 width: 40,
                                 height: 40,
                                 padding: 0,
-                                transform: isHovered ? 'scale(1.075)' : 'scale(1)',
+                                transform: hovered === '/__auth' ? 'scale(1.075)' : 'scale(1)',
                                 transition: 'transform 150ms ease',
                             }}
                         >
-                            <Icon size={20} strokeWidth={2} />
+                            {authRole === AuthRole.Admin ?
+                                <IconLockOpen size={20} strokeWidth={2} /> :
+                                <IconLock size={20} strokeWidth={2} />
+                            }
                         </Button>
                     </Tooltip>
-                );
-            })}
-        </Flex>
+                </div>
+            </Box>
+            {/* Main content */}
+            <AnimatedRoutes />
+            <ToastContainer />
+
+            {/* Auth modal */}
+            <AuthModal
+                opened={authOpen}
+                onClose={() => setAuthOpen(false)}
+                onSuccess={() => setAuthOpen(false)}
+                validateCredentials={async (role, pwd, username) => {
+                    const res = await dispatch(loginWithRole({ role, password: pwd, username }));
+                    return loginWithRole.fulfilled.match(res);
+                }}
+                adminDefaultPassword={adminDefault}
+                onChangeAdminPassword={async (newPwd) => {
+                    const res = await dispatch(setAdminPassword(newPwd));
+                    return setAdminPassword.fulfilled.match(res);
+                }}
+                title="选择登录模式"
+            />
+        </div>
     );
 }

@@ -44,8 +44,8 @@ export const initPreferences = createAsyncThunk<
                 const result = await readTextFile(PREFERENCES_FILENAME, { baseDir });
                 parsed = JSON.parse(result);
             } catch (err: unknown) {
-                console.debug('[PREF. file check] assuming file DNE', err);
-                console.debug('Creating preferences file...');
+                console.debug('%c[PREF. file check] assuming file DNE', 'color:#6b7280', err);
+                console.info('%cCreating preferences file...', 'color:#2563eb');
                 const data = prepPreferenceWriteOut(preferences);
                 await writeTextFile(PREFERENCES_FILENAME, data, { baseDir });
                 const result = await readTextFile(PREFERENCES_FILENAME, { baseDir });
@@ -59,13 +59,12 @@ export const initPreferences = createAsyncThunk<
                 console.warn('[PREF. validation] invalid preferences structure, using defaults');
             }
 
-            // Check if data source config file exists
+            // Check if data source config file exists and progress to Subdirectories
             try {
                 await readTextFile(preferences.dataSourceConfigPath, { baseDir });
-                // Ensures that the current dataSourceConfigPath exists!
-                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
+                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
             } catch (err: unknown) {
-                console.debug('[DataSourcePaths file check] assuming file DNE', err);
+                console.debug('%c[DataSourcePaths file check] assuming file DNE', 'color:#6b7280', err);
             }
 
             await thunkAPI.dispatch(setStepper(ConfigStepperState.ConfigInfo)); // NOT valid yet...
@@ -122,13 +121,12 @@ export const revalidatePreferencesFile = createAsyncThunk<
         }
 
         // Check if data source config file exists
-        try {
-            await readTextFile(preferences.dataSourceConfigPath, { baseDir });
-            // Ensures that the current dataSourceConfigPath exists!
-            await thunkAPI.dispatch(advanceStepper(ConfigStepperState.RootDirectory));
-        } catch (err: unknown) {
-            console.debug('[DataSourcePaths file check] assuming file DNE', err);
-        }
+            try {
+                await readTextFile(preferences.dataSourceConfigPath, { baseDir });
+                await thunkAPI.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
+            } catch (err: unknown) {
+                console.debug('%c[DataSourcePaths file check] assuming file DNE', 'color:#6b7280', err);
+            }
 
         await thunkAPI.dispatch(advanceStepper(ConfigStepperState.ConfigInfo)); // NOT valid yet...
 
@@ -176,6 +174,9 @@ const preferencesSlice = createSlice({
         setDataSourceConfigPath(state, action: PayloadAction<string>) {
             state.dataSourceConfigPath = action.payload;    // set the new value
             // no need to save because the middleware takes care of that
+        },
+        setSqlDebug(state, action: PayloadAction<boolean>) {
+            state.sqlDebug = action.payload;
         },
         advanceStepper(state, action: PayloadAction<ConfigStepperState>) {
             const current = state.stepper;
@@ -245,5 +246,5 @@ const preferencesSlice = createSlice({
     },
 });
 
-export const { setDataSourceConfigPath, setAutoTriggerState, setStepper, advanceStepper } = preferencesSlice.actions;
+export const { setDataSourceConfigPath, setSqlDebug, setAutoTriggerState, setStepper, advanceStepper } = preferencesSlice.actions;
 export default preferencesSlice.reducer;

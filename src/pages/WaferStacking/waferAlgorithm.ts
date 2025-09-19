@@ -10,14 +10,13 @@ import {
     isSpecialBin,
     isNumberBin,
 } from '@/types/ipc';
-import { Statistics } from './types';
 import { PRIORITY_RULES, LayerMeta } from './priority';
-
 
 export const getLayerPriority = (meta: LayerMeta): number => {
     const matchedRule = PRIORITY_RULES.find((rule) => rule.when(meta));
     return matchedRule ? matchedRule.score : 0;
 };
+
 /**
  * 提取对齐标记
  */
@@ -30,7 +29,12 @@ export const extractAlignmentMarkers = (
         )
         .map((die) => ({ x: die.x, y: die.y }));
 };
-
+export interface Statistics {
+    totalTested: number;
+    totalPass: number;
+    totalFail: number;
+    yieldPercentage: number;
+}
 
 export const calculateOffset = (
     baseMarkers: { x: number; y: number }[],
@@ -56,85 +60,68 @@ export const calculateOffset = (
 };
 
 
-export const createEmptyAsciiMap = (
+export const createDieMapStructure = (
     allAlignedDies: AsciiDie[][]
-): { map: string[][]; minX: number; minY: number } => {
-    const allX = allAlignedDies.flatMap((dies) => dies.map((die) => die.x));
-    const allY = allAlignedDies.flatMap((dies) => dies.map((die) => die.y));
+): { dieMap: Map<string, { die: AsciiDie; priority: number }>; bounds: { minX: number; maxX: number; minY: number; maxY: number } } => {
+    const allX = allAlignedDies.flatMap(dies => dies.map(die => die.x));
+    const allY = allAlignedDies.flatMap(dies => dies.map(die => die.y));
     const minX = Math.min(...allX);
     const maxX = Math.max(...allX);
     const minY = Math.min(...allY);
     const maxY = Math.max(...allY);
-    const map = Array.from({ length: maxY - minY + 1 }, () =>
-        Array(maxX - minX + 1).fill('.')
-    );
-    return { map, minX, minY };
+
+    return {
+        dieMap: new Map(),
+        bounds: { minX, maxX, minY, maxY }
+    };
 };
 
-export const fillLayerToAsciiMap = (
-    map: string[][],
+export const mergeLayerToDieMap = (
+    dieMap: Map<string, { die: AsciiDie; priority: number }>,
     dies: AsciiDie[],
-    layerPriority: number,
-    minX: number,
-    minY: number,
-    existingPriorities: number[][]
+    layerPriority: number
 ) => {
-    dies.forEach((die) => {
+    dies.forEach(die => {
         if (isSpecialBin(die.bin) && ['.', 'S', '*'].includes(die.bin.special)) {
             return;
         }
-        const rowIdx = die.y - minY;
-        const colIdx = die.x - minX;
-        if (
-            rowIdx < 0 ||
-            rowIdx >= map.length ||
-            colIdx < 0 ||
-            colIdx >= map[rowIdx].length
-        ) {
-            return;
-        }
-        const currentPriority = existingPriorities[rowIdx][colIdx];
+        const key = `${die.x},${die.y}`;
+        const existing = dieMap.get(key);
+
         let shouldOverwrite = false;
-        if (layerPriority > currentPriority) {
+        if (!existing) {
             shouldOverwrite = true;
-        } else if (layerPriority < currentPriority) {
-            const existingChar = map[rowIdx][colIdx];
-            shouldOverwrite = existingChar === '1';
+        } else if (layerPriority > existing.priority) {
+            shouldOverwrite = true;
+        } else if (layerPriority < existing.priority) {
+            const existingValue = 'number' in existing.die.bin
+                ? existing.die.bin.number.toString()
+                : existing.die.bin.special;
+            shouldOverwrite = existingValue === '1';
         }
+
         if (shouldOverwrite) {
-            if (isNumberBin(die.bin)) {
-                map[rowIdx][colIdx] = die.bin.number.toString();
-            } else if (isSpecialBin(die.bin)) {
-                map[rowIdx][colIdx] = die.bin.special;
-            }
-            existingPriorities[rowIdx][colIdx] = layerPriority;
+            dieMap.set(key, { die: { ...die }, priority: layerPriority });
         }
     });
 };
 
-/**
- * 删除ASCII Map中的空行/空列
- */
-export const removeEmptyRowsAndCols = (map: string[][]): string[][] => {
-    const filteredMap = map.filter((row) => !row.every((char) => char === '.'));
-    if (filteredMap.length === 0) return [];
-    const colCount = filteredMap[0].length;
-    const transposed = Array.from({ length: colCount }, (_, col) =>
-        filteredMap.map((row) => row[col])
-    );
-    const filteredTransposed = transposed.filter(
-        (col) => !col.every((char) => char === '.')
-    );
-    if (filteredTransposed.length === 0) return [];
-    return Array.from({ length: filteredMap.length }, (_, row) =>
-        filteredTransposed.map((col) => col[row])
+export const pruneEmptyRegions = (
+    dieMap: Map<string, { die: AsciiDie; priority: number }>
+): AsciiDie[] => {
+    if (dieMap.size === 0) return [];
+    const dies = Array.from(dieMap.values()).map(item => item.die);
+    const xs = dies.map(die => die.x);
+    const ys = dies.map(die => die.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    return dies.filter(die =>
+        die.x >= minX && die.x <= maxX && die.y >= minY && die.y <= maxY
     );
 };
 
-
-/**
- * 从ASCII Map反推合并后的Die数据
- */
 export const mapToMergedDies = (
     map: string[][],
     minX: number,
@@ -155,84 +142,57 @@ export const mapToMergedDies = (
     return mergedDies;
 };
 
-
-/**
- * 对ASCII Map的XY坐标整体偏移（并同步更新Die数据）
- */
-export const applyOffsetToAsciiMap = (
-    mergedDies: AsciiDie[],
+export const applyOffsetToDies = (
+    dies: AsciiDie[],
     dx: number,
     dy: number
-): {
-    offsetMap: string[][];
-    offsetDies: AsciiDie[];
-    newMinX: number;
-    newMinY: number;
-} => {
-    const offsetDies = mergedDies.map((die) => ({
+): AsciiDie[] => {
+    return dies.map(die => ({
         ...die,
         x: die.x + dx,
-        y: die.y + dy,
+        y: die.y + dy
     }));
-    const xs = offsetDies.map((die) => die.x);
-    const ys = offsetDies.map((die) => die.y);
-    const newMinX = Math.min(...xs);
-    const newMaxX = Math.max(...xs);
-    const newMinY = Math.min(...ys);
-    const newMaxY = Math.max(...ys);
-    const offsetMap = Array.from({ length: newMaxY - newMinY + 1 }, () =>
-        Array(newMaxX - newMinX + 1).fill('.')
-    );
-    offsetDies.forEach((die) => {
-        const rowIdx = die.y - newMinY;
-        const colIdx = die.x - newMinX;
-        if (
-            rowIdx >= 0 &&
-            rowIdx < offsetMap.length &&
-            colIdx >= 0 &&
-            colIdx < offsetMap[rowIdx].length
-        ) {
-            offsetMap[rowIdx][colIdx] = isNumberBin(die.bin)
-                ? die.bin.number.toString()
-                : (die.bin as { special: string }).special;
-        }
-    });
-    return { offsetMap, offsetDies, newMinX, newMinY };
 };
 
-
-export const calculateStats = (mapData: string[]): Statistics => {
+export const calculateStatsFromDies = (dies: AsciiDie[]): Statistics => {
     let totalTested = 0;
     let totalPass = 0;
 
-    for (const row of mapData) {
-        for (const char of row) {
-            if (char !== '.' && char !== 'S' && char !== '*') {
-                totalTested++;
-                if (
-                    char === '1' ||
-                    char === 'G' ||
-                    char === 'H' ||
-                    char === 'I' ||
-                    char === 'J'
-                ) {
-                    totalPass++;
-                }
-            }
+    dies.forEach(die => {
+        if (isSpecialBin(die.bin)) {
+            if (['S', '*', '.'].includes(die.bin.special)) return;
         }
-    }
+        totalTested++;
 
-    const totalFail = totalTested - totalPass;
-    const yieldPercentage = totalTested > 0 ? (totalPass / totalTested) * 100 : 0;
+        if (isNumberBin(die.bin)) {
+            if (die.bin.number === 1) totalPass++;
+        } else if (isSpecialBin(die.bin)) {
+            if (['G', 'H', 'I', 'J'].includes(die.bin.special)) totalPass++;
+        }
+    });
 
     return {
-        totalTested: totalTested || 0,
-        totalPass: totalPass || 0,
-        totalFail: totalFail || 0,
-        yieldPercentage: yieldPercentage || 0,
+        totalTested,
+        totalPass,
+        totalFail: totalTested - totalPass,
+        yieldPercentage: totalTested > 0 ? (totalPass / totalTested) * 100 : 0
     };
 };
 
+/**
+ * 提取WLBI头部信息
+ */
+export const extractBinMapHeader = (binData: BinMapData): Record<string, string> => ({
+    'WaferType': binData.waferType.toString(),
+    'DUT': binData.dut.toString(),
+    'Mode': binData.mode.toString(),
+    'Product': binData.product || 'Unknown',
+    'Wafer Lots': binData.waferLots || 'Unknown',
+    'Wafer No': binData.waferNo || 'Unknown',
+    'Wafer Size': binData.waferSize.toString(),
+    'Index X': binData.indexX.toString(),
+    'Index Y': binData.indexY.toString(),
+})
 
 /**
  * 提取Wafer头部信息
@@ -271,42 +231,39 @@ export const extractMapDataHeader = (mapData: MapData): Record<string, string> =
  * 转换为MapData格式
  */
 export const convertToMapData = (
-    mapData: string[],
+    dies: AsciiDie[],
     stats: Statistics,
     header: Record<string, string>
-): MapData => ({
-    deviceName: header?.['Device Name'] || 'Unknown',
-    lotNo: header?.['Lot No.'] || 'Unknown',
-    waferId: header?.['Wafer ID'] || 'Unknown',
-    waferSize: header?.['Wafer Size'] || '6',
-    diceSizeX: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) : 0,
-    diceSizeY: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) : 0,
-    flatNotch: header?.['Flat/Notch'] || 'Unknown',
-    mapColumns: mapData[0]?.length || 0,
-    mapRows: mapData.length || 0,
-    totalTested: stats.totalTested || 0,
-    totalPass: stats.totalPass || 0,
-    totalFail: stats.totalFail || 0,
-    yieldPercent: stats.yieldPercentage || 0,
-    map: {
-        raw: mapData,
-        dies: mapData.flatMap((row, y) =>
-            row.split('').map((char, x) => ({
-                x: Number.isFinite(x) ? x : 0,
-                y: Number.isFinite(y) ? y : 0,
-                bin:
-                    char === '.'
-                        ? { special: '.' }
-                        : {
-                            number: Number.isFinite(parseInt(char, 10))
-                                ? parseInt(char, 10)
-                                : 0,
-                        },
-            }))
-        ),
-    },
-});
+): MapData => {
+    const xs = dies.map(d => d.x), ys = dies.map(d => d.y);
+    const [minX, maxX] = xs.length ? [Math.min(...xs), Math.max(...xs)] : [0, 0];
+    const [minY, maxY] = ys.length ? [Math.min(...ys), Math.max(...ys)] : [0, 0];
+    const [mapColumns, mapRows] = [maxX - minX + 1, maxY - minY + 1];
+    const rawMap = Array.from({ length: mapRows }, () => Array(mapColumns).fill('.'));
+    dies.forEach(die => {
+        const [row, col] = [die.y - minY, die.x - minX];
+        if (row >= 0 && row < mapRows && col >= 0 && col < mapColumns) {
+            rawMap[row][col] = isNumberBin(die.bin) ? die.bin.number.toString() : die.bin.special;
+        }
+    });
 
+    return {
+        deviceName: header?.['Device Name'] || 'Unknown',
+        lotNo: header?.['Lot No.'] || 'Unknown',
+        waferId: header?.['Wafer ID'] || 'Unknown',
+        waferSize: header?.['Wafer Size'] || '6',
+        diceSizeX: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) : 0,
+        diceSizeY: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) : 0,
+        flatNotch: header?.['Flat/Notch'] || 'Unknown',
+        mapColumns,
+        mapRows,
+        totalTested: stats.totalTested,
+        totalPass: stats.totalPass,
+        totalFail: stats.totalFail,
+        yieldPercent: stats.yieldPercentage,
+        map: { raw: rawMap.map(r => r.join('')), dies }
+    };
+};
 /**
  * 生成BinMap数据
  */
@@ -315,9 +272,8 @@ export const convertToBinMapData = (
     header?: Record<string, string>
 ): BinMapData => {
     const map: WaferMapDie[] = offsetDies
-        .filter((die) => isNumberBin(die.bin))
         .map((die) => ({
-            x: die.x - 1,
+            x: die.x,
             y: die.y,
             bin: die.bin,
             reserved: 0,
@@ -338,9 +294,9 @@ export const convertToBinMapData = (
         waferType: header?.['WaferType'] ? parseInt(header['WaferType']) : 0,
         dut: header?.['DUT'] ? parseInt(header['DUT']) : 0,
         mode: header?.['Mode'] ? parseInt(header['Mode']) : 0,
-        product: header?.['Device Name'] || 'Unknown',
-        waferLots: header?.['Lot No.'] || 'Unknown',
-        waferNo: header?.['Wafer ID'] || 'Unknown',
+        product: header?.['Product'] || 'Unknown',
+        waferLots: header?.['Wafer Lots'] || 'Unknown',
+        waferNo: header?.['Wafer No'] || 'Unknown',
         waferSize: header?.['Wafer Size'] ? parseFloat(header['Wafer Size']) : 0,
         indexX: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) : 0,
         indexY: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) : 0,
@@ -353,72 +309,55 @@ export const convertToBinMapData = (
  * 转换为HexMapData类型
  */
 export const convertToHexMapData = (
-    mapData: string[],
+    dies: AsciiDie[],
     header?: Record<string, string>
 ): HexMapData => {
-    const validMapData =
-        mapData.length === 0 || mapData.every((row) => row.length === 0)
-            ? ['0']
-            : mapData;
+    // Build quick lookup to avoid O(n^2) `.find` inside nested loops
+    const xs = dies.map(die => die.x);
+    const ys = dies.map(die => die.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
 
-    const letterToNumber = {
-        A: 10,
-        B: 11,
-        C: 12,
-        D: 13,
-        E: 14,
-        F: 15,
-        G: 16,
-        H: 17,
-        I: 18,
-        J: 19,
-    };
-    const grid: HexMap['grid'] = validMapData.map((row) =>
-        row.split('').map((char) => {
-            if (char === '.') return null;
-            if (char.match(/[a-zA-Z]/)) {
-                const upperChar = char.toUpperCase();
-                return letterToNumber[upperChar as keyof typeof letterToNumber] || 99;
+    const byCoord = new Map<string, AsciiDie>();
+    for (const d of dies) byCoord.set(`${d.x},${d.y}`, d);
+
+    const grid: HexMap['grid'] = Array.from({ length: maxY - minY + 1 }, (_, yIdx) =>
+        Array.from({ length: maxX - minX + 1 }, (_, xIdx) => {
+            const x = minX + xIdx;
+            const y = minY + yIdx;
+            const die = byCoord.get(`${x},${y}`);
+
+            if (!die) return null;
+            if (isSpecialBin(die.bin)) {
+                const letterToNumber = {
+                    A: 10, B: 11, C: 12, D: 13, E: 14, F: 15,
+                    G: 16, H: 17, I: 18, J: 19
+                };
+                return letterToNumber[die.bin.special as keyof typeof letterToNumber] || 99;
             }
-            if (char.match(/\d/)) return parseInt(char, 10);
-            return null;
+            return isNumberBin(die.bin) ? die.bin.number : null;
         })
     );
-
-    const dies = validMapData
-        .flatMap((row, y) =>
-            row.split('').map((char, x) => ({
-                x: Number.isFinite(x) ? x : 0,
-                y: Number.isFinite(y) ? y : 0,
-                bin:
-                    char === '.'
-                        ? { special: '.' }
-                        : {
-                            number: Number.isFinite(parseInt(char, 10))
-                                ? parseInt(char, 10)
-                                : 0,
-                        },
-            }))
-        )
-        .filter((die) => isNumberBin(die.bin));
 
     return {
         header: {
             device: header?.['Device Name'] || 'Unknown',
             lot: header?.['Lot No.'] || 'Unknown',
             wafer: header?.['Wafer ID'] || 'Unknown',
-            rowCt: validMapData.length > 0 ? validMapData.length : 1,
-            colCt: validMapData[0]?.length > 0 ? validMapData[0].length : 1,
-            refpx: 1,
-            refpy: 28,
+            rowCt: maxY - minY + 1,
+            colCt: maxX - minX + 1,
+            refpx: 1, //未知
+            refpy: 28, //未知
             dutMs: 'MM',
-            xDies: !isNaN(parseFloat(header?.['Dice SizeX'] || '0'))
-                ? parseFloat(header?.['Dice SizeX'] || '0') / 1000
-                : 0,
-            yDies: !isNaN(parseFloat(header?.['Dice SizeY'] || '0'))
-                ? parseFloat(header?.['Dice SizeY'] || '0') / 1000
-                : 0,
+            xDies: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) / 1000 : 0,
+            yDies: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) / 1000 : 0,
         },
-        map: { raw: validMapData, grid, dies },
+        map: {
+            raw: [],
+            grid,
+            dies: dies.filter(die => isNumberBin(die.bin))
+        }
     };
 };

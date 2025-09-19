@@ -135,3 +135,24 @@ ON file_index (file_hash);
 
 CREATE INDEX IF NOT EXISTS idx_folder_index_path
 ON folder_index (folder_path);
+
+-- =======================================
+-- User authentication
+-- =======================================
+
+-- Roles supported: 'admin' | 'user' | 'guest'
+CREATE TABLE IF NOT EXISTS auth (
+    username TEXT PRIMARY KEY,
+    role TEXT NOT NULL CHECK (role IN ('admin','user','guest')),
+    password TEXT,                   -- plaintext; NULL for guest
+    created_at INTEGER NOT NULL DEFAULT (unixepoch('now')*1000)
+    -- Optionally enforce guests have no password:
+    , CHECK (role != 'guest' OR password IS NULL)
+);
+
+-- Seed users (idempotent). Change passwords as needed.
+INSERT OR IGNORE INTO auth (username, role, password) VALUES
+('admin', 'admin', 'admin'),
+('guest', 'guest', NULL);
+
+CREATE INDEX IF NOT EXISTS idx_auth_role ON auth (role);

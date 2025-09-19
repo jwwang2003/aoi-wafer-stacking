@@ -63,6 +63,14 @@ The database file is located in the `%APPDATA` folder, named `data.db`.
 
 ![](./assets/images/appdata_ss.png)
 
+### Admin password via env
+
+- Set a default admin password by creating a `.env` file at the project root:
+  - Copy `.env.example` to `.env`
+  - Set `VITE_ADMIN_DEFAULT_PASSWORD=your-secret`
+- On first run, if the database still has the seed password (`admin`), the app updates it to the env value during initialization.
+- The “default password” check in the UI uses this env value as the baseline.
+
 
 
 ## References (libraries, dependencies, papers, etc.)
