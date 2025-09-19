@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type * as THREE from 'three';
+import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
 
 import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
 
@@ -36,10 +36,12 @@ export default function SubstrateRenderer({
     const [error, setError] = useState<string | null>(null);
     const [zoom, setZoom] = useState(1);
 
-    const sceneRef = useRef<THREE.Scene>(new THREE.Scene());
+    const threeRef = useRef<typeof import('three') | null>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const controlsRef = useRef<OrbitControls | null>(null);
+    const controlsRef = useRef<OrbitControlsType | null>(null);
+    const [threeReady, setThreeReady] = useState(false);
     const defectObjectsRef = useRef<THREE.Object3D[]>([]);
     const gridObjectsRef = useRef<THREE.Object3D[]>([]);
     const { x: offsetX, y: offsetY } = gridOffset;
@@ -139,63 +141,86 @@ export default function SubstrateRenderer({
         mapCoordinatesRef.current = mapCoordinates;
     }, [mapCoordinates]);
 
-    // Init
+    // Init: dynamically import three.js and OrbitControls, then construct scene
     useEffect(() => {
-        const container = squareRef.current;
-        if (!container) return;
+        let disposed = false;
+        const boot = async () => {
+            const container = squareRef.current;
+            if (!container) return;
 
-        // Ensure absolute canvas can fill
-        container.style.position = 'relative';
+            container.style.position = 'relative';
+            const [THREE, { OrbitControls }] = await Promise.all([
+                import('three'),
+                import('three/examples/jsm/controls/OrbitControls.js'),
+            ]);
+            if (disposed) return;
+            threeRef.current = THREE;
 
-        const side = container.getBoundingClientRect().width;
+            const scene = new THREE.Scene();
+            sceneRef.current = scene;
 
-        const camera = new THREE.OrthographicCamera(
-            -side / 2, side / 2, side / 2, -side / 2, 0.1, 1000
-        );
-        camera.position.z = 10;
-        // Ensure default zoom is exactly 1 on init
-        camera.zoom = 1;
-        camera.updateProjectionMatrix();
-        cameraRef.current = camera;
+            const side = container.getBoundingClientRect().width;
+            const camera = new THREE.OrthographicCamera(
+                -side / 2, side / 2, side / 2, -side / 2, 0.1, 1000
+            );
+            camera.position.z = 10;
+            camera.zoom = 1;
+            camera.updateProjectionMatrix();
+            cameraRef.current = camera;
 
-        const renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            powerPreference: 'high-performance',
-            alpha: false,
-            stencil: false,
-            depth: true,
-        });
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        renderer.setClearColor(0xffffff);
-        container.appendChild(renderer.domElement);
-        rendererRef.current = renderer;
+            const renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                powerPreference: 'high-performance',
+                alpha: false,
+                stencil: false,
+                depth: true,
+            });
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            renderer.setClearColor(0xffffff);
+            container.appendChild(renderer.domElement);
+            rendererRef.current = renderer;
 
-        sizeRendererToSquare();
+            sizeRendererToSquare();
 
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = false;
-        controls.dampingFactor = 0;
-        controls.enableRotate = false;
-        controls.enableZoom = false;
-        controls.enablePan = true;
-        controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
-        controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
-        controlsRef.current = controls;
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = false;
+            controls.dampingFactor = 0;
+            controls.enableRotate = false;
+            controls.enableZoom = false;
+            controls.enablePan = true;
+            controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+            controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
+            controlsRef.current = controls;
 
-        let raf = 0;
-        const animate = () => {
-            controls.update();
-            renderer.render(sceneRef.current, camera);
+            let raf = 0;
+            const animate = () => {
+                if (!disposed && rendererRef.current && sceneRef.current && cameraRef.current) {
+                    controls.update();
+                    renderer.render(sceneRef.current, camera);
+                }
+                raf = requestAnimationFrame(animate);
+            };
             raf = requestAnimationFrame(animate);
-        };
-        raf = requestAnimationFrame(animate);
 
+            setThreeReady(true);
+
+            return () => cancelAnimationFrame(raf);
+        };
+        // const cleanup = boot();
+        boot();
+        
         return () => {
-            cancelAnimationFrame(raf);
-            if (renderer && container.contains(renderer.domElement)) {
+            disposed = true;
+            const container = squareRef.current;
+            const renderer = rendererRef.current;
+            if (renderer && container && container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }
             renderer?.dispose();
+            sceneRef.current = null;
+            cameraRef.current = null;
+            rendererRef.current = null;
+            controlsRef.current = null;
         };
     }, []);
 
@@ -221,8 +246,10 @@ export default function SubstrateRenderer({
 
     // Rebuild scene on data changes
     useEffect(() => {
-        defectObjectsRef.current.forEach((o) => sceneRef.current.remove(o));
-        gridObjectsRef.current.forEach((o) => sceneRef.current.remove(o));
+        if (!threeReady || !sceneRef.current || !threeRef.current) return;
+        const THREE = threeRef.current;
+        defectObjectsRef.current.forEach((o) => sceneRef.current!.remove(o));
+        gridObjectsRef.current.forEach((o) => sceneRef.current!.remove(o));
         defectObjectsRef.current = [];
         gridObjectsRef.current = [];
 
@@ -265,7 +292,7 @@ export default function SubstrateRenderer({
                 if (!hasColor) {
                     const sprite = makeQuestionMarkSprite(sizeX, sizeY);
                     sprite.position.set(item.x, item.y, 0.2);
-                    sceneRef.current.add(sprite);
+                    sceneRef.current!.add(sprite);
                     nodes.push(sprite);
                 } else {
                     const geometry = new THREE.PlaneGeometry(item.w / 300, item.h / 300);
@@ -279,7 +306,7 @@ export default function SubstrateRenderer({
                     });
                     const mesh = new THREE.Mesh(geometry, material);
                     mesh.position.set(item.x, item.y, 0);
-                    sceneRef.current.add(mesh);
+                    sceneRef.current!.add(mesh);
                     nodes.push(mesh);
                 }
             });
@@ -288,9 +315,11 @@ export default function SubstrateRenderer({
 
         fitCameraToData();
         setError(null);
-    }, [mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY]);
+    }, [threeReady, mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY]);
 
     const createGridFromCoordinates = () => {
+        if (!threeReady || !sceneRef.current || !threeRef.current) return;
+        const THREE = threeRef.current;
         const baseGridColor = 0x8cefa1;
         const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
         const gridObjs: THREE.Object3D[] = [];
@@ -324,14 +353,14 @@ export default function SubstrateRenderer({
             const geometry = new THREE.PlaneGeometry(gridWidth, gridHeight);
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
-            sceneRef.current.add(mesh);
+            sceneRef.current!.add(mesh);
             gridObjs.push(mesh);
 
             const edges = new THREE.EdgesGeometry(geometry);
             const border = new THREE.LineSegments(edges, borderMaterial);
             border.position.copy(mesh.position);
             border.renderOrder = 1;
-            sceneRef.current.add(border);
+            sceneRef.current!.add(border);
             gridObjs.push(border);
         }
 

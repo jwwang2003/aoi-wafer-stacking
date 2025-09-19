@@ -3,6 +3,7 @@ import { logCacheReport } from './console';
 import { upsertManyWaferMaps, upsertManyWaferMapsWithStats } from '@/db/wafermaps';
 import { ExcelMetadata, ExcelType, WaferFileMetadata } from '@/types/wafer';
 import { ProductDefectIngestStats, SubstrateDefectIngestStats, WaferMapIngestStats } from '@/types/ingest';
+import { getDb } from '@/db';
 
 type FolderStep = {
     name: RegExp;
@@ -338,7 +339,7 @@ export async function processNSyncExcelDataWithStats(data: ExcelMetadata[]): Pro
     const uniqueSubIds = Array.from(subIdMap.keys());
 
     // Query existing
-    const db = await (await import('@/db')).getDb();
+    const db = await getDb();
     const existingSubIdSet = new Set<string>();
     const CHUNK = 300;
     for (let i = 0; i < uniqueSubIds.length; i += CHUNK) {

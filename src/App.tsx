@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from './store';
 
 import { IconLock, IconLockOpen } from '@tabler/icons-react';
-import { Box, Button, Tooltip } from '@mantine/core';
+import { Box, Button, Tooltip, Loader, Text } from '@mantine/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ToastContainer } from 'react-toastify';
 
@@ -57,12 +57,28 @@ export function AnimatedRoutes() {
                 style={{ flex: 1, overflow: 'auto' }}
             >
                 {/* The app router is located here! */}
-                <Routes location={location}>
-                    {MenuItems.map(({ path, component: Component }) => (
-                        <Route key={path} path={path + '/*'} element={<Component />} />
-                    ))}
-                    <Route path="*" element={<div>未找到内容</div>} />
-                </Routes>
+                <Suspense
+                    fallback={
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100%'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <Loader color="teal" size="sm" />
+                                <Text c="dimmed">正在载入页面…</Text>
+                            </div>
+                        </div>
+                    }
+                >
+                    <Routes location={location}>
+                        {MenuItems.map(({ path, component: Component }) => (
+                            <Route key={path} path={path + '/*'} element={<Component />} />
+                        ))}
+                        <Route path="*" element={<div>未找到内容</div>} />
+                    </Routes>
+                </Suspense>
             </motion.div>
         </AnimatePresence>
     );
