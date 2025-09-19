@@ -2,9 +2,10 @@
   "name": "aoi-wafer-stacking",
   "description": "清纯AOI优化与叠图",
   "private": true,
-  "version": "0.1",
+  "version": "0.1.0",
   "scripts": {
-    "dev": "cross-env ANALYZE=true vite",
+    "dev": "cross-env ANALYZE=true vite --mode development",
+    "dev:prod": "cross-env ANALYZE=true vite --mode production",
     "build": "tsc && cross-env ANALYZE=true vite build",
     "preview": "vite preview",
     "tauri": "tauri",

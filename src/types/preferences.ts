@@ -6,6 +6,9 @@ export interface PreferencesState {
 
     autoTriggers: { [K in AutoTriggers]: boolean; }
 
+    // SQL debug echo: when true, DB layer prints SQL logs
+    sqlDebug: boolean;
+
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState;
     status: 'idle' | 'loading' | 'failed';

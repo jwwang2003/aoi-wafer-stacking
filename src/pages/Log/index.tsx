@@ -77,9 +77,9 @@ export default function LoggingPage() {
 
             if (destPath) {
                 await writeTextFile(destPath, content);
-                console.log('Log file saved to:', destPath);
+                console.info('%cLog file saved to:%c ' + destPath, 'color:#2563eb; font-weight:600', 'color:#334155');
             } else {
-                console.log('Save cancelled by user');
+                console.debug('%cSave cancelled by user', 'color:#6b7280');
             }
         } catch (err) {
             console.error('Error saving log file:', err);

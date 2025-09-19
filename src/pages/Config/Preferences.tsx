@@ -8,22 +8,27 @@ import {
     Divider,
     Badge,
     ScrollArea,
-    Code,
     Switch,
+    Tooltip,
 } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import { exists, stat } from '@tauri-apps/plugin-fs';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { initPreferences, revalidatePreferencesFile, resetPreferencesToDefault, setDataSourceConfigPath, setAutoTriggerState } from '@/slices/preferencesSlice';
-import { PathPicker } from '@/components';
+import { resetDataSourceConfigToDefault } from '@/slices/dataSourceConfigSlice';
+import { resetFolders } from '@/slices/dataSourceStateSlice';
+import { PathPicker, JsonCode } from '@/components';
 
 import { appDataDir, resolve } from '@tauri-apps/api/path';
-import { DATA_SOURCE_CONFIG_FILENAME, DB_FILENAME } from '@/constants';
+import { DB_FILENAME } from '@/constants';
 import { prepPreferenceWriteOut } from '@/utils/helper';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 import { norm } from '@/utils/fs';
 import { useNavigate } from 'react-router-dom';
 import { AutoTriggers } from '@/types/preferences';
+import { IS_DEV } from '@/env';
+import { AuthRole } from '@/types/auth';
 
 export default function PreferencesSubpage() {
     const navigate = useNavigate();
@@ -41,6 +46,7 @@ export default function PreferencesSubpage() {
 
     // AutoTriggers
     const autoTriggers = useAppSelector(s => s.preferences.autoTriggers);
+    const role = useAppSelector(s => s.auth.role);
     const folderDetectTrigger = autoTriggers[AutoTriggers.folderDetection];
     const searchTrigger = autoTriggers[AutoTriggers.search];
     const ingestTrigger = autoTriggers[AutoTriggers.ingest];
@@ -61,14 +67,24 @@ export default function PreferencesSubpage() {
     // NOTE: METHODS
     // =========================================================================
     const handlePrefReset = async () => {
-        await dispatch(resetPreferencesToDefault());
-        await dispatch(initPreferences());
+        try {
+            await dispatch(resetPreferencesToDefault());
+            await dispatch(initPreferences());
+            infoToast({ title: '初始化完成', message: '已重置通用设置为默认值。' });
+        } catch (err) {
+            errorToast({ title: '初始化失败', message: String(err) });
+        }
     }
 
     const handleDataSourcePathReset = async () => {
-        const dir = await appDataDir();
-        const defaultPath = await resolve(dir, DATA_SOURCE_CONFIG_FILENAME);
-        await dispatch(setDataSourceConfigPath(defaultPath));
+        try {
+            // Reset the entire data source config to defaults and clear folder state
+            await dispatch(resetDataSourceConfigToDefault());
+            await dispatch(resetFolders());
+            infoToast({ title: '初始化完成', message: '已重置数据源配置与子目录列表。' });
+        } catch (err) {
+            errorToast({ title: '初始化失败', message: String(err) });
+        }
     };
 
     // For the auto triggers
@@ -132,41 +148,49 @@ export default function PreferencesSubpage() {
 
     return (
         <Stack gap="lg">
-            <Title order={2}>通用</Title>
-            <PathPicker
-                label=""
-                value={preferenceFilePath || ''}
-                disabled
-                onChange={() => {}}
-                variant="filled"
-                withAsterisk={false}
-                mode="file"
-            />
-            <Group>
-                <Button variant="light" onClick={() => dispatch(initPreferences())} disabled={status === 'loading'}>
-                    加载配置
-                </Button>
-                <Button variant="light" onClick={handlePrefReset} disabled={status === 'loading'}>
-                    初始化配置
-                </Button>
-            </Group>
+            <Group grow align="flex-start">
+                <Stack>
+                    <Title order={2}>通用</Title>
+                    <PathPicker
+                        label=""
+                        value={preferenceFilePath || ''}
+                        disabled
+                        onChange={() => { }}
+                        variant="filled"
+                        withAsterisk={false}
+                        mode="file"
+                    />
+                    <Group>
+                        <Tooltip label="从磁盘读取并加载当前设置" withArrow>
+                            <Button variant="light" onClick={() => dispatch(initPreferences())} disabled={status === 'loading'}>
+                                加载
+                            </Button>
+                        </Tooltip>
+                        <Tooltip label="将通用设置恢复为默认值（会覆盖当前设置）" withArrow>
+                            <Button variant="light" color="red" onClick={handlePrefReset} disabled={status === 'loading'}>
+                                初始化
+                            </Button>
+                        </Tooltip>
+                    </Group>
+                </Stack>
 
-            <Divider />
-
-            <Title order={2}>数据库</Title>
-            <PathPicker
-                label=""
-                value={dbPath || ''}
-                disabled
-                onChange={() => {}}
-                variant="filled"
-                withAsterisk={false}
-                mode="file"
-            />
-            <Group>
-                <Button variant="light" onClick={() => navigate('/db/data/more')} disabled={status === 'loading'}>
-                    前往更多选择
-                </Button>
+                <Stack>
+                    <Title order={2}>数据库</Title>
+                    <PathPicker
+                        label=""
+                        value={dbPath || ''}
+                        disabled
+                        onChange={() => { }}
+                        variant="filled"
+                        withAsterisk={false}
+                        mode="file"
+                    />
+                    <Group>
+                        <Button variant="light" onClick={() => navigate('/db/data/more')} disabled={status === 'loading'}>
+                            数据库设置
+                        </Button>
+                    </Group>
+                </Stack>
             </Group>
 
             <Divider />
@@ -181,6 +205,7 @@ export default function PreferencesSubpage() {
                     offLabel="手动"
                     checked={folderDetectTrigger}
                     onChange={handleToggleFolderDetect}
+                    disabled={!IS_DEV && role !== AuthRole.Admin}
                 />
                 <Switch
                     withThumbIndicator={false}
@@ -224,43 +249,32 @@ export default function PreferencesSubpage() {
                 </Group>
             </Stack>
             <Group>
-                <Button disabled={status === 'loading'}>
-                    迁移
-                </Button>
-                <Button variant="light" color="red" disabled={status === 'loading'}>
-                    导出
-                </Button>
-                <Button variant="light" color="green" disabled={status === 'loading'}>
-                    导入
-                </Button>
-                <Button variant="outline" color="red" onClick={handleDataSourcePathReset} disabled={status === 'loading'}>
-                    初始化
-                </Button>
+                <Tooltip label="将数据源配置与子目录列表重置为默认值" withArrow>
+                    <Button variant="light" color="red" onClick={handleDataSourcePathReset} disabled={status === 'loading'}>
+                        初始化
+                    </Button>
+                </Tooltip>
             </Group>
 
             <Divider />
 
             <Title order={2}>配置文件浏览</Title>
             <Title order={3}>通用设置</Title>
-            {preferences ?
+            {preferences ? (
                 <ScrollArea>
-                    <Code block fz="xs" style={{ whiteSpace: 'pre-wrap' }}>
-                        {prepPreferenceWriteOut(preferences)}
-                    </Code>
+                    <JsonCode value={prepPreferenceWriteOut(preferences)} />
                 </ScrollArea>
-                :
+            ) : (
                 <Text>无信息</Text>
-            }
+            )}
             <Title order={3}>数据源设置</Title>
-            {dataSourceConfig ?
+            {dataSourceConfig ? (
                 <ScrollArea>
-                    <Code block fz="xs" style={{ whiteSpace: 'pre-wrap' }}>
-                        {JSON.stringify(dataSourceConfig, null, 2)}
-                    </Code>
+                    <JsonCode value={dataSourceConfig} />
                 </ScrollArea>
-                :
+            ) : (
                 <Text>无信息</Text>
-            }
+            )}
         </Stack>
     );
 }

@@ -12,10 +12,13 @@ import {
     Loader,
     NumberInput,
 } from '@mantine/core';
+import { useMantineTheme } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { IconDatabase, IconDeviceFloppy, IconEraser, IconTrash } from '@tabler/icons-react';
-import { errorToast } from '@/components/Toaster';
+import { errorToast } from '@/components/UI/Toaster';
 import { useAppSelector } from '@/hooks';
 import { AuthRole } from '@/types/auth';
+import { IS_DEV } from '@/env';
 
 // Offsets (existing)
 import { getOemOffset, upsertOemOffset, deleteOemOffset } from '@/db/offsets';
@@ -60,8 +63,10 @@ export default function Parameters({
     maxDie = 50,
     stepDie = 0.001,
 }: ParametersProps) {
+    const theme = useMantineTheme();
+    const isNarrow = useMediaQuery(`(max-width: ${theme.breakpoints.lg})`);
     const role = useAppSelector(s => s.auth.role);
-    const readOnlyMode = role !== AuthRole.Admin;
+    const readOnlyMode = !IS_DEV && role !== AuthRole.Admin;
     // --------------------------
     // Offset state
     // --------------------------
@@ -187,8 +192,8 @@ export default function Parameters({
     // --------------------------
     // Die size state
     // --------------------------
-    const [dieX, setDieX] = useState(0);
-    const [dieY, setDieY] = useState(0);
+    const [dieX, setDieX] = useState(1);
+    const [dieY, setDieY] = useState(1);
     const [loadingSize, setLoadingSize] = useState(false);
     const [savingSize, setSavingSize] = useState(false);
     const [dbHasSize, setDbHasSize] = useState<boolean>(false);
@@ -213,9 +218,10 @@ export default function Parameters({
                     lastSavedSizeRef.current = { dieX: row.die_x, dieY: row.die_y };
                     setDbHasSize(true);
                 } else {
-                    setDieX(0);
-                    setDieY(0);
-                    lastSavedSizeRef.current = { dieX: 0, dieY: 0 };
+                    // Default to 1mm x 1mm when no DB data
+                    setDieX(1);
+                    setDieY(1);
+                    lastSavedSizeRef.current = { dieX: 1, dieY: 1 };
                     setDbHasSize(false);
                 }
             } catch (e) {
@@ -255,8 +261,9 @@ export default function Parameters({
     };
 
     const handleResetSize = () => {
-        setDieX(0);
-        setDieY(0);
+        // Reset UI controls to sensible default (does not write DB)
+        setDieX(1);
+        setDieY(1);
     };
 
     const handleDeleteSize = async () => {
@@ -265,9 +272,10 @@ export default function Parameters({
         try {
             await deleteProductSize(oemProductId);
             setDbHasSize(false);
-            setDieX(0);
-            setDieY(0);
-            lastSavedSizeRef.current = { dieX: 0, dieY: 0 };
+            // Default to 1mm x 1mm after deletion
+            setDieX(1);
+            setDieY(1);
+            lastSavedSizeRef.current = { dieX: 1, dieY: 1 };
         } catch (e) {
             errorToast({ title: '删除失败', message: `删除晶粒尺寸记录失败: ${String(e)}` });
         } finally {
@@ -304,7 +312,14 @@ export default function Parameters({
     };
 
     return (
-        <Box w={320} p="md" style={{ borderRight: '1px solid var(--mantine-color-gray-3)' }}>
+        <Box
+            w={isNarrow ? '100%' : 320}
+            p="md"
+            style={{
+                borderRight: isNarrow ? 'none' : '1px solid var(--mantine-color-gray-3)',
+                borderBottom: isNarrow ? '1px solid var(--mantine-color-gray-3)' : 'none',
+            }}
+        >
             <Stack gap="xl">
                 {/* ---------------------- Die size ---------------------- */}
                 <Group justify="space-between" align="center">

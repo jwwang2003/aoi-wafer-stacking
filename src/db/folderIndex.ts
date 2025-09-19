@@ -14,7 +14,7 @@ const rowsAffected = (res: ExecResult): number => (res && typeof res === 'object
 /**
  * Retrieves a single folder index record by its path.
  *
- * @param folder_path - The relative path of the folder to look up.
+ * @param folder_path - The absolute path of the folder to look up.
  * @returns A `FolderIndexRow` if found, otherwise `null`.
  */
 export async function getFolderIndexByPath(folder_path: string): Promise<FolderIndexRow | null> {
@@ -29,7 +29,7 @@ export async function getFolderIndexByPath(folder_path: string): Promise<FolderI
 /**
  * Retrieves multiple folder index records by their paths.
  *
- * @param paths - An array of relative folder paths.
+ * @param paths - An array of absolute folder paths.
  * @returns A `Map` keyed by `folder_path` containing matching `FolderIndexRow` entries.
  *          If `paths` is empty, an empty map is returned.
  */
@@ -128,7 +128,7 @@ ON CONFLICT(folder_path) DO UPDATE SET
 /**
  * Deletes a single folder index record by its path.
  *
- * @param folder_path - The relative file path to delete.
+ * @param folder_path - The absolute folder path to delete.
  */
 export async function deleteFolderIndexByPath(file_path: string): Promise<void> {
     const db = await getDb();
@@ -138,7 +138,7 @@ export async function deleteFolderIndexByPath(file_path: string): Promise<void> 
 /**
  * Deletes multiple folder index records by their paths, in batches.
  *
- * @param folder_paths - Array of relative folder paths to delete.
+ * @param folder_paths - Array of absolute folder paths to delete.
  * @param batchSize - Max items per DELETE (default 500; keep < 999 for SQLite param limit).
  */
 export async function deleteFolderIndexesByPaths(

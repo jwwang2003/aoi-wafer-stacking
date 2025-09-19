@@ -9,7 +9,7 @@ const names: { [K in AutoTriggers]: string } = {
     'ingest': '数据摄取'
 }
 
-export default function AutoTriggerSwitch({ type }: { type: AutoTriggers }) {
+export default function AutoTriggerSwitch({ type, disabled = false }: { type: AutoTriggers; disabled?: boolean }) {
     const dispatch = useAppDispatch();
     const trigger = useAppSelector(s => s.preferences.autoTriggers[type]);
     const handleSetTrigger = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -26,6 +26,7 @@ export default function AutoTriggerSwitch({ type }: { type: AutoTriggers }) {
             offLabel="手动"
             checked={trigger}
             onChange={handleSetTrigger}
+            disabled={disabled}
         />
     );
 }

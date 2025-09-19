@@ -1,17 +1,14 @@
 import { join, desktopDir } from '@tauri-apps/api/path';
 import { mkdir } from '@tauri-apps/plugin-fs';
-
-import { useRef, useEffect, useState } from 'react';
-import { useAppSelector } from '@/hooks';
-
-import { IconDownload, IconRefresh } from '@tabler/icons-react';
-import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio } from '@mantine/core';
-
+import { useEffect, useState } from 'react';
+import { useAppSelector, useAppDispatch } from '@/hooks';
+import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge } from '@mantine/core';
 import { PathPicker } from '@/components';
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import JobManager from '@/components/JobManager';
-import LayersSelector, { LayerChoice } from '@/components/LayersSelector';
-import { infoToast, errorToast } from '@/components/Toaster';
+import LayersSelector, { LayerChoice } from '@/components/Form/LayersSelector';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 
 // DB
 import { getOemOffset } from '@/db/offsets';
@@ -21,6 +18,8 @@ import { getProductSize } from '@/db/productSize';
 import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
 import { toWaferFileMetadata } from '@/types/helpers';
+
+import { JobItem, JobStatus, queueUpdateJob, queueSetActive, queueResetAllStatus, queueClearCompleted, queueClearAll } from '@/slices/job';
 
 // WAFER
 import {
@@ -64,7 +63,7 @@ type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
 type OutputOption = {
     id: OutputId;
     label: string;
-    disabled?: boolean; // <- optional on all
+    disabled?: boolean;
 };
 
 const OUTPUT_OPTIONS = [
@@ -74,7 +73,6 @@ const OUTPUT_OPTIONS = [
     { id: 'image', label: 'Image' },
 ] as const satisfies readonly OutputOption[];
 
-// Map your DataSourceType to a short stage label shown in the UI
 function stageLabel(
     stage: string | DataSourceType,
     subStage: string = ''
@@ -86,50 +84,51 @@ function stageLabel(
             return 'CP' + subStage;
         case DataSourceType.Aoi:
             return 'AOI';
-        // If you have more, extend here:
         default:
             return String(stage ?? 'Unknown');
     }
 }
 
+const statusStyles: Record<JobStatus, { color: string; label: string }> = {
+    queued: { color: 'blue', label: '等待中' },
+    active: { color: 'orange', label: '处理中' },
+    done: { color: 'green', label: '已完成' },
+    error: { color: 'red', label: '出错' }
+};
+
 export default function WaferStacking() {
     const [layerChoice, setLayerChoice] = useState<LayerChoice>({ includeSubstrate: false, maps: [] });
-    const [tasks, setTasks] = useState<string[][]>([]);
     const [processing, setProcessing] = useState(false);
     const [finalOutputDir, setFinalOutputDir] = useState<string>('');
     const [substrateOffset, setSubstrateOffset] = useState({ x: 0, y: 0 });
-    const [dieSize, setDieSize] = useState({ x: 0, y: 0 });
-    const [imageRenderer, setImageRenderer] = useState<'bin' | 'substrate'>('substrate');
-    const lastSavedOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [imageRenderer, setImageRenderer] = useState<'bin' | 'substrate'>('bin');
+    const [batchProcessing, setBatchProcessing] = useState(false);
+    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+    const [batchErrors, setBatchErrors] = useState<Array<{ id: string; message: string }>>([]);
 
-    const job = useAppSelector((s) => s.stackingJob);
+    const dispatch = useAppDispatch();
+    const jobState = useAppSelector((s) => s.stackingJob);
+    const { queue } = jobState;
+    const currentJob = jobState;
+
     const {
         oemProductId: jobOemId,
         productId: jobProductId,
         batchId: jobBatchId,
         waferId: jobWaferId,
         subId: jobSubId,
-        waferSubstrate: jobSubstrate,
-        waferMaps: jobWaferMaps,
-    } = job;
+        waferSubstrate: jobSubstrate
+    } = currentJob;
 
     useEffect(() => {
         if (!jobOemId) return;
         let cancelled = false;
         (async () => {
             try {
-                const found = await getOemOffset(jobOemId);
-                const sizeData = await getProductSize(jobOemId);
+                const offset = await getOemOffset(jobOemId);
                 if (cancelled) return;
-                if (found) {
-                    setSubstrateOffset({ x: found.x_offset, y: found.y_offset });
-                    lastSavedOffsetRef.current = { x: found.x_offset, y: found.y_offset };
-                } else {
-                    setSubstrateOffset({ x: 0, y: 0 });
-                    lastSavedOffsetRef.current = { x: 0, y: 0 };
-                }
-                if (sizeData) {
-                    setDieSize({ x: sizeData.die_x, y: sizeData.die_y });
+                if (offset) {
+                    setSubstrateOffset({ x: offset.x_offset, y: offset.y_offset });
                 }
             } catch (e) {
                 errorToast({ title: '读取失败', message: `加载偏移量/尺寸失败: ${String(e)}` });
@@ -138,14 +137,55 @@ export default function WaferStacking() {
         return () => { cancelled = true; };
     }, [jobOemId]);
 
-    // no-op: replaced by LayersSelector
+    const processSingleJob = async (jobItem: JobItem) => {
+        dispatch(queueUpdateJob({
+            id: jobItem.id,
+            changes: { status: 'active' }
+        }));
 
-    const processMapping = async () => {
-        setProcessing(true);
         try {
+            const {
+                oemProductId,
+                productId,
+                batchId,
+                waferId,
+                subId,
+                waferSubstrate,
+                waferMaps,
+            } = jobItem;
+
+            let currentSubstrateOffset = { x: 0, y: 0 };
+            // Default to 1mm x 1mm when no DB record exists
+            let currentDieSize = { x: 1, y: 1 };
+            if (oemProductId) {
+                try {
+                    const offset = await getOemOffset(oemProductId);
+                    const sizeData = await getProductSize(oemProductId);
+                    if (offset) {
+                        currentSubstrateOffset = { x: offset.x_offset, y: offset.y_offset };
+                    }
+                    if (sizeData) {
+                        currentDieSize = { x: sizeData.die_x, y: sizeData.die_y };
+                    }
+                } catch (e) {
+                    throw new Error(`加载偏移量/尺寸失败: ${String(e)}`);
+                }
+            }
+
+            // Build selection using stage|substage keys to match job.selectedLayerKeys
+            const keyOf = (wm: typeof waferMaps[number]) => `${String(wm.stage ?? '').toLowerCase()}|${wm.sub_stage == null ? '' : String(wm.sub_stage)}`;
+            const candidateKeys = new Set(waferMaps.map(keyOf));
+            const selectedKeys = (jobItem.selectedLayerKeys && jobItem.selectedLayerKeys.length > 0)
+                ? new Set(jobItem.selectedLayerKeys.filter((k) => candidateKeys.has(String(k))))
+                : candidateKeys; // fallback: all candidates
+
             const selectedLayerInfo = [
-                ...(layerChoice.includeSubstrate && jobSubstrate ? [{ layerType: 'substrate' as const, filePath: jobSubstrate.file_path, stage: DataSourceType.Substrate }] : []),
-                ...layerChoice.maps.map((wm) => ({
+                ...((waferSubstrate && (jobItem.includeSubstrateSelected ?? !!waferSubstrate)) ? [{
+                    layerType: 'substrate' as const,
+                    filePath: waferSubstrate.file_path,
+                    stage: DataSourceType.Substrate,
+                }] : []),
+                ...waferMaps.filter((wm) => selectedKeys.has(keyOf(wm))).map((wm) => ({
                     layerType: 'map' as const,
                     filePath: wm.file_path,
                     stage: wm.stage as DataSourceType,
@@ -171,27 +211,6 @@ export default function WaferStacking() {
             });
 
             const baseTargetDir = outputDir || finalOutputDir;
-            if (!outputDir && !finalOutputDir) {
-                errorToast({
-                    title: '路径未选择',
-                    message: '请先选择导出文件的保存路径'
-                });
-                return;
-            }
-            const outputRootDir = await join(baseTargetDir, '输出文件');
-            try {
-                await mkdir(outputRootDir, { recursive: true });
-                if (outputDir) {
-                    setFinalOutputDir(outputRootDir);
-                }
-            } catch (error) {
-                console.error('创建输出目录失败:', error);
-                throw new Error(
-                    `无法创建输出目录: ${error instanceof Error ? error.message : String(error)
-                    }`
-                );
-            }
-
             const headers: Record<string, string>[] = [];
             const originalDiesList: AsciiDie[][] = [];
             const formatNamesList: string[] = [];
@@ -228,7 +247,6 @@ export default function WaferStacking() {
                                 header = extractWaferHeader(content);
                                 dies = content.map.dies;
                             }
-
                         }
                     } else if (stage === DataSourceType.Wlbi) {
                         content = await parseWaferMap(filePath);
@@ -272,7 +290,7 @@ export default function WaferStacking() {
                                 class: defect.class
                             }))
                         ];
-                        dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, substrateOffset.x, substrateOffset.y);
+                        dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, currentSubstrateOffset.x, currentSubstrateOffset.y);
                     }
                 }
 
@@ -324,14 +342,22 @@ export default function WaferStacking() {
             if (mergedDies.length === 0) {
                 throw new Error('处理后地图为空');
             }
-            console.log('Merged dies:', mergedDies);
 
             const stats = calculateStatsFromDies(mergedDies);
-            const baseFileName = jobOemId + '_' + jobProductId + '_' + jobBatchId + '_' + jobWaferId + '_' + jobSubId;
+            const baseFileName = `${oemProductId}_${productId}_${batchId}_${waferId}_${subId}`;
             const useHeader = {
                 ...tempCombinedHeaders,
                 ...(cp1Header || headers[0] || {}),
             };
+            const outputRootDir = await join(baseTargetDir, '输出文件', baseFileName);
+            try {
+                await mkdir(outputRootDir, { recursive: true });
+                if (outputDir) {
+                    setFinalOutputDir(outputRootDir);
+                }
+            } catch (error) {
+                throw new Error(`无法创建输出目录: ${error instanceof Error ? error.message : String(error)}`);
+            }
 
             if (selectedOutputs.includes('mapEx')) {
                 const mapExData = convertToMapData(mergedDies, stats, useHeader);
@@ -366,24 +392,109 @@ export default function WaferStacking() {
                     `${baseFileName}_overlayed.jpg`
                 );
                 const imageData = imageRenderer === 'substrate'
-                    ? await renderSubstrateAsJpg(mergedDies, allSubstrateDefects, dieSize.x, dieSize.y, substrateOffset, useHeader)
-                    : await renderAsJpg(mergedDies, allSubstrateDefects, dieSize.x, dieSize.y, substrateOffset, useHeader);
+                    ? await renderSubstrateAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader)
+                    : await renderAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader);
                 await exportWaferJpg(imageData, imagePath);
             }
-            infoToast({ title: '成功', message: '叠图处理已完成' });
+
+            dispatch(queueUpdateJob({
+                id: jobItem.id,
+                changes: { status: 'done' }
+            }));
+            return { success: true, jobId: jobItem.id };
         } catch (error) {
-            console.error('处理失败:', error);
+            dispatch(queueUpdateJob({
+                id: jobItem.id,
+                changes: { status: 'error' }
+            }));
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            return {
+                success: false,
+                jobId: jobItem.id,
+                message: errorMsg
+            };
+        }
+    };
+
+    const processMapping = async () => {
+        if (!jobOemId || !jobProductId) {
+            errorToast({ title: '无任务', message: '请先选择一个有效的数据集' });
+            return;
+        }
+        setProcessing(true);
+        try {
+            const tempJob: JobItem = {
+                id: 'current',
+                createdAt: Date.now(),
+                status: 'active',
+                oemProductId: jobOemId,
+                productId: jobProductId,
+                batchId: jobBatchId,
+                waferId: jobWaferId,
+                subId: jobSubId,
+                waferSubstrate: layerChoice.includeSubstrate ? jobSubstrate : null,
+                waferMaps: layerChoice.maps,
+            };
+
+            const result = await processSingleJob(tempJob);
+            if (result.success) {
+                infoToast({ title: '成功', message: '当前任务处理完成' });
+            } else {
+                errorToast({ title: '处理失败', message: result.message });
+            }
+        } catch (error) {
+            errorToast({ title: '处理失败', message: error instanceof Error ? error.message : String(error) });
         } finally {
             setProcessing(false);
         }
     };
 
-    /**
-     * 批量处理任务
-     */
-    const handleBatchProcess = () => {
-        alert(`Processing ${tasks.length} tasks`);
-        setTasks([]);
+    const handleBatchProcess = async () => {
+        const jobsToProcess = [...queue];
+        if (jobsToProcess.length === 0) {
+            errorToast({
+                title: '无任务可处理',
+                message: '任务队列为空'
+            });
+            return;
+        }
+        setBatchProcessing(true);
+        setBatchProgress({ current: 0, total: jobsToProcess.length });
+        setBatchErrors([]);
+
+        for (let i = 0; i < jobsToProcess.length; i++) {
+            const jobItem = jobsToProcess[i];
+            try {
+                const result = await processSingleJob(jobItem);
+                if (!result.success) {
+                    setBatchErrors(prev => [...prev, {
+                        id: result.jobId,
+                        message: result.message || ''
+                    }]);
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                setBatchErrors(prev => [...prev, {
+                    id: jobItem.id,
+                    message: errorMsg
+                }]);
+            } finally {
+                setBatchProgress(prev => ({ ...prev, current: i + 1 }));
+            }
+        }
+
+        setBatchProcessing(false);
+        if (batchErrors.length > 0) {
+            errorToast({
+                title: '批量处理完成',
+                message: `共 ${jobsToProcess.length} 个任务，成功 ${jobsToProcess.length - batchErrors.length} 个，失败 ${batchErrors.length} 个`
+            });
+        } else {
+            infoToast({
+                title: '批量处理完成',
+                message: `全部 ${jobsToProcess.length} 个任务处理成功`
+            });
+        }
     };
 
     const [selectedOutputs, setSelectedOutputs] = useState<OutputId[]>([
@@ -436,11 +547,15 @@ export default function WaferStacking() {
                         <Radio.Group
                             label='图像渲染器'
                             value={imageRenderer}
-                            onChange={(v) => setImageRenderer((v as 'bin' | 'substrate') || 'substrate')}
+                            onChange={(v) => {
+                                const next = (v as 'bin' | 'substrate') || 'bin';
+                                // 禁用“真实衬底样式”，强制为 bin
+                                setImageRenderer(next === 'substrate' ? 'bin' : next);
+                            }}
                         >
                             <Group gap='md' mt='xs'>
-                                <Radio value='substrate' label='Substrate 样式' />
-                                <Radio value='bin' label='Bin 颜色' />
+                                <Radio value='bin' label='方块 (Bin颜色)' />
+                                <Radio value='substrate' label='真实衬底样式' disabled />
                             </Group>
                         </Radio.Group>
                     )}
@@ -464,20 +579,84 @@ export default function WaferStacking() {
                     <Stack w='25%' gap='sm'>
                         <Title order={3}>待处理任务</Title>
                         <JobManager disableAddFromCurrent />
+                        {batchProcessing && (
+                            <Stack gap='sm'>
+                                <Progress
+                                    value={(batchProgress.current / batchProgress.total) * 100}
+                                />
+                                <Text size='sm'>
+                                    正在处理第 {batchProgress.current} 个任务
+                                </Text>
+                            </Stack>
+                        )}
+                        {!batchProcessing && batchErrors.length > 0 && (
+                            <Text size='sm'>
+                                有 {batchErrors.length} 个任务处理失败
+                            </Text>
+                        )}
+                        {!batchProcessing && queue.length > 0 && (
+                            <Group gap="sm" wrap="wrap">
+                                {Object.entries(statusStyles).map(([status, { color, label }]) => {
+                                    const count = queue.filter(j => j.status === status).length;
+                                    return count > 0 && (
+                                        <Badge key={status} color={color}>
+                                            {label}: {count}
+                                        </Badge>
+                                    );
+                                })}
+                            </Group>
+                        )}
+                        {/* Queue operations */}
+                        <Group gap="xs" wrap="wrap">
+                            <Button
+                                size="xs"
+                                variant="light"
+                                onClick={() => dispatch(queueSetActive(null))}
+                                disabled={!jobState.activeId}
+                            >
+                                取消激活
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="blue"
+                                onClick={() => dispatch(queueResetAllStatus())}
+                                disabled={queue.length === 0}
+                            >
+                                重置状态
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="orange"
+                                onClick={() => dispatch(queueClearCompleted())}
+                                disabled={!queue.some(j => j.status === 'done')}
+                            >
+                                清除已完成
+                            </Button>
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="red"
+                                onClick={() => dispatch(queueClearAll())}
+                                disabled={queue.length === 0}
+                            >
+                                清空全部
+                            </Button>
+                        </Group>
                     </Stack>
-
                     <Stack style={{ flex: 1, minWidth: 0 }}>
-                        {job && jobSubstrate ? (
+                        {(jobOemId && jobProductId && jobWaferId != null) ? (
                             <>
                                 <Title order={4}>当前Wafer数据</Title>
                                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
-                                    {jobWaferMaps.map((r, i) => (
+                                    {layerChoice.maps.map((r, i) => (
                                         <WaferFileMetadataCard
                                             key={`${r.idx}-${i}`}
                                             data={toWaferFileMetadata(r)}
                                         />
                                     ))}
-                                    {jobSubstrate && (
+                                    {layerChoice.includeSubstrate && jobSubstrate && (
                                         <ExcelMetadataCard
                                             data={{
                                                 ...jobSubstrate,
@@ -536,32 +715,20 @@ export default function WaferStacking() {
                                 }
                                 loading={processing}
                                 onClick={processMapping}
-                                disabled={selectedOutputs.length === 0}
+                                disabled={selectedOutputs.length === 0 || !jobOemId || jobWaferId == null}
                             >
                                 处理当前
                             </Button>
+                            <Button
+                                color='green'
+                                onClick={handleBatchProcess}
+                                disabled={batchProcessing}
+                                leftSection={batchProcessing ? <IconRefresh size={16} /> : <IconRepeat size={16} />}
+                            >
+                                批量处理
+                            </Button>
                         </Group>
                     </Stack>
-                </Group>
-
-                <Divider />
-
-                <Group align='end' grow>
-                    <Button
-                        color='blue'
-                        leftSection={
-                            processing ? (
-                                <IconRefresh size={16} />
-                            ) : (
-                                <IconDownload size={16} />
-                            )
-                        }
-                        loading={processing}
-                        onClick={processMapping}
-                        disabled={selectedOutputs.length === 0}
-                    >
-                        处理全部
-                    </Button>
                 </Group>
             </Stack>
         </Container>

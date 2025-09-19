@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useAppSelector } from '@/hooks';
 import { AppDispatch } from '@/store';
@@ -21,7 +21,7 @@ import {
     Title,
     Tooltip,
 } from '@mantine/core';
-import { IconCheck, IconPlayerPlay, IconPlus, IconTrash, IconPencil, IconDeviceFloppy, IconX } from '@tabler/icons-react';
+import { IconPlayerPlay, IconPlus, IconTrash, IconPencil, IconDeviceFloppy, IconX } from '@tabler/icons-react';
 
 type EditState = {
     name?: string;

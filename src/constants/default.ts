@@ -14,6 +14,7 @@ export const initialPreferencesState: PreferencesState = {
         search: false,
         ingest: false,
     },
+    sqlDebug: false,
 
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState.Initial,

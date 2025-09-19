@@ -1,4 +1,4 @@
-import { getDb, MAX_PARAMS, vacuum, withRetry } from '@/db';
+import { getDb, MAX_PARAMS, vacuum, withRetry, existingSet as getExistingSet } from '@/db';
 import { WaferMapRow } from './types'; // Ensure this includes "idx?: number"
 
 const TABLE = 'wafer_maps';
@@ -214,7 +214,18 @@ export async function upsertManyWaferMaps(
     // Last-wins de-dupe by file_path (UPSERT key)
     const byFile = new Map<string, Omit<WaferMapRow, 'idx'> | WaferMapRow>();
     for (const r of rows) if (r?.file_path) byFile.set(r.file_path, r);
-    const unique = Array.from(byFile.values());
+    let unique = Array.from(byFile.values());
+    if (!unique.length) return 0;
+
+    // Preflight FK: product_id must exist in oem_product_map(product_id)
+    const productIds = Array.from(new Set(unique.map(r => String(r.product_id)).filter(Boolean)));
+    const existingProducts = await getExistingSet('oem_product_map', 'product_id', productIds);
+    const before = unique.length;
+    unique = unique.filter(r => existingProducts.has(String(r.product_id)));
+    const skippedFk = before - unique.length;
+    if (skippedFk > 0) {
+        console.warn(`[wafermaps] Skipping ${skippedFk} rows due to missing product_id in oem_product_map`);
+    }
     if (!unique.length) return 0;
 
     // params per row:
@@ -262,6 +273,118 @@ ON CONFLICT(file_path) DO UPDATE SET
     }
 
     return written;
+}
+
+/** Upsert many with statistics (by unique file_path). */
+export async function upsertManyWaferMapsWithStats(
+    rows: Array<Omit<WaferMapRow, 'idx'> | WaferMapRow>
+): Promise<{
+    written: number;
+    unique: number;
+    duplicates: number;
+    duplicateFiles: string[];
+    existing: number;
+    insertedFiles: string[];
+    updatedFiles: string[];
+    fkMissingFiles: string[];
+    fkMissingProductIds: string[];
+}> {
+    if (!rows?.length) return { written: 0, unique: 0, duplicates: 0, duplicateFiles: [], existing: 0, insertedFiles: [], updatedFiles: [], fkMissingFiles: [], fkMissingProductIds: [] };
+    const db = await getDb();
+
+    // De-dupe by file_path and count duplicates
+    const byFile = new Map<string, Omit<WaferMapRow, 'idx'> | WaferMapRow>();
+    let duplicateCount = 0;
+    const duplicateSet = new Set<string>();
+    for (const r of rows) {
+        if (!r?.file_path) continue;
+        if (byFile.has(r.file_path)) {
+            duplicateCount += 1;
+            duplicateSet.add(r.file_path);
+        }
+        byFile.set(r.file_path, r);
+    }
+    let unique = Array.from(byFile.values());
+    if (!unique.length) return { written: 0, unique: 0, duplicates: duplicateCount, duplicateFiles: [], existing: 0, insertedFiles: [], updatedFiles: [], fkMissingFiles: [], fkMissingProductIds: [] };
+
+    // FK preflight: product_id must exist
+    const productIds = Array.from(new Set(unique.map(r => String(r.product_id)).filter(Boolean)));
+    const existingProducts = await getExistingSet('oem_product_map', 'product_id', productIds);
+    const fkMissing = unique.filter(r => !existingProducts.has(String(r.product_id)));
+    const fkMissingFiles = fkMissing.map(r => r.file_path);
+    const fkMissingProductIds = Array.from(new Set(fkMissing.map(r => String(r.product_id))));
+    unique = unique.filter(r => existingProducts.has(String(r.product_id)));
+    if (!unique.length) return { written: 0, unique: 0, duplicates: duplicateCount, duplicateFiles: Array.from(duplicateSet), existing: 0, insertedFiles: [], updatedFiles: [], fkMissingFiles, fkMissingProductIds };
+
+    const files = unique.map(r => r.file_path);
+
+    // Find existing file_paths in DB in chunks using IN (...)
+    const existingSet = new Set<string>();
+    const ROWS_PER_CHUNK = 300;
+    for (let i = 0; i < files.length; i += ROWS_PER_CHUNK) {
+        const batch = files.slice(i, i + ROWS_PER_CHUNK);
+        const placeholders = batch.map(() => '?').join(',');
+        const found = await db.select<{ file_path: string }[]>(
+            `SELECT file_path FROM ${TABLE} WHERE file_path IN (${placeholders})`,
+            batch
+        );
+        for (const f of found) existingSet.add(f.file_path);
+    }
+
+    const updatedFiles: string[] = [];
+    const insertedFiles: string[] = [];
+    for (const fp of files) (existingSet.has(fp) ? updatedFiles : insertedFiles).push(fp);
+
+    // Perform UPSERT in same fashion
+    const PARAMS_PER_ROW = 8;
+    const LIMIT = typeof MAX_PARAMS === 'number' ? MAX_PARAMS : 999;
+    const ROWS_PER_INSERT = Math.max(1, Math.floor(LIMIT / PARAMS_PER_ROW));
+
+    let written = 0;
+    for (let i = 0; i < unique.length; i += ROWS_PER_INSERT) {
+        const batch = unique.slice(i, i + ROWS_PER_INSERT);
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const sql = `
+INSERT INTO ${TABLE}
+    (product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path)
+VALUES ${placeholders}
+ON CONFLICT(file_path) DO UPDATE SET
+    product_id   = excluded.product_id,
+    batch_id     = excluded.batch_id,
+    wafer_id     = excluded.wafer_id,
+    stage        = excluded.stage,
+    sub_stage    = excluded.sub_stage,
+    retest_count = excluded.retest_count,
+    time         = excluded.time
+        `;
+        const params: Array<string | number | null> = [];
+        for (const r of batch) {
+            params.push(
+                r.product_id,
+                r.batch_id,
+                r.wafer_id,
+                r.stage,
+                r.sub_stage ?? null,
+                r.retest_count ?? 0,
+                r.time ?? null,
+                r.file_path
+            );
+        }
+        await withRetry(() => db.execute(sql, params));
+        written += batch.length;
+    }
+
+    return {
+        written,
+        unique: unique.length,
+        duplicates: duplicateCount,
+        duplicateFiles: Array.from(duplicateSet),
+        existing: existingSet.size,
+        insertedFiles,
+        updatedFiles,
+        fkMissingFiles,
+        fkMissingProductIds,
+    };
 }
 
 /** Bulk insert (no upsert) — use for brand-new files only. */

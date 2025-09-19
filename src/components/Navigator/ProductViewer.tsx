@@ -11,55 +11,12 @@ import { AppDispatch } from '@/store';
 import { clearJob, setJob } from '@/slices/job';
 import type { OemProductMapRow, WaferMapRow } from '@/db/types';
 
-import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/MetadataCard';
+import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import SubstratePane from '@/components/Substrate';
 
 import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
 import { toWaferFileMetadata } from '@/types/helpers';
-
-// ---------------- 中文 UI 文案 ----------------
-const zh = {
-    searchPlaceholder: '搜索…',
-    reload: '刷新',
-    none: '无数据',
-    selectProduct: '请选择产品',
-    selectBatch: '请选择批次',
-    selectWafer: '请选择晶圆',
-    noBatches: '没有批次',
-    noWafers: '没有晶圆',
-    noSubs: '没有子编号',
-
-    mapped: (n: number) => `已映射 ${n} 条`,
-    batchesCount: (n: number) => `共 ${n} 个批次`,
-    wafersCount: (n: number) => `共 ${n} 片晶圆`,
-    subsCount: (n: number) => `共 ${n} 个子编号`,
-
-    oemProduct: 'OEM产品',
-    batches: '批次',
-    wafers: '晶圆',
-    subs: '子编号',
-
-    waferMaps: '晶圆叠图',
-    selected: '当前选择',
-
-    oem: 'OEM',
-    product: '产品',
-    batch: '批次号',
-    wafer: '晶圆号',
-    subId: '子编号',
-
-    oemIdCol: 'OEM编号',
-    productIdCol: '产品编号',
-    lotIdCol: '批次号',
-    waferIdCol: '晶圆号',
-    filePathCol: '文件路径',
-
-    clickToLoad: '点击加载晶圆叠图',
-    selectSubTip: '请选择子编号以加载叠图。',
-
-    noMaps: '当前选择没有叠图数据。',
-};
 
 // UI spacing for the columns
 const LIST_MAH = { base: 300 } as const;
@@ -299,7 +256,7 @@ export default function ProductBatchNavigator({
         if (subsState.loading) return; // 等待加载完成
         if (!subsState.data?.length) return; // 无可用子编号
         void loadWaferMaps(subsState.data[0].sub_id);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [selectedWaferId, selectedSubId, subsState.loading, subsState.data]);
 
     // 5) 叠图面板（点击子编号后加载）
@@ -366,9 +323,9 @@ export default function ProductBatchNavigator({
                     style={{ flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column' }}
                 >
                     <Group justify="space-between" mb="xs">
-                        <Title order={4}>{zh.oemProduct}</Title>
-                        <Tooltip label={zh.reload} withArrow>
-                            <ActionIcon variant="light" onClick={mappingsState.reload} aria-label={zh.reload}>
+                        <Title order={4}>{'OEM产品'}</Title>
+                        <Tooltip label={'刷新'} withArrow>
+                            <ActionIcon variant="light" onClick={mappingsState.reload} aria-label={'刷新'}>
                                 <IconRefresh size={16} />
                             </ActionIcon>
                         </Tooltip>
@@ -380,8 +337,8 @@ export default function ProductBatchNavigator({
                         <Table striped highlightOnHover withRowBorders={false} horizontalSpacing="sm" verticalSpacing="xs">
                             <Table.Thead {...stickyHeadProps}>
                                 <Table.Tr>
-                                    <Table.Th>{zh.oemIdCol}</Table.Th>
-                                    <Table.Th>{zh.productIdCol}</Table.Th>
+                                    <Table.Th>{'OEM编号'}</Table.Th>
+                                    <Table.Th>{'产品编号'}</Table.Th>
                                 </Table.Tr>
                                 {/* ▼ NEW: 每列表头下的筛选行 */}
                                 <Table.Tr>
@@ -390,7 +347,7 @@ export default function ProductBatchNavigator({
                                             value={oemFilter}
                                             onChange={(e) => setOemFilter(e.currentTarget.value)}
                                             onClear={() => setOemFilter('')}
-                                            placeholder={`${zh.oemIdCol} ${zh.searchPlaceholder}`}
+                                            placeholder={'OEM编号 搜索…'}
                                         />
                                     </Table.Th>
                                     <Table.Th>
@@ -398,7 +355,7 @@ export default function ProductBatchNavigator({
                                             value={productFilter}
                                             onChange={(e) => setProductFilter(e.currentTarget.value)}
                                             onClear={() => setProductFilter('')}
-                                            placeholder={`${zh.productIdCol} ${zh.searchPlaceholder}`}
+                                            placeholder={'产品编号 搜索…'}
                                         />
                                     </Table.Th>
                                 </Table.Tr>
@@ -407,7 +364,7 @@ export default function ProductBatchNavigator({
                                 {mappingsState.loading ? (
                                     <Table.Tr><Table.Td colSpan={2}><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : filteredMappings.length === 0 ? (
-                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{zh.none}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" ta="center">{'无数据'}</Text></Table.Td></Table.Tr>
                                 ) : filteredMappings.map((row) => {
                                     const active = row.product_id === selectedProductId || row.oem_product_id === selectedOemId;
                                     return (
@@ -426,8 +383,8 @@ export default function ProductBatchNavigator({
                     </ScrollArea.Autosize>
 
                     <Group justify="space-between" mt="xs">
-                        <Text size="xs" c="dimmed">{zh.mapped(filteredMappings.length)}</Text>
-                        {selectedProductId && <Badge radius="sm" variant="light">{zh.product}: {selectedProductId}</Badge>}
+                        <Text size="xs" c="dimmed">{`已映射 ${filteredMappings.length} 条`}</Text>
+                        {selectedProductId && <Badge radius="sm" variant="light">{'产品'}: {selectedProductId}</Badge>}
                     </Group>
                 </Card>
 
@@ -439,9 +396,9 @@ export default function ProductBatchNavigator({
                     style={{ flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column' }}
                 >
                     <Group justify="space-between" mb="xs">
-                        <Title order={4}>{zh.batches}</Title>
+                        <Title order={4}>{'批次'}</Title>
                         <Group gap={1} align="end" style={{ alignItems: 'center' }}>
-                            <Text size="xs" c="dimmed">{zh.oem}</Text>
+                            <Text size="xs" c="dimmed">{'OEM'}</Text>
                             <Text size="sm" fw={600}>{selectedOemId ?? '—'}</Text>
                         </Group>
                     </Group>
@@ -449,7 +406,7 @@ export default function ProductBatchNavigator({
                     <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
                         <Table striped highlightOnHover withRowBorders={false}>
                             <Table.Thead {...stickyHeadProps}>
-                                <Table.Tr><Table.Th>{zh.lotIdCol}</Table.Th></Table.Tr>
+                                {/* <Table.Tr><Table.Th>{zh.lotIdCol}</Table.Th></Table.Tr> */}
                                 {/* ▼ NEW: 批次筛选 */}
                                 <Table.Tr>
                                     <Table.Th>
@@ -457,7 +414,7 @@ export default function ProductBatchNavigator({
                                             value={lotFilter}
                                             onChange={(e) => setLotFilter(e.currentTarget.value)}
                                             onClear={() => setLotFilter('')}
-                                            placeholder={`${zh.lotIdCol} ${zh.searchPlaceholder}`}
+                                            placeholder={'批次号 搜索…'}
                                         />
                                     </Table.Th>
                                 </Table.Tr>
@@ -466,9 +423,9 @@ export default function ProductBatchNavigator({
                                 {batchesState.loading ? (
                                     <Table.Tr><Table.Td><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : !selectedProductId ? (
-                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.selectProduct}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{'请选择产品'}</Text></Table.Td></Table.Tr>
                                 ) : filteredBatches.length === 0 ? (
-                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.noBatches}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{'没有批次'}</Text></Table.Td></Table.Tr>
                                 ) : filteredBatches.map(b => {
                                     const active = b.lot_id === selectedLotId;
                                     return (
@@ -485,7 +442,7 @@ export default function ProductBatchNavigator({
                         </Table>
                     </ScrollArea.Autosize>
                     <Group justify="space-between" mt="xs">
-                        <Text size="xs" c="dimmed">{selectedProductId ? zh.batchesCount(filteredBatches.length) : '—'}</Text>
+                        <Text size="xs" c="dimmed">{selectedProductId ? `共 ${filteredBatches.length} 个批次` : '—'}</Text>
                     </Group>
                 </Card>
 
@@ -497,9 +454,9 @@ export default function ProductBatchNavigator({
                     style={{ flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column' }}
                 >
                     <Group justify="space-between" mb="xs">
-                        <Title order={4}>{zh.wafers}</Title>
+                        <Title order={4}>{'晶圆'}</Title>
                         <Group gap={1} align="end" style={{ alignItems: 'center' }}>
-                            <Text size="xs" c="dimmed">{zh.batch}</Text>
+                            <Text size="xs" c="dimmed">{'批次号'}</Text>
                             <Text size="sm" fw={600}>{selectedLotId ?? '—'}</Text>
                         </Group>
                     </Group>
@@ -507,7 +464,7 @@ export default function ProductBatchNavigator({
                     <ScrollArea.Autosize mah={LIST_MAH} offsetScrollbars type="hover" scrollbarSize={8} style={{ flex: 1 }}>
                         <Table striped highlightOnHover withRowBorders={false}>
                             <Table.Thead {...stickyHeadProps}>
-                                <Table.Tr><Table.Th>{zh.waferIdCol}</Table.Th></Table.Tr>
+                                {/* <Table.Tr><Table.Th>{zh.waferIdCol}</Table.Th></Table.Tr> */}
                                 {/* ▼ NEW: 晶圆筛选 */}
                                 <Table.Tr>
                                     <Table.Th>
@@ -515,7 +472,7 @@ export default function ProductBatchNavigator({
                                             value={waferFilter}
                                             onChange={(e) => setWaferFilter(e.currentTarget.value)}
                                             onClear={() => setWaferFilter('')}
-                                            placeholder={`${zh.waferIdCol} ${zh.searchPlaceholder}`}
+                                            placeholder={'晶圆号 搜索…'}
                                         />
                                     </Table.Th>
                                 </Table.Tr>
@@ -524,9 +481,9 @@ export default function ProductBatchNavigator({
                                 {wafersState.loading ? (
                                     <Table.Tr><Table.Td><Group justify="center" p="md"><Loader size="sm" /></Group></Table.Td></Table.Tr>
                                 ) : !selectedLotId ? (
-                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.selectBatch}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{'请选择批次'}</Text></Table.Td></Table.Tr>
                                 ) : filteredWafers.length === 0 ? (
-                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{zh.noWafers}</Text></Table.Td></Table.Tr>
+                                    <Table.Tr><Table.Td><Text c="dimmed" ta="center">{'没有晶圆'}</Text></Table.Td></Table.Tr>
                                 ) : filteredWafers.map(w => {
                                     const active = w.wafer_id === selectedWaferId;
                                     return (
@@ -543,7 +500,7 @@ export default function ProductBatchNavigator({
                         </Table>
                     </ScrollArea.Autosize>
                     <Group justify="space-between" mt="xs">
-                        <Text size="xs" c="dimmed">{selectedLotId ? zh.wafersCount(filteredWafers.length) : '—'}</Text>
+                        <Text size="xs" c="dimmed">{selectedLotId ? `共 ${filteredWafers.length} 片晶圆` : '—'}</Text>
                     </Group>
                 </Card>
 
@@ -553,9 +510,9 @@ export default function ProductBatchNavigator({
             {/* 晶圆叠图面板 */}
             <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column' }}>
                 <Group justify="space-between" mb="xs">
-                    <Title order={4}>{zh.waferMaps + ' (active)'}</Title>
+                    <Title order={4}>{'晶圆叠图 (active)'}</Title>
                     <Stack gap={0} align="end">
-                        <Text size="xs" c="dimmed">{zh.selected}</Text>
+                        <Text size="xs" c="dimmed">{'当前选择'}</Text>
                         <Text size="sm" fw={600}>
                             {/* OEM/Product */}
                             {jobProductId
