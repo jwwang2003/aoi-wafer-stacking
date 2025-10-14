@@ -272,6 +272,7 @@ export default function ProductBatchNavigator({
         waferSubstrate: jobSubstrate,
         waferMaps: jobWaferMaps,
     } = job;
+    const waferSelected = jobWaferId !== null && jobWaferId !== undefined;
 
     async function loadWaferMaps(sub_id: string) {
         setSelectedSubId(sub_id);
@@ -508,9 +509,21 @@ export default function ProductBatchNavigator({
             </Group>
 
             {/* 晶圆叠图面板 */}
-            <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column' }}>
+            <Card
+                withBorder
+                radius="lg"
+                p="sm"
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    ...(waferSelected ? {
+                        borderColor: 'var(--mantine-color-blue-5)',
+                        boxShadow: '0 0 0 1px var(--mantine-color-blue-1) inset',
+                    } : {}),
+                }}
+            >
                 <Group justify="space-between" mb="xs">
-                    <Title order={4}>{'晶圆叠图 (active)'}</Title>
+                    <Title order={4}>{''}</Title>
                     <Stack gap={0} align="end">
                         <Text size="xs" c="dimmed">{'当前选择'}</Text>
                         <Text size="sm" fw={600}>

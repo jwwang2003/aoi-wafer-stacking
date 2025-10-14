@@ -244,6 +244,24 @@ const stackingJobSlice = createSlice({
                 waferMaps: selectedMaps,
             };
             state.queue.push(job);
+            // Newly added job becomes the active one
+            if (state.activeId) {
+                const prev = state.queue.find(x => x.id === state.activeId);
+                if (prev && prev.status !== 'done') {
+                    prev.status = 'queued';
+                }
+            }
+            state.activeId = id;
+            job.status = 'active';
+            state.oemProductId = job.oemProductId;
+            state.productId = job.productId;
+            state.batchId = job.batchId;
+            state.waferId = job.waferId;
+            state.subId = job.subId;
+            state.waferSubstrate = job.waferSubstrate;
+            state.waferMaps = job.waferMaps.slice();
+            state.includeSubstrateSelected = !!job.waferSubstrate;
+            state.selectedLayerKeys = pickHighestRetestPerGroup(state.waferMaps).map((r) => layerKey(r));
         },
         queueAddJob(state, action: PayloadAction<Omit<JobItem, 'id' | 'createdAt' | 'status'>>) {
             const id = uuidv4();
@@ -314,7 +332,8 @@ const stackingJobSlice = createSlice({
             state.waferMaps = j.waferMaps.slice();
             // reflect selection from the active job
             state.includeSubstrateSelected = !!j.waferSubstrate;
-            state.selectedLayerKeys = pickHighestRetestPerGroup(state.waferMaps).map((r) => layerKey(r));
+            const selectedLayers = pickHighestRetestPerGroup(state.waferMaps);
+            state.selectedLayerKeys = selectedLayers.reverse().map((r) => layerKey(r));
         },
         // Reset all job statuses to queued and unset active
         queueResetAllStatus(state) {

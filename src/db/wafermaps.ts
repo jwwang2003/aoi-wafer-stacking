@@ -106,6 +106,74 @@ LIMIT ? OFFSET ?`,
     );
 }
 
+export interface WaferMapQueryOptions {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    stage?: string | null;
+}
+
+export async function queryWaferMaps(
+    options: WaferMapQueryOptions = {}
+): Promise<{ rows: WaferMapRow[]; total: number }> {
+    const db = await getDb();
+    const page = Math.max(1, options.page ?? 1);
+    const pageSize = Math.min(500, Math.max(1, options.pageSize ?? 50));
+    const offset = (page - 1) * pageSize;
+
+    const whereClauses: string[] = [];
+    const params: Array<string | number | null> = [];
+
+    const search = options.search?.trim();
+    if (search) {
+        const like = `%${search}%`;
+        whereClauses.push(`(
+product_id LIKE ?
+OR batch_id LIKE ?
+OR file_path LIKE ?
+OR stage LIKE ?
+OR IFNULL(sub_stage, '') LIKE ?
+)`);
+        params.push(like, like, like, like, like);
+    }
+
+    const stage = options.stage?.trim();
+    if (stage) {
+        whereClauses.push(`stage = ?`);
+        params.push(stage);
+    }
+
+    const where = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const countRows = await db.select<{ total: number }[]>(
+        `SELECT COUNT(*) AS total FROM ${TABLE} ${where}`,
+        params
+    );
+    const total = countRows[0]?.total ?? 0;
+
+    const rows = await db.select<WaferMapRow[]>(
+        `
+SELECT idx, product_id, batch_id, wafer_id, stage, sub_stage, retest_count, time, file_path
+FROM ${TABLE}
+${where}
+ORDER BY product_id, batch_id, wafer_id, COALESCE(time, 0) DESC, idx DESC
+LIMIT ? OFFSET ?`,
+        [...params, pageSize, offset]
+    );
+
+    return { rows, total };
+}
+
+export async function getDistinctWaferStages(): Promise<string[]> {
+    const db = await getDb();
+    const rows = await db.select<{ stage: string | null }[]>(
+        `SELECT DISTINCT stage FROM ${TABLE} WHERE IFNULL(TRIM(stage), '') <> '' ORDER BY stage COLLATE NOCASE`
+    );
+    return rows
+        .map((row) => row.stage?.trim())
+        .filter((stage): stage is string => Boolean(stage));
+}
+
 /** Insert a new row (no idx). Will throw on duplicate file_path. Returns the new idx. */
 export async function insertWaferMap(row: Omit<WaferMapRow, 'idx'>): Promise<number> {
     const db = await getDb();

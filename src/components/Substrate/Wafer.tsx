@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as THREE from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
 
 import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
+import { IconRefresh } from '@tabler/icons-react';
 
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
 
@@ -35,6 +36,7 @@ export default function SubstrateRenderer({
 
     const [error, setError] = useState<string | null>(null);
     const [zoom, setZoom] = useState(1);
+    const [reloadToken, setReloadToken] = useState(0);
 
     const threeRef = useRef<typeof import('three') | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -45,7 +47,17 @@ export default function SubstrateRenderer({
     const defectObjectsRef = useRef<THREE.Object3D[]>([]);
     const gridObjectsRef = useRef<THREE.Object3D[]>([]);
     const { x: offsetX, y: offsetY } = gridOffset;
+    const shouldResetViewRef = useRef(false);
 
+
+    // Manual refresh — re-run WebGL init effect
+    const refreshRenderer = useCallback(() => {
+        setError('正在重载渲染器…');
+        shouldResetViewRef.current = true;
+        setZoom(1);
+        setThreeReady(false);
+        setReloadToken((token) => token + 1);
+    }, []);
 
     // Fit to current square size
     const sizeRendererToSquare = () => {
@@ -144,6 +156,10 @@ export default function SubstrateRenderer({
     // Init: dynamically import three.js and OrbitControls, then construct scene
     useEffect(() => {
         let disposed = false;
+        let animationId = 0;
+        let contextLostHandler: EventListener | null = null;
+        let contextRestoredHandler: EventListener | null = null;
+
         const boot = async () => {
             const container = squareRef.current;
             if (!container) return;
@@ -180,6 +196,22 @@ export default function SubstrateRenderer({
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
 
+            const canvas = renderer.domElement;
+            contextLostHandler = (event: Event) => {
+                event.preventDefault();
+                if (disposed) return;
+                console.warn('[SubstrateRenderer] WebGL context lost; scheduling refresh.');
+                setThreeReady(false);
+                setError('检测到 WebGL 上下文丢失，正在尝试恢复…');
+                requestAnimationFrame(() => refreshRenderer());
+            };
+            contextRestoredHandler = () => {
+                console.info('[SubstrateRenderer] WebGL context restored.');
+                setError(null);
+            };
+            canvas.addEventListener('webglcontextlost', contextLostHandler as EventListener, { passive: false });
+            canvas.addEventListener('webglcontextrestored', contextRestoredHandler as EventListener);
+
             sizeRendererToSquare();
 
             const controls = new OrbitControls(camera, renderer.domElement);
@@ -192,37 +224,50 @@ export default function SubstrateRenderer({
             controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
             controlsRef.current = controls;
 
-            let raf = 0;
             const animate = () => {
                 if (!disposed && rendererRef.current && sceneRef.current && cameraRef.current) {
                     controls.update();
                     renderer.render(sceneRef.current, camera);
                 }
-                raf = requestAnimationFrame(animate);
+                animationId = requestAnimationFrame(animate);
             };
-            raf = requestAnimationFrame(animate);
+            animationId = requestAnimationFrame(animate);
 
             setThreeReady(true);
-
-            return () => cancelAnimationFrame(raf);
         };
-        // const cleanup = boot();
+
         boot();
         
         return () => {
             disposed = true;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
             const container = squareRef.current;
             const renderer = rendererRef.current;
+            const canvas = renderer?.domElement;
+            if (canvas) {
+                if (contextLostHandler) {
+                    canvas.removeEventListener('webglcontextlost', contextLostHandler);
+                }
+                if (contextRestoredHandler) {
+                    canvas.removeEventListener('webglcontextrestored', contextRestoredHandler);
+                }
+            }
             if (renderer && container && container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }
             renderer?.dispose();
+            sceneRef.current?.clear();
             sceneRef.current = null;
             cameraRef.current = null;
             rendererRef.current = null;
+            controlsRef.current?.dispose();
             controlsRef.current = null;
+            defectObjectsRef.current = [];
+            gridObjectsRef.current = [];
         };
-    }, []);
+    }, [refreshRenderer, reloadToken]);
 
     // Apply zoom
     useEffect(() => {
@@ -314,6 +359,10 @@ export default function SubstrateRenderer({
         }
 
         fitCameraToData();
+        if (shouldResetViewRef.current) {
+            centerCameraToData();
+            shouldResetViewRef.current = false;
+        }
         setError(null);
     }, [threeReady, mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY]);
 
@@ -435,7 +484,16 @@ export default function SubstrateRenderer({
                     <Button size="xs" variant="light" onClick={() => centerCameraToData()}>居中视图</Button>
                     <Button size="xs" variant="light" onClick={() => setZoom(1)}>重置缩放</Button>
                 </Group>
-                <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} />
+                <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} py="md"/>
+                <Button
+                    size="xs"
+                    variant="outline"
+                    mt="xs"
+                    leftSection={<IconRefresh size={14} />}
+                    onClick={refreshRenderer}
+                >
+                    刷新渲染器
+                </Button>
             </Paper>
 
             {error && (

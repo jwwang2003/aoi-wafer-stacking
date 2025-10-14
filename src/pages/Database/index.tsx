@@ -17,10 +17,12 @@ import { useMemo } from 'react';
 // Sub-pages
 import Cache from './Cache';
 import Data from './Data';
+import OffsetsAndSizes from './OffsetsAndSizes';
 import ComingSoon from '../ComingSoon';
 
 const subpageOptions = [
-    { label: 'Wafer数据据', value: 'data' },
+    { label: '晶圆数据', value: 'data' },
+    { label: '晶粒尺寸 / 偏移', value: 'offsets' },
     { label: '缓存', value: 'cache' },
 ];
 
@@ -55,6 +57,7 @@ export default function DatabaseIndexPage() {
                     <Routes>
                         <Route path="/" element={<Navigate to="data" replace />} />
                         <Route path="data/*" element={<Data />} />
+                        <Route path="offsets" element={<OffsetsAndSizes />} />
                         <Route path="cache" element={<Cache />} />
                         <Route path="*" element={<ComingSoon />} />
                     </Routes>
