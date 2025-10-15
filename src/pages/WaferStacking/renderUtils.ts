@@ -108,6 +108,7 @@ export function getColorByBin(bin: BinValue, defaultColor: number = 0xcccccc): n
             case 20: return 0x594543;
         }
     } else if (isSpecialBin(bin)) {
+        if (bin.special === 'S') return 0xd1191f;
         const numericBin = LETTER_TO_NUMBER_MAP[bin.special];
         if (numericBin !== undefined) {
             return getColorByBin({ number: numericBin }, defaultColor);
