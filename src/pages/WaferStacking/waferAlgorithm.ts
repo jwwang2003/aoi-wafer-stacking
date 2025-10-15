@@ -385,8 +385,8 @@ export const convertToHexMapData = (
             wafer: header?.['Wafer ID'] || 'Unknown',
             rowCt: maxY - minY + 1,
             colCt: maxX - minX + 1,
-            refpx: -1, //未知
-            refpy: -1, //未知
+            refpx: 0, //未知
+            refpy: 0, //未知
             dutMs: 'MM',
             xDies: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) / 1000 : 0,
             yDies: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) / 1000 : 0,
