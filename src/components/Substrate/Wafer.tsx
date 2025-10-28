@@ -18,6 +18,7 @@ interface SubstrateRendererProps {
     sheetsData: SubstrateDefectXlsResult;
     gridOffset?: { x: number; y: number };
     dies: AsciiDie[] | WaferMapDie[] | null;
+    defectSizeOffset?: { x: number; y: number };
 }
 
 export default function SubstrateRenderer({
@@ -30,6 +31,7 @@ export default function SubstrateRenderer({
     sheetsData,
     gridOffset = { x: 0, y: 0 },
     dies,
+    defectSizeOffset = { x: 200, y: 60 },
 }: SubstrateRendererProps) {
     // This is the square box (aspect ratio 1:1)
     const squareRef = useRef<HTMLDivElement>(null);
@@ -47,6 +49,7 @@ export default function SubstrateRenderer({
     const defectObjectsRef = useRef<THREE.Object3D[]>([]);
     const gridObjectsRef = useRef<THREE.Object3D[]>([]);
     const { x: offsetX, y: offsetY } = gridOffset;
+    const { x: offsetX_defect, y: offsetY_defect } = defectSizeOffset;
     const shouldResetViewRef = useRef(false);
 
 
@@ -237,7 +240,7 @@ export default function SubstrateRenderer({
         };
 
         boot();
-        
+
         return () => {
             disposed = true;
             if (animationId) {
@@ -340,7 +343,7 @@ export default function SubstrateRenderer({
                     sceneRef.current!.add(sprite);
                     nodes.push(sprite);
                 } else {
-                    const geometry = new THREE.PlaneGeometry(item.w / 300, item.h / 300);
+                    const geometry = new THREE.PlaneGeometry((item.w + offsetX_defect) / 300, (item.h + offsetY_defect) / 300);
                     const color = colorMap.get(item.class)!;
                     // Use fully opaque material for accurate, saturated color
                     const material = new THREE.MeshBasicMaterial({
@@ -380,10 +383,10 @@ export default function SubstrateRenderer({
             const gridBottom = gridTop + gridHeight;
             const hasOverlap = activeDefects && activeDefects.length
                 ? activeDefects.some(defect => {
-                    const defectLeft = defect.x - (defect.w / 300) / 2;
-                    const defectRight = defect.x + (defect.w / 300) / 2;
-                    const defectTop = defect.y - (defect.h / 300) / 2;
-                    const defectBottom = defect.y + (defect.h / 300) / 2;
+                    const defectLeft = defect.x - ((defect.w + offsetX_defect) / 300) / 2;
+                    const defectRight = defect.x + ((defect.w + offsetX_defect) / 300) / 2;
+                    const defectTop = defect.y - ((defect.h + offsetY_defect) / 300) / 2;
+                    const defectBottom = defect.y + ((defect.h + offsetY_defect) / 300) / 2;
                     return !(
                         gridRight < defectLeft ||
                         gridLeft > defectRight ||
@@ -484,7 +487,7 @@ export default function SubstrateRenderer({
                     <Button size="xs" variant="light" onClick={() => centerCameraToData()}>居中视图</Button>
                     <Button size="xs" variant="light" onClick={() => setZoom(1)}>重置缩放</Button>
                 </Group>
-                <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} py="md"/>
+                <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} py="md" />
                 <Button
                     size="xs"
                     variant="outline"

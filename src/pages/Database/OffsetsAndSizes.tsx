@@ -271,29 +271,29 @@ function parseCsvContent(raw: string): { rows: FormState[]; errors: string[]; to
 
 export default function OffsetsAndSizes() {
     const [rows, setRows] = useState<CombinedRow[]>([]);
-    
+
     const [loading, setLoading] = useState(true);
-    
+
     const [importing, setImporting] = useState(false);
     const [exporting, setExporting] = useState(false);
-    
+
     const [searchInput, setSearchInput] = useState('');
     const [searching, setSearching] = useState(false);
     const [searchResult, setSearchResult] = useState<CombinedRow | null>(null);
     const [searchMessage, setSearchMessage] = useState<string | null>('输入 OEM 产品 ID 后按回车或点击搜索。');
     const [searchError, setSearchError] = useState<string | null>(null);
-    
+
     const [modalOpen, setModalOpen] = useState(false);
     const [formState, setFormState] = useState<FormState | null>(null);
     const [formErrors, setFormErrors] = useState<FormErrors>({});
     const [editMode, setEditMode] = useState<'create' | 'edit'>('create');
     const [saving, setSaving] = useState(false);
-    
+
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    
+
     const [selectAll, setSelectAll] = useState(false);
-    
+
     const [batchDeleting, setBatchDeleting] = useState(false);
 
     // =========================================================================
@@ -870,7 +870,7 @@ export default function OffsetsAndSizes() {
                     </SimpleGrid>
                 </Stack>
             </Paper>
-            
+
             {/* NOTE: QUERY */}
             <Card withBorder radius="md" p="md" shadow="xs">
                 <Stack gap="md">
@@ -998,7 +998,7 @@ export default function OffsetsAndSizes() {
                     )}
                 </Stack>
             </Card>
-            
+
             {/* NOTE: ALL DATA TABLE */}
             <Paper withBorder radius="md" p="xs" style={{ display: 'flex', flexDirection: 'column' }}>
                 <ScrollArea style={{ flex: 1 }} type="auto" offsetScrollbars>
@@ -1012,11 +1012,13 @@ export default function OffsetsAndSizes() {
                                         aria-label="全选"
                                     />
                                 </Table.Th>
-                                <Table.Th style={{ width: '22%' }}>OEM 产品 ID</Table.Th>
-                                <Table.Th style={{ width: '18%' }}>Die X (mm)</Table.Th>
-                                <Table.Th style={{ width: '18%' }}>Die Y (mm)</Table.Th>
-                                <Table.Th style={{ width: '18%' }}>X 偏移 (mm)</Table.Th>
-                                <Table.Th style={{ width: '18%' }}>Y 偏移 (mm)</Table.Th>
+                                <Table.Th style={{ width: '20%' }}>OEM 产品 ID</Table.Th>
+                                <Table.Th style={{ width: '11%' }}>Die X (mm)</Table.Th>
+                                <Table.Th style={{ width: '11%' }}>Die Y (mm)</Table.Th>
+                                <Table.Th style={{ width: '11%' }}>X 位置偏移 (mm)</Table.Th>
+                                <Table.Th style={{ width: '11%' }}>Y 位置偏移 (mm)</Table.Th>
+                                <Table.Th style={{ width: '11%' }}>X 大小偏移 (um)</Table.Th>
+                                <Table.Th style={{ width: '11%' }}>Y 大小偏移 (um)</Table.Th>
                                 <Table.Th style={{ width: '6%' }}>操作</Table.Th>
                             </Table.Tr>
                         </Table.Thead>
@@ -1071,6 +1073,9 @@ export default function OffsetsAndSizes() {
                                             </Table.Td>
                                             <Table.Td>{formatNumber(row.die_x)}</Table.Td>
                                             <Table.Td>{formatNumber(row.die_y)}</Table.Td>
+                                            <Table.Td>{formatSignedNumber(row.x_offset)}</Table.Td>
+                                            <Table.Td>{formatSignedNumber(row.y_offset)}</Table.Td>
+                                            {/* 待修改 */}
                                             <Table.Td>{formatSignedNumber(row.x_offset)}</Table.Td>
                                             <Table.Td>{formatSignedNumber(row.y_offset)}</Table.Td>
                                             <Table.Td>
@@ -1132,7 +1137,7 @@ export default function OffsetsAndSizes() {
 
                 </Stack>
             </Paper>
-            
+
             {/* NOTE: MODAL */}
             <Modal
                 opened={modalOpen}
