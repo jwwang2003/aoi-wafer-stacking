@@ -1,4 +1,4 @@
-import { Container, Group, Stack, SegmentedControl, Button, Text, Paper, useMantineTheme, Switch } from '@mantine/core';
+import { Container, Group, Stack, SegmentedControl, Button, Paper, useMantineTheme, Switch } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
     Routes,
@@ -12,6 +12,7 @@ import ProductViewer from '@/components/Navigator/ProductViewer';
 import JobManager from '@/components/JobManager';
 import LayersSelector from '@/components/Form/LayersSelector';
 import ComingSoon from '../ComingSoon';
+import WaferMapIndex from './WaferMapIndex';
 
 import { appDataDir, join, basename } from '@tauri-apps/api/path';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
@@ -24,9 +25,10 @@ import { warmIndexCaches } from '@/utils/fs';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { setSqlDebug } from '@/slices/preferencesSlice';
 import { setSqlDebugLogging } from '@/db';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 
 const subpageOptions = [
-    { label: '快速预览', value: 'browse' },
+    { label: '预览', value: 'browse' },
     { label: '索引', value: 'search' },
     { label: '更多', value: 'more' }
 ];
@@ -58,7 +60,7 @@ export default function DatabaseIndexPage() {
                     <Routes>
                         <Route path="/" element={<Navigate to="browse" replace />} />
                         <Route path="browse" element={<BrowsePage />} />
-                        <Route path="search" element={<ComingSoon />} />
+                        <Route path="search" element={<WaferMapIndex />} />
                         <Route path="more" element={<MorePage />} />
                         <Route path="*" element={<ComingSoon />} />
                     </Routes>
@@ -103,21 +105,29 @@ function MorePage() {
     const dispatch = useAppDispatch();
     const sqlDebug = useAppSelector(s => s.preferences.sqlDebug);
     const [busy, setBusy] = useState(false);
-    const [msg, setMsg] = useState<string | null>(null);
-    const [err, setErr] = useState<string | null>(null);
-
     const handleResetDb = async () => {
-        await deleteAllWaferMaps();
-        await resetSpreadSheetData();
-        await deleteAllFileIndexes();
-        await deleteAllFolderIndexes();
-        await warmIndexCaches();
-    }
+        if (!await Promise.resolve(window.confirm('确认要重置数据库吗？该操作将清空所有晶圆、缓存与索引数据，且无法撤销。'))) {
+            return;
+        }
+
+        setBusy(true);
+        try {
+            await deleteAllWaferMaps();
+            await resetSpreadSheetData();
+            await deleteAllFileIndexes();
+            await deleteAllFolderIndexes();
+            await warmIndexCaches();
+            infoToast({ title: '重置完成', message: '数据库已成功重置。' });
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            errorToast({ title: '重置失败', message });
+        } finally {
+            setBusy(false);
+        }
+    };
 
     const handleExportDb = async () => {
         setBusy(true);
-        setMsg(null);
-        setErr(null);
         try {
             const src = await getDbAbsolutePath();
             // default file name: keep the original base name, but suggest something friendly
@@ -136,10 +146,10 @@ function MorePage() {
             const bytes = await readFile(src);
             await writeFile(target, bytes);
 
-            setMsg(`已导出到：${target}`);
+            infoToast({ title: '导出完成', message: `已导出到：${target}` });
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            setErr(`导出失败：${msg}`);
+            errorToast({ title: '导出失败', message: msg });
         } finally {
             setBusy(false);
         }
@@ -160,29 +170,14 @@ function MorePage() {
                             }}
                         />
                     </Group>
-                    {/* <Text c="dimmed" size="sm">
-                        工具与设置
-                    </Text>
-                    <Divider /> */}
                     <Group>
                         <Button loading={busy} onClick={handleExportDb}>
-                            导出整个数据库文件
+                            {'导出数据库（.sql）'}
                         </Button>
-                        <Button variant='outline' color='red' onClick={handleResetDb}>
-                            重置数据库
+                        <Button variant="outline" color="red" onClick={handleResetDb} loading={busy}>
+                            {'重置数据库'}
                         </Button>
                     </Group>
-
-                    {msg && (
-                        <Text size="sm" c="teal">
-                            {msg}
-                        </Text>
-                    )}
-                    {err && (
-                        <Text size="sm" c="red">
-                            {err}
-                        </Text>
-                    )}
                 </Stack>
             </Paper>
         </Stack>

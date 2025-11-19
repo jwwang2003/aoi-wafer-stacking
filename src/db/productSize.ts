@@ -1,3 +1,11 @@
+/**
+ * Product size (DIE size, in mm units)
+ * - DIE width
+ * - DIE height
+ * 
+ * ONLY unique for each oem_product_id
+ */
+
 import { getDb, vacuum } from '@/db';
 import { ProductSize, ProductSizeMap } from './types';
 

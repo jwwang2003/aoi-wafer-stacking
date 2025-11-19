@@ -3,7 +3,7 @@ import { mkdir } from '@tauri-apps/plugin-fs';
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/hooks';
 import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
-import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge } from '@mantine/core';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge, Card } from '@mantine/core';
 import { PathPicker } from '@/components';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import JobManager from '@/components/JobManager';
@@ -155,18 +155,22 @@ export default function WaferStacking() {
             } = jobItem;
 
             let currentSubstrateOffset = { x: 0, y: 0 };
+            let currentDefectSizeOffset = { x: 0, y: 0 };
             // Default to 1mm x 1mm when no DB record exists
             let currentDieSize = { x: 1, y: 1 };
             if (oemProductId) {
                 try {
                     const offset = await getOemOffset(oemProductId);
+                    console.log('Loaded offset:', offset);
                     const sizeData = await getProductSize(oemProductId);
                     if (offset) {
                         currentSubstrateOffset = { x: offset.x_offset, y: offset.y_offset };
+                        currentDefectSizeOffset = { x: offset.defect_offset_x, y: offset.defect_offset_y };
                     }
                     if (sizeData) {
                         currentDieSize = { x: sizeData.die_x, y: sizeData.die_y };
                     }
+
                 } catch (e) {
                     throw new Error(`加载偏移量/尺寸失败: ${String(e)}`);
                 }
@@ -290,7 +294,7 @@ export default function WaferStacking() {
                                 class: defect.class
                             }))
                         ];
-                        dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, currentSubstrateOffset.x, currentSubstrateOffset.y);
+                        dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, currentSubstrateOffset.x, currentSubstrateOffset.y, currentDefectSizeOffset.x, currentDefectSizeOffset.y);
                     }
                 }
 
@@ -349,7 +353,7 @@ export default function WaferStacking() {
                 ...tempCombinedHeaders,
                 ...(cp1Header || headers[0] || {}),
             };
-            const outputRootDir = await join(baseTargetDir, '输出文件', baseFileName);
+            const outputRootDir = await join(baseTargetDir, baseFileName);
             try {
                 await mkdir(outputRootDir, { recursive: true });
                 if (outputDir) {
@@ -645,17 +649,22 @@ export default function WaferStacking() {
                             </Button>
                         </Group>
                     </Stack>
+
                     <Stack style={{ flex: 1, minWidth: 0 }}>
                         {(jobOemId && jobProductId && jobWaferId != null) ? (
-                            <>
+                            <Card
+                                withBorder
+                                radius="lg"
+                                p="sm"
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    borderColor: 'var(--mantine-color-blue-5)',
+                                    boxShadow: '0 0 0 1px var(--mantine-color-blue-1) inset',
+                                }}
+                            >
                                 <Title order={4}>当前Wafer数据</Title>
                                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
-                                    {layerChoice.maps.map((r, i) => (
-                                        <WaferFileMetadataCard
-                                            key={`${r.idx}-${i}`}
-                                            data={toWaferFileMetadata(r)}
-                                        />
-                                    ))}
                                     {layerChoice.includeSubstrate && jobSubstrate && (
                                         <ExcelMetadataCard
                                             data={{
@@ -667,8 +676,14 @@ export default function WaferStacking() {
                                             }}
                                         />
                                     )}
+                                    {layerChoice.maps.map((r, i) => (
+                                        <WaferFileMetadataCard
+                                            key={`${r.idx}-${i}`}
+                                            data={toWaferFileMetadata(r)}
+                                        />
+                                    ))}
                                 </SimpleGrid>
-                            </>
+                            </Card>
                         ) : (
                             <Text>先前往数据库选择一个有效的数据集</Text>
                         )}
@@ -722,15 +737,15 @@ export default function WaferStacking() {
                             <Button
                                 color='green'
                                 onClick={handleBatchProcess}
-                                disabled={batchProcessing}
+                                disabled={batchProcessing || queue.length === 0}
                                 leftSection={batchProcessing ? <IconRefresh size={16} /> : <IconRepeat size={16} />}
                             >
-                                批量处理
+                                批量队列
                             </Button>
                         </Group>
                     </Stack>
                 </Group>
             </Stack>
-        </Container>
+        </Container >
     );
 }

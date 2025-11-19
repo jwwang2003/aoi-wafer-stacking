@@ -9,11 +9,14 @@ export const generateGridWithSubstrateDefects = (
     baseDies: AsciiDie[] | undefined,
     defects: Array<{ x: number; y: number; w: number; h: number }>,
     offsetX: number = 0,
-    offsetY: number = 0
+    offsetY: number = 0,
+    defectSizeOffsetX: number = 0,
+    defectSizeOffsetY: number = 0,
 ): AsciiDie[] => {
     const GRID_WIDTH = 4.134;
     const GRID_HEIGHT = 3.74;
-
+    defectSizeOffsetX = defectSizeOffsetX / 1000;
+    defectSizeOffsetY = defectSizeOffsetY / 1000;
     if (!baseDies || baseDies.length === 0) {
         return [];
     }
@@ -25,10 +28,10 @@ export const generateGridWithSubstrateDefects = (
         const adjustedDefectX = defect.x - offsetX;
         const adjustedDefectY = defect.y - offsetY;
 
-        const defectLeft = adjustedDefectX - defect.w / 2;
-        const defectRight = adjustedDefectX + defect.w / 2;
-        const defectBottom = adjustedDefectY - defect.h / 2;
-        const defectTop = adjustedDefectY + defect.h / 2;
+        const defectLeft = adjustedDefectX - (defect.w + defectSizeOffsetX) / 2;
+        const defectRight = adjustedDefectX + (defect.w + defectSizeOffsetX) / 2;
+        const defectBottom = adjustedDefectY - (defect.h + defectSizeOffsetY) / 2;
+        const defectTop = adjustedDefectY + (defect.h + defectSizeOffsetY) / 2;
 
         const startGridX = Math.floor(defectLeft / GRID_WIDTH);
         const endGridX = Math.ceil(defectRight / GRID_WIDTH);

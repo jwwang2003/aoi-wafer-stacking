@@ -84,7 +84,6 @@ export function ExcelMetadataCard({
                     <Badge color="teal" variant="light" size="xs">{String(data.stage).toUpperCase()}</Badge>
                     <Badge color="blue" variant="light" size="xs">{String(data.type).toUpperCase()}</Badge>
                 </Group>
-
                 <Tooltip label={data.filePath} withArrow multiline>
                     <Text
                         size="xs"

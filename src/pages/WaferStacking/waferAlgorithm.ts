@@ -9,6 +9,7 @@ import {
     Wafer,
     isSpecialBin,
     isNumberBin,
+    BinValue,
 } from '@/types/ipc';
 import { PRIORITY_RULES, LayerMeta } from './priority';
 
@@ -82,11 +83,27 @@ export const mergeLayerToDieMap = (
     layerPriority: number
 ) => {
     dies.forEach(die => {
-        if (isSpecialBin(die.bin) && ['.', 'S', '*'].includes(die.bin.special)) {
-            return;
-        }
+        const isImportantMarker = isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special);
         const key = `${die.x},${die.y}`;
         const existing = dieMap.get(key);
+        if (isImportantMarker) {
+            if (!existing || layerPriority >= existing.priority) {
+                dieMap.set(key, { die: { ...die }, priority: layerPriority });
+            }
+            return;
+        }
+        if (isSpecialBin(die.bin) && die.bin.special === '.') {
+            return;
+        }
+        if (existing) {
+            const existingBin = existing.die.bin;
+            if (
+                (isSpecialBin(existingBin) && ['S', '*'].includes(existingBin.special)) ||
+                (isNumberBin(existingBin) && existingBin.number === 257)
+            ) {
+                return;
+            }
+        }
 
         let shouldOverwrite = false;
         if (!existing) {
@@ -272,12 +289,20 @@ export const convertToBinMapData = (
     header?: Record<string, string>
 ): BinMapData => {
     const map: WaferMapDie[] = offsetDies
-        .map((die) => ({
-            x: die.x,
-            y: die.y,
-            bin: die.bin,
-            reserved: 0,
-        }));
+        .map((die) => {
+            const isStartMarker =
+                (isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special)) ||
+                (isNumberBin(die.bin) && die.bin.number === 257);
+            const bin: BinValue = isStartMarker
+                ? { number: 257 }
+                : die.bin;
+            return {
+                x: die.x,
+                y: die.y,
+                bin: bin,
+                reserved: 0,
+            };
+        });
     const binCounts: Record<number, number> = {};
     map.forEach((die) => {
         if (isNumberBin(die.bin)) {
@@ -330,6 +355,18 @@ export const convertToHexMapData = (
             const die = byCoord.get(`${x},${y}`);
 
             if (!die) return null;
+            const isIgnoredStartMarker = (bin: AsciiDie['bin']): boolean => {
+                if (isSpecialBin(bin)) {
+                    return ['S', '*'].includes(bin.special);
+                } else if (isNumberBin(bin)) {
+                    return bin.number === 257;
+                }
+                return false;
+            };
+            if (isIgnoredStartMarker(die.bin)) {
+                return null;
+            }
+
             if (isSpecialBin(die.bin)) {
                 const letterToNumber = {
                     A: 10, B: 11, C: 12, D: 13, E: 14, F: 15,
@@ -348,8 +385,8 @@ export const convertToHexMapData = (
             wafer: header?.['Wafer ID'] || 'Unknown',
             rowCt: maxY - minY + 1,
             colCt: maxX - minX + 1,
-            refpx: 1, //未知
-            refpy: 28, //未知
+            refpx: 0, //未知
+            refpy: 0, //未知
             dutMs: 'MM',
             xDies: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) / 1000 : 0,
             yDies: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) / 1000 : 0,
