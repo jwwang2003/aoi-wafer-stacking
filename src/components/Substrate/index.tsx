@@ -34,6 +34,8 @@ export default function SubstratePane({
     const [dieY, setDieY] = useState(1);
     const [xOffset, setXOffset] = useState(0); // mm
     const [yOffset, setYOffset] = useState(0); // mm
+    const [defectSizeOffsetX, setDefectSizeOffsetX] = useState(0); // um
+    const [defectSizeOffsetY, setDefectSizeOffsetY] = useState(0); // um
 
     // Fetched data
     const [sheetsData, setSheetsData] = useState<SubstrateDefectXlsResult | null>(null);
@@ -138,6 +140,10 @@ export default function SubstratePane({
                         setXOffset(x);
                         setYOffset(y);
                     }}
+                    onDefectSizeOffsetChange={({ x, y }) => {
+                        setDefectSizeOffsetX(x);
+                        setDefectSizeOffsetY(y);
+                    }}
                 />
             )}
 
@@ -165,6 +171,7 @@ export default function SubstratePane({
                         selectedSheetId={selectedSheetId}
                         sheetsData={sheetsData}
                         gridOffset={{ x: xOffset, y: yOffset }}
+                        defectSizeOffset={{ x: defectSizeOffsetX, y: defectSizeOffsetY }}
                         style={{ height: '100%', width: '100%' }}
                     />
                 )}

@@ -32,8 +32,11 @@ type CombinedRow = {
     die_y: number | null;
     x_offset: number | null;
     y_offset: number | null;
+    defect_offset_x: number | null;
+    defect_offset_y: number | null;
     hasOffset: boolean;
     hasSize: boolean;
+    hasDefectSizeOffset: boolean;
 };
 
 type FormState = {
@@ -42,11 +45,13 @@ type FormState = {
     die_y: number | null;
     x_offset: number | null;
     y_offset: number | null;
+    defect_offset_x: number | null;
+    defect_offset_y: number | null;
 };
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
 
-const CSV_HEADERS = ['oem_product_id', 'die_x', 'die_y', 'x_offset', 'y_offset'] as const;
+const CSV_HEADERS = ['oem_product_id', 'die_x', 'die_y', 'x_offset', 'y_offset', 'defect_offset_x', 'defect_offset_y'] as const;
 const MAX_FETCH = 10_000;
 const numberFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6 });
 const signedNumberFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6, signDisplay: 'exceptZero' });
@@ -71,11 +76,17 @@ function formatPercent(value: number | null) {
     return `${(value * 100).toFixed(1)}%`;
 }
 
+function isBothZero(val1: number | null, val2: number | null) {
+    const num1 = val1 === null || !Number.isFinite(val1) ? 0 : val1;
+    const num2 = val2 === null || !Number.isFinite(val2) ? 0 : val2;
+    return Math.abs(num1) < 1e-10 && Math.abs(num2) < 1e-10;
+};
+
 type ChartDatum = { label: string; value: number; magnitude: number };
 
 function buildChartData(
     rows: CombinedRow[],
-    field: 'x_offset' | 'y_offset' | 'die_x' | 'die_y',
+    field: 'x_offset' | 'y_offset' | 'die_x' | 'die_y' | 'defect_offset_x' | 'defect_offset_y',
     limit = 6,
     useAbsolute = false
 ): ChartDatum[] {
@@ -157,15 +168,20 @@ async function fetchOffsetsAndSizes(): Promise<CombinedRow[]> {
 
     const map = new Map<string, CombinedRow>();
 
-    offsetRows.forEach(({ oem_product_id, x_offset, y_offset }) => {
+    offsetRows.forEach(({ oem_product_id, x_offset, y_offset, defect_offset_x, defect_offset_y }) => {
+        const hasOffset = !isBothZero(x_offset, y_offset);
+        const hasDefectSizeOffset = !isBothZero(defect_offset_x, defect_offset_y);
         map.set(oem_product_id, {
             oem_product_id,
             x_offset,
             y_offset,
             die_x: null,
             die_y: null,
-            hasOffset: true,
+            defect_offset_x,
+            defect_offset_y,
+            hasOffset,
             hasSize: false,
+            hasDefectSizeOffset,
         });
     });
 
@@ -182,8 +198,11 @@ async function fetchOffsetsAndSizes(): Promise<CombinedRow[]> {
                 y_offset: null,
                 die_x,
                 die_y,
+                defect_offset_x: null,
+                defect_offset_y: null,
                 hasOffset: false,
                 hasSize: true,
+                hasDefectSizeOffset: false,
             });
         }
     });
@@ -199,6 +218,8 @@ function buildCsv(rows: CombinedRow[]) {
         toCsvValue(row.y_offset),
         toCsvValue(row.die_x),
         toCsvValue(row.die_y),
+        toCsvValue(row.defect_offset_x),
+        toCsvValue(row.defect_offset_y),
     ].join(','));
     return [header, ...lines].join('\n');
 }
@@ -211,14 +232,14 @@ function parseNumberStrict(value: string | undefined) {
     return Number.isFinite(num) ? num : null;
 }
 
-function parseCsvContent(raw: string): { rows: FormState[]; errors: string[]; total: number } {
+function parseCsvContent(raw: string): { rows: FormState[]; errors: string[]; skippedIds: string[]; total: number } {
     const lines = raw
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
 
     if (!lines.length) {
-        return { rows: [], errors: [], total: 0 };
+        return { rows: [], errors: [], skippedIds: [], total: 0 };
     }
 
     const firstLine = lines[0].replace(/^\uFEFF/, '');
@@ -228,12 +249,13 @@ function parseCsvContent(raw: string): { rows: FormState[]; errors: string[]; to
 
     const rows: FormState[] = [];
     const errors: string[] = [];
+    const skippedIds: string[] = [];
 
     for (let i = dataStart; i < lines.length; i += 1) {
         const rawLine = lines[i];
         if (!rawLine) continue;
         const parts = rawLine.split(',');
-        const [idRaw, dxRaw, dyRaw, xRaw, yRaw] = parts;
+        const [idRaw, dxRaw, dyRaw, xRaw, yRaw, defectXRaw, defectYRaw] = parts;
         const lineNumber = i + 1;
 
         const oem = (idRaw ?? '').trim();
@@ -246,9 +268,12 @@ function parseCsvContent(raw: string): { rows: FormState[]; errors: string[]; to
         const dy = parseNumberStrict(dyRaw);
         const x = parseNumberStrict(xRaw);
         const y = parseNumberStrict(yRaw);
+        const dxDefect = parseNumberStrict(defectXRaw);
+        const dyDefect = parseNumberStrict(defectYRaw);
 
-        if (x === null || y === null || dx === null || dy === null) {
+        if (x === null || y === null || dx === null || dy === null || dxDefect === null || dyDefect === null) {
             errors.push(`第 ${lineNumber} 行包含无效数字`);
+            skippedIds.push(oem);
             continue;
         }
 
@@ -258,11 +283,13 @@ function parseCsvContent(raw: string): { rows: FormState[]; errors: string[]; to
             die_y: dy,
             x_offset: x,
             y_offset: y,
+            defect_offset_x: dxDefect,
+            defect_offset_y: dyDefect,
         });
     }
 
     const total = Math.max(0, lines.length - dataStart);
-    return { rows, errors, total };
+    return { rows, errors, skippedIds, total };
 }
 
 // =============================================================================
@@ -451,8 +478,11 @@ export default function OffsetsAndSizes() {
                 die_y: sizeRow?.die_y ?? null,
                 x_offset: offsetRow?.x_offset ?? null,
                 y_offset: offsetRow?.y_offset ?? null,
-                hasOffset: Boolean(offsetRow),
+                defect_offset_x: offsetRow?.defect_offset_x ?? null,
+                defect_offset_y: offsetRow?.defect_offset_y ?? null,
+                hasOffset: Boolean(offsetRow && (offsetRow.x_offset !== null || offsetRow.y_offset !== null)),
                 hasSize: Boolean(sizeRow),
+                hasDefectSizeOffset: Boolean(offsetRow && (offsetRow.defect_offset_x !== null || offsetRow.defect_offset_y !== null)),
             });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -479,6 +509,8 @@ export default function OffsetsAndSizes() {
             die_y: 0,
             x_offset: 0,
             y_offset: 0,
+            defect_offset_x: 0,
+            defect_offset_y: 0,
         });
         setModalOpen(true);
     };
@@ -492,6 +524,8 @@ export default function OffsetsAndSizes() {
             die_y: row.die_y ?? 0,
             x_offset: row.x_offset ?? 0,
             y_offset: row.y_offset ?? 0,
+            defect_offset_x: row.defect_offset_x ?? 0,
+            defect_offset_y: row.defect_offset_y ?? 0,
         });
         setModalOpen(true);
     };
@@ -516,7 +550,7 @@ export default function OffsetsAndSizes() {
             errors.oem_product_id = '请输入 OEM 产品 ID';
         }
 
-        (['die_x', 'die_y', 'x_offset', 'y_offset'] as const).forEach((key) => {
+        (['die_x', 'die_y', 'x_offset', 'y_offset', 'defect_offset_x', 'defect_offset_y'] as const).forEach((key) => {
             const value = formState[key];
             if (value === null || !Number.isFinite(value)) {
                 errors[key] = '请输入有效数字';
@@ -539,6 +573,8 @@ export default function OffsetsAndSizes() {
                 oem_product_id: trimmedId,
                 x_offset: formState.x_offset ?? 0,
                 y_offset: formState.y_offset ?? 0,
+                defect_offset_x: formState.defect_offset_x ?? 0,
+                defect_offset_y: formState.defect_offset_y ?? 0,
             });
 
             infoToast({
@@ -647,7 +683,7 @@ export default function OffsetsAndSizes() {
 
             setImporting(true);
             const raw = await readTextFile(filePath);
-            const { rows: parsedRows, errors, total } = parseCsvContent(raw);
+            const { rows: parsedRows, errors, skippedIds, total } = parseCsvContent(raw);
 
             if (!parsedRows.length) {
                 errorToast({
@@ -667,13 +703,17 @@ export default function OffsetsAndSizes() {
                     oem_product_id: record.oem_product_id.trim(),
                     x_offset: record.x_offset ?? 0,
                     y_offset: record.y_offset ?? 0,
+                    defect_offset_x: record.defect_offset_x ?? 0,
+                    defect_offset_y: record.defect_offset_y ?? 0,
                 });
             }
-
+            const skippedText = skippedIds.length
+                ? `跳过的记录：\n${skippedIds.slice(0, 10).join('\n')}${skippedIds.length > 10 ? `\n... 共 ${skippedIds.length} 条` : ''}`
+                : '';
             infoToast({
                 title: '导入完成',
                 message: errors.length
-                    ? '部分记录已导入，部分行包含错误已跳过'
+                    ? `部分记录已导入，部分行包含错误已跳过${skippedText}`
                     : '全部记录已成功导入',
                 lines: [
                     { label: '有效记录', value: parsedRows.length },
@@ -761,11 +801,11 @@ export default function OffsetsAndSizes() {
                     <Text size="xs" c="dimmed">
                         支持 CSV 列：
                         <Text component="span" c="gray.7" fw={600}>
-                            oem_product_id, die_x, die_y, x_offset, y_offset
+                            oem_product_id, die_x, die_y, x_offset, y_offset, defect_offset_x, defect_offset_y
                         </Text>
                     </Text>
                     <Text size="xs" c="dimmed">
-                        · 需要表头行，可选顺序：oem_product_id,die_x,die_y,x_offset,y_offset
+                        · 需要表头行，可选顺序：oem_product_id,die_x,die_y,x_offset,y_offset,defect_offset_x,defect_offset_y
                     </Text>
                     <Text size="xs" c="dimmed">
                         · 偏移与尺寸值使用毫米(mm)，小数采用点号，如：12.3456
@@ -1063,7 +1103,10 @@ export default function OffsetsAndSizes() {
                                                     <Text fw={600}>{row.oem_product_id}</Text>
                                                     <Group gap={6}>
                                                         <Badge color={row.hasOffset ? 'teal' : 'orange'} variant="light" size="xs">
-                                                            {row.hasOffset ? '偏移' : '缺偏移'}
+                                                            {row.hasOffset ? '位置偏移' : '无位置偏移'}
+                                                        </Badge>
+                                                        <Badge color={row.hasDefectSizeOffset ? 'teal' : 'orange'} variant="light" size="xs">
+                                                            {row.hasDefectSizeOffset ? '缺陷偏移' : '无缺陷偏移'}
                                                         </Badge>
                                                         <Badge color={row.hasSize ? 'teal' : 'orange'} variant="light" size="xs">
                                                             {row.hasSize ? '晶粒' : '缺晶粒'}
@@ -1075,9 +1118,8 @@ export default function OffsetsAndSizes() {
                                             <Table.Td>{formatNumber(row.die_y)}</Table.Td>
                                             <Table.Td>{formatSignedNumber(row.x_offset)}</Table.Td>
                                             <Table.Td>{formatSignedNumber(row.y_offset)}</Table.Td>
-                                            {/* 待修改 */}
-                                            <Table.Td>{formatSignedNumber(row.x_offset)}</Table.Td>
-                                            <Table.Td>{formatSignedNumber(row.y_offset)}</Table.Td>
+                                            <Table.Td>{formatSignedNumber(row.defect_offset_x)}</Table.Td>
+                                            <Table.Td>{formatSignedNumber(row.defect_offset_y)}</Table.Td>
                                             <Table.Td>
                                                 <Group gap={4} justify="flex-end">
                                                     <ActionIcon

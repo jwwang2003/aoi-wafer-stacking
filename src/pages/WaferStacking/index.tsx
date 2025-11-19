@@ -155,23 +155,21 @@ export default function WaferStacking() {
             } = jobItem;
 
             let currentSubstrateOffset = { x: 0, y: 0 };
-            let currentDefectSizeOffset = { x: 200, y: 60 };
+            let currentDefectSizeOffset = { x: 0, y: 0 };
             // Default to 1mm x 1mm when no DB record exists
             let currentDieSize = { x: 1, y: 1 };
             if (oemProductId) {
                 try {
                     const offset = await getOemOffset(oemProductId);
+                    console.log('Loaded offset:', offset);
                     const sizeData = await getProductSize(oemProductId);
-                    // const defectSizeOffset = offset ? offset.defect_size_offset_x : 0;待修改
                     if (offset) {
                         currentSubstrateOffset = { x: offset.x_offset, y: offset.y_offset };
+                        currentDefectSizeOffset = { x: offset.defect_offset_x, y: offset.defect_offset_y };
                     }
                     if (sizeData) {
                         currentDieSize = { x: sizeData.die_x, y: sizeData.die_y };
                     }
-                    // if (defectSizeOffset) {
-                    //     currentDefectSizeOffset = { x: offset.defect_size_offset_x, y: offset.defect_size_offset_y };
-                    // }
 
                 } catch (e) {
                     throw new Error(`加载偏移量/尺寸失败: ${String(e)}`);

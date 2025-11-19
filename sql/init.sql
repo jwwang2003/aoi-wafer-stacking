@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS product_offsets (
     
     x_offset DOUBLE NOT NULL,
     y_offset DOUBLE NOT NULL,
+    defect_offset_x DOUBLE NOT NULL,
+    defect_offset_y DOUBLE NOT NULL,
 
     FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );

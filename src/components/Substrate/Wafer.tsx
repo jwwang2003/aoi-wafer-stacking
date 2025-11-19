@@ -31,7 +31,7 @@ export default function SubstrateRenderer({
     sheetsData,
     gridOffset = { x: 0, y: 0 },
     dies,
-    defectSizeOffset = { x: 200, y: 60 },
+    defectSizeOffset = { x: 0, y: 0 },
 }: SubstrateRendererProps) {
     // This is the square box (aspect ratio 1:1)
     const squareRef = useRef<HTMLDivElement>(null);
@@ -367,7 +367,7 @@ export default function SubstrateRenderer({
             shouldResetViewRef.current = false;
         }
         setError(null);
-    }, [threeReady, mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY]);
+    }, [threeReady, mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY, offsetX_defect, offsetY_defect]);
 
     const createGridFromCoordinates = () => {
         if (!threeReady || !sceneRef.current || !threeRef.current) return;
