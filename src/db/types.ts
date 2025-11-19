@@ -34,9 +34,11 @@ export interface OemProductOffset {
     oem_product_id: string;
     x_offset: number;
     y_offset: number;
+    defect_offset_x: number;
+    defect_offset_y: number;
 }
 
-export type OemProductOffsetMap = Map<string, { x_offset: number; y_offset: number }>;
+export type OemProductOffsetMap = Map<string, { x_offset: number; y_offset: number, defect_offset_x: number; defect_offset_y: number; }>;
 
 export function applyOemOffset(
     x: number,
