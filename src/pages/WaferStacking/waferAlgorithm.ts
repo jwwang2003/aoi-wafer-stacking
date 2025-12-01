@@ -11,7 +11,7 @@ import {
     isNumberBin,
     BinValue,
 } from '@/types/ipc';
-import { PRIORITY_RULES, LayerMeta } from './priority';
+import { PRIORITY_RULES, LayerMeta, PASS_VALUES } from './priority';
 
 export const getLayerPriority = (meta: LayerMeta): number => {
     const matchedRule = PRIORITY_RULES.find((rule) => rule.when(meta));
@@ -181,10 +181,12 @@ export const calculateStatsFromDies = (dies: AsciiDie[]): Statistics => {
         }
         totalTested++;
 
-        if (isNumberBin(die.bin)) {
-            if (die.bin.number === 1) totalPass++;
-        } else if (isSpecialBin(die.bin)) {
-            if (['G', 'H', 'I', 'J'].includes(die.bin.special)) totalPass++;
+        const binValue = isNumberBin(die.bin)
+            ? die.bin.number.toString()
+            : die.bin.special;
+
+        if (PASS_VALUES.has(binValue)) {
+            totalPass++;
         }
     });
 

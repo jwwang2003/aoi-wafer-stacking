@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AsciiDie, WaferMapDie } from '@/types/ipc';
 import { BinValue } from '@/types/ipc';
 import { isNumberBin, isSpecialBin } from '@/types/ipc';
+import { PASS_VALUES } from './priority';
 
 const LETTER_TO_NUMBER_MAP: Record<string, number> = {
     'A': 10,
@@ -15,6 +16,7 @@ const LETTER_TO_NUMBER_MAP: Record<string, number> = {
     'H': 17,
     'I': 18,
     'J': 19,
+    'z': 20 // ink marker待修
 };
 
 const convertBinToNumber = (binKey: string): string | null => {
@@ -27,10 +29,9 @@ const convertBinToNumber = (binKey: string): string | null => {
 
 function calculateTestStats(binCounts: Map<string, number>): { totalTested: number; totalPass: number; yieldRate: number } {
     let totalTested = 0, totalPass = 0;
-    const passBins = ['1', 'G', 'H', 'I', 'J'];
     binCounts.forEach((count, binKey) => {
         if (!['S', '*'].includes(binKey)) totalTested += count;
-        if (passBins.includes(binKey)) totalPass += count;
+        if (PASS_VALUES.has(binKey)) totalPass += count;
     });
     return {
         totalTested,
