@@ -40,7 +40,7 @@ function calculateTestStats(binCounts: Map<string, number>): { totalTested: numb
     };
 }
 
-function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
+export function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
     const binCounts = new Map<string, number>();
     dies.forEach(die => {
         if ('bin' in die) {
@@ -57,6 +57,10 @@ function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
         }
     });
     return binCounts;
+}
+
+export function formatDateTime(date: Date): string {
+    return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
 function createInfoLinesCanvas(infoLines: string[], targetWidth: number): HTMLCanvasElement {

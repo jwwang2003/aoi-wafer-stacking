@@ -3,7 +3,7 @@ import { mkdir } from '@tauri-apps/plugin-fs';
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/hooks';
 import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
-import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge, Card } from '@mantine/core';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge, Card, Alert } from '@mantine/core';
 import { PathPicker } from '@/components';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import JobManager from '@/components/JobManager';
@@ -18,6 +18,8 @@ import {
 // DB
 import { getOemOffset } from '@/db/offsets';
 import { getProductSize } from '@/db/productSize';
+import { upsertWaferStackStats } from '@/db/waferStackStats';
+import { exportWaferStatsReport } from '@/utils/exportWaferReport';
 
 // TYPES
 import { ExcelType } from '@/types/wafer';
@@ -53,6 +55,7 @@ import {
     extractMapDataHeader,
     extractBinMapHeader,
 } from './waferAlgorithm';
+import { countBinValues, formatDateTime } from './renderUtils';
 
 export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
 export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
@@ -475,6 +478,33 @@ export default function WaferStacking() {
             }
 
             const stats = calculateStatsFromDies(mergedDies);
+
+            const binCounts = countBinValues(mergedDies);
+            const binCountsObj = Object.fromEntries(binCounts);
+            const binCountsStr = JSON.stringify(binCountsObj);
+            const startTime = formatDateTime(new Date());
+            const stopTime = formatDateTime(new Date());
+            formatDateTime(new Date());
+            const statsToSave = {
+                oem_product_id: oemProductId!,
+                batch_id: batchId,
+                wafer_id: waferId.toString(),
+                total_tested: stats.totalTested,
+                total_pass: stats.totalPass,
+                total_fail: stats.totalFail,
+                yield_percentage: stats.yieldPercentage,
+                bin_counts: binCountsStr,
+                start_time: startTime,
+                stop_time: stopTime
+            };
+
+            try {
+                await upsertWaferStackStats(statsToSave);
+                console.log(`晶圆 ${waferId} 统计数据已入库`);
+            } catch (dbError) {
+                console.warn(`晶圆 ${waferId} 统计数据入库失败:`, dbError);
+            }
+
             const baseFileName = `${oemProductId}_${productId}_${batchId}_${waferId}_${subId}`;
             const useHeader = {
                 ...tempCombinedHeaders,
@@ -602,6 +632,7 @@ export default function WaferStacking() {
                 message: `全部 ${jobsToProcess.length} 个任务处理成功`
             });
         }
+        await exportWaferStatsReport(jobOemId, outputDir);
     };
 
     return (

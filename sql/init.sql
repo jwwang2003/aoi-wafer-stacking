@@ -98,6 +98,24 @@ CREATE TABLE IF NOT EXISTS folder_index (
     last_mtime INTEGER
 );
 
+DROP TABLE IF EXISTS wafer_stack_stats;
+
+CREATE TABLE IF NOT EXISTS wafer_stack_stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    oem_product_id TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    wafer_id TEXT NOT NULL,
+    total_tested INTEGER NOT NULL,
+    total_pass INTEGER NOT NULL,
+    total_fail INTEGER NOT NULL,
+    yield_percentage REAL NOT NULL,
+    bin_counts TEXT NOT NULL DEFAULT '{}',
+    start_time TEXT,
+    stop_time TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(oem_product_id, batch_id, wafer_id)
+);
+
 -- =======================================
 -- Indexes for Faster Lookup
 -- =======================================

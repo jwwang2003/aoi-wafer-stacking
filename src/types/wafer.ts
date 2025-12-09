@@ -107,3 +107,22 @@ export function isWaferFileMetadata(item: RawWaferMetadata): item is WaferFileMe
         typeof (item as WaferFileMetadata).waferId === 'string'
     );
 }
+
+export interface BinStat {
+    bin: string;
+    count: number;
+    percentage: number;
+}
+
+export interface WaferStackStats {
+    oem_product_id: string;
+    batch_id: string;
+    wafer_id: string;
+    total_tested: number;
+    total_pass: number;
+    total_fail: number;
+    yield_percentage: number;
+    bin_stats: BinStat[];
+    start_time?: string;
+    stop_time?: string;
+}
