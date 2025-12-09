@@ -9,7 +9,12 @@ import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/Meta
 import JobManager from '@/components/JobManager';
 import LayersSelector, { LayerChoice } from '@/components/Form/LayersSelector';
 import { infoToast, errorToast } from '@/components/UI/Toaster';
-
+import {
+    getProductBinSelection,
+    saveProductBinSelection,
+    parseSelectedBins,
+    stringifySelectedBins
+} from '@/db/binSelection';
 // DB
 import { getOemOffset } from '@/db/offsets';
 import { getProductSize } from '@/db/productSize';
@@ -49,11 +54,34 @@ import {
     extractBinMapHeader,
 } from './waferAlgorithm';
 
+export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
+export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
 
-type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
-
-type OutputOption = {
+const ALL_BINS = [
+    'Unclassified',
+    'Particle',
+    'Pit',
+    'Bump',
+    'MicroPipe',
+    'Line',
+    'Carrot',
+    'Triangle',
+    'Downfall',
+    'Scratch',
+    'PL_Black',
+    'PL_White',
+    'PL_BPD',
+    'PL_SF',
+    'PL_BSF'
+];
+export type OutputOption = {
     id: OutputId;
+    label: string;
+    disabled?: boolean;
+};
+
+export type OutputOption2 = {
+    id: BinId;
     label: string;
     disabled?: boolean;
 };
@@ -64,6 +92,24 @@ const OUTPUT_OPTIONS = [
     { id: 'HEX', label: 'HexMap' },
     { id: 'image', label: 'Image' },
 ] as const satisfies readonly OutputOption[];
+
+const OUTPUT_OPTIONS2 = [
+    { id: 'Unclassified', label: 'Unclassified' },
+    { id: 'Particle', label: 'Particle' },
+    { id: 'Pit', label: 'Pit' },
+    { id: 'Bump', label: 'Bump' },
+    { id: 'MicroPipe', label: 'MicroPipe' },
+    { id: 'Line', label: 'Line' },
+    { id: 'Carrot', label: 'Carrot' },
+    { id: 'Triangle', label: 'Triangle' },
+    { id: 'Downfall', label: 'Downfall' },
+    { id: 'Scratch', label: 'Scratch' },
+    { id: 'PL_Black', label: 'PL_Black' },
+    { id: 'PL_White', label: 'PL_White' },
+    { id: 'PL_BPD', label: 'PL_BPD' },
+    { id: 'PL_SF', label: 'PL_SF' },
+    { id: 'PL_BSF', label: 'PL_BSF' },
+] as const satisfies readonly OutputOption2[];
 
 function stageLabel(
     stage: string | DataSourceType,
@@ -80,6 +126,8 @@ function stageLabel(
             return String(stage ?? 'Unknown');
     }
 }
+
+const asDefectClass = (binId: BinId): string => binId as string;
 
 const statusStyles: Record<JobStatus, { color: string; label: string }> = {
     queued: { color: 'blue', label: '等待中' },
@@ -99,6 +147,33 @@ export default function WaferStacking() {
     const [batchErrors, setBatchErrors] = useState<Array<{ id: string; message: string }>>([]);
     const [exportAsciiDieData, setExportAsciiDieData] = useState(false);
 
+    const [selectedOutputs, setSelectedOutputs] = useState<OutputId[]>([
+        'mapEx',
+        'HEX',
+        'bin',
+        'image',
+    ]);
+
+    const [selectedOutputs2, setSelectedOutputs2] = useState<BinId[]>([
+        'Unclassified',
+        'Particle',
+        'Pit',
+        'Bump',
+        'MicroPipe',
+        'Line',
+        'Carrot',
+        'Triangle',
+        'Downfall',
+        'Scratch',
+        'PL_Black',
+        'PL_White',
+        'PL_BPD',
+        'PL_SF',
+        'PL_BSF'
+    ]);
+
+    const [outputDir, setOutputDir] = useState<string>('');
+
     const dispatch = useAppDispatch();
     const jobState = useAppSelector((s) => s.stackingJob);
     const { queue } = jobState;
@@ -112,6 +187,34 @@ export default function WaferStacking() {
         subId: jobSubId,
         waferSubstrate: jobSubstrate
     } = currentJob;
+
+    useEffect(() => {
+        if (!jobOemId) return;
+
+        const loadBinSelection = async () => {
+            const selection = await getProductBinSelection(jobOemId);
+            const parsed = parseSelectedBins(selection.selected_bin_ids, ALL_BINS);
+            setSelectedOutputs2(parsed as BinId[]);
+        };
+
+        loadBinSelection();
+    }, [jobOemId]);
+
+    useEffect(() => {
+        if (!jobOemId) return;
+
+        const saveSelection = async () => {
+            const stringified = stringifySelectedBins(selectedOutputs2, ALL_BINS);
+            await saveProductBinSelection({
+                oem_product_id: jobOemId,
+                selected_bin_ids: stringified
+            });
+        };
+
+        const timer = setTimeout(saveSelection, 500);
+        return () => clearTimeout(timer);
+    }, [jobOemId, selectedOutputs2]);
+
 
     useEffect(() => {
         if (!jobOemId) return;
@@ -129,6 +232,20 @@ export default function WaferStacking() {
         })();
         return () => { cancelled = true; };
     }, [jobOemId]);
+
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                if (outputDir) return;
+                const desktop = await desktopDir();
+                if (alive && desktop) setOutputDir(desktop);
+            } catch {/* 忽略错误 */ }
+        })();
+        return () => {
+            alive = false;
+        };
+    }, [outputDir]);
 
     const processSingleJob = async (jobItem: JobItem, exportAsciiData: boolean = false) => {
         dispatch(queueUpdateJob({
@@ -268,6 +385,7 @@ export default function WaferStacking() {
                     layerName = 'Substrate';
                     content = await invokeParseSubstrateDefectXls(filePath);
                     if (content) {
+                        allSubstrateDefects = [];
                         const plDefects = content['PL defect list'] || [];
                         const surfaceDefects = content['Surface defect list'] || [];
                         allSubstrateDefects = [
@@ -276,17 +394,38 @@ export default function WaferStacking() {
                                 y: defect.y,
                                 w: defect.w / 1000,
                                 h: defect.h / 1000,
-                                class: defect.class
+                                class: defect.class,
+                                area: defect.area,
+                                contrast: defect.contrast
                             })),
                             ...surfaceDefects.map(defect => ({
                                 x: defect.x,
                                 y: defect.y,
                                 w: defect.w / 1000,
                                 h: defect.h / 1000,
-                                class: defect.class
+                                class: defect.class,
+                                area: defect.area,
+                                contrast: defect.contrast
                             }))
                         ];
-                        dies = generateGridWithSubstrateDefects(originalDiesList[0], allSubstrateDefects, currentSubstrateOffset.x, currentSubstrateOffset.y, currentDefectSizeOffset.x, currentDefectSizeOffset.y);
+
+
+                        const selectedClasses = selectedOutputs2.map(asDefectClass);
+                        const filteredSubstrateDefects = selectedClasses.length > 0
+                            ? allSubstrateDefects.filter(defect => selectedClasses.includes(defect.class))
+                            : allSubstrateDefects;
+
+                        console.log('筛选后参与叠图的缺陷数:', filteredSubstrateDefects.length);
+
+                        dies = generateGridWithSubstrateDefects(
+                            originalDiesList[0] || [],
+                            filteredSubstrateDefects,
+                            selectedOutputs2,
+                            currentSubstrateOffset.x,
+                            currentSubstrateOffset.y,
+                            currentDefectSizeOffset.x,
+                            currentDefectSizeOffset.y
+                        );
                     }
                 }
 
@@ -465,29 +604,6 @@ export default function WaferStacking() {
         }
     };
 
-    const [selectedOutputs, setSelectedOutputs] = useState<OutputId[]>([
-        'mapEx',
-        'HEX',
-        'bin',
-        'image',
-    ]);
-    const [outputDir, setOutputDir] = useState<string>('');
-
-    // Default output directory to user's Desktop if not chosen
-    useEffect(() => {
-        let alive = true;
-        (async () => {
-            try {
-                if (outputDir) return; // respect already selected value
-                const desktop = await desktopDir();
-                if (alive && desktop) setOutputDir(desktop);
-            } catch {/* noop */ }
-        })();
-        return () => {
-            alive = false;
-        };
-    }, [outputDir]);
-
     return (
         <Container fluid p='md'>
             <Stack gap='md'>
@@ -509,6 +625,23 @@ export default function WaferStacking() {
                                 />
                             ))}
                         </Group>
+                    </Checkbox.Group>
+
+                    <Checkbox.Group
+                        label='选择参与叠图的BIN/缺陷类别'
+                        value={selectedOutputs2}
+                        onChange={(vals) => setSelectedOutputs2(vals as BinId[])}
+                        mt='md'
+                    >
+                        <SimpleGrid cols={3} spacing='sm' mt='xs'>
+                            {OUTPUT_OPTIONS2.map((opt) => (
+                                <Checkbox
+                                    key={opt.id}
+                                    value={opt.id}
+                                    label={opt.label}
+                                />
+                            ))}
+                        </SimpleGrid>
                     </Checkbox.Group>
 
                     {selectedOutputs.includes('image') && (
