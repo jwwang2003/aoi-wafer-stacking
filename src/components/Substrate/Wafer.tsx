@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
+import { Box, Slider, Group, Text, Button, Card } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
@@ -464,20 +464,7 @@ export default function SubstrateRenderer({
             />
 
             {/* UI overlay lives on top of the Card, not inside the square div to avoid affecting its size */}
-            <Paper
-                shadow="sm"
-                p="xs"
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    width: 220,
-                    height: 'min-content',
-                    zIndex: 200,
-                }}
-            >
+            <Box style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
                 <Group justify="space-between" mb={6}>
                     <Text size="sm" c="dimmed">缩放</Text>
                     <Text size="sm">{zoom.toFixed(2)}×</Text>
@@ -486,18 +473,18 @@ export default function SubstrateRenderer({
                 <Group mt="xs" grow>
                     <Button size="xs" variant="light" onClick={() => centerCameraToData()}>居中视图</Button>
                     <Button size="xs" variant="light" onClick={() => setZoom(1)}>重置缩放</Button>
+                    <Button
+                        size="xs"
+                        variant="outline"
+                        mt="xs"
+                        leftSection={<IconRefresh size={14} />}
+                        onClick={refreshRenderer}
+                    >
+                        刷新渲染器
+                    </Button>
                 </Group>
                 <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} py="md" />
-                <Button
-                    size="xs"
-                    variant="outline"
-                    mt="xs"
-                    leftSection={<IconRefresh size={14} />}
-                    onClick={refreshRenderer}
-                >
-                    刷新渲染器
-                </Button>
-            </Paper>
+            </Box>
 
             {error && (
                 <Box
