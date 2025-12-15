@@ -7,7 +7,8 @@ import { AsciiDie, isNumberBin, isSpecialBin } from '@/types/ipc';
  */
 export const generateGridWithSubstrateDefects = (
     baseDies: AsciiDie[] | undefined,
-    defects: Array<{ x: number; y: number; w: number; h: number }>,
+    defects: Array<{ x: number; y: number; w: number; h: number; class: string }>,
+    selectedDefectClasses: string[] = [],
     offsetX: number = 0,
     offsetY: number = 0,
     defectSizeOffsetX: number = 0,
@@ -23,7 +24,10 @@ export const generateGridWithSubstrateDefects = (
 
     const defectiveGrids = new Set<string>();
 
-    defects.forEach(defect => {
+    const filteredDefects = selectedDefectClasses.length > 0
+        ? defects.filter(defect => selectedDefectClasses.includes(defect.class))
+        : defects;
+    filteredDefects.forEach(defect => {
 
         const adjustedDefectX = defect.x - offsetX;
         const adjustedDefectY = defect.y - offsetY;

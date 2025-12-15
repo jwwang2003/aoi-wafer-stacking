@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AsciiDie, WaferMapDie } from '@/types/ipc';
 import { BinValue } from '@/types/ipc';
 import { isNumberBin, isSpecialBin } from '@/types/ipc';
+import { PASS_VALUES } from './priority';
 
 const LETTER_TO_NUMBER_MAP: Record<string, number> = {
     'A': 10,
@@ -15,6 +16,7 @@ const LETTER_TO_NUMBER_MAP: Record<string, number> = {
     'H': 17,
     'I': 18,
     'J': 19,
+    'z': 20 // ink marker待修
 };
 
 const convertBinToNumber = (binKey: string): string | null => {
@@ -27,10 +29,9 @@ const convertBinToNumber = (binKey: string): string | null => {
 
 function calculateTestStats(binCounts: Map<string, number>): { totalTested: number; totalPass: number; yieldRate: number } {
     let totalTested = 0, totalPass = 0;
-    const passBins = ['1', 'G', 'H', 'I', 'J'];
     binCounts.forEach((count, binKey) => {
         if (!['S', '*'].includes(binKey)) totalTested += count;
-        if (passBins.includes(binKey)) totalPass += count;
+        if (PASS_VALUES.has(binKey)) totalPass += count;
     });
     return {
         totalTested,
@@ -39,7 +40,7 @@ function calculateTestStats(binCounts: Map<string, number>): { totalTested: numb
     };
 }
 
-function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
+export function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
     const binCounts = new Map<string, number>();
     dies.forEach(die => {
         if ('bin' in die) {
@@ -56,6 +57,10 @@ function countBinValues(dies: (AsciiDie | WaferMapDie)[]): Map<string, number> {
         }
     });
     return binCounts;
+}
+
+export function formatDateTime(date: Date): string {
+    return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
 function createInfoLinesCanvas(infoLines: string[], targetWidth: number): HTMLCanvasElement {

@@ -1,5 +1,7 @@
 import { DataSourceType } from '@/types/dataSource';
 
+export const PASS_VALUES = new Set(['1', 'G', 'H', 'I', 'J']);
+
 export type LayerMeta = {
     stage: DataSourceType;
     subStage?: string | number | null; // e.g. "1" / 1 / "CP-2"

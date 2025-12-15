@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS product_size (
     FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS product_bin_selection (
+    oem_product_id TEXT PRIMARY KEY,           
+    selected_bin_ids TEXT NOT NULL DEFAULT '*',
+
+    FOREIGN KEY (oem_product_id) REFERENCES oem_product_map(oem_product_id) ON DELETE CASCADE
+);
+
 -- Product Lot/Wafer -> SubID Defect Mapping
 CREATE TABLE IF NOT EXISTS product_defect_map (
     oem_product_id TEXT NOT NULL,
@@ -91,6 +98,24 @@ CREATE TABLE IF NOT EXISTS folder_index (
     last_mtime INTEGER
 );
 
+DROP TABLE IF EXISTS wafer_stack_stats;
+
+CREATE TABLE IF NOT EXISTS wafer_stack_stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    oem_product_id TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    wafer_id TEXT NOT NULL,
+    total_tested INTEGER NOT NULL,
+    total_pass INTEGER NOT NULL,
+    total_fail INTEGER NOT NULL,
+    yield_percentage REAL NOT NULL,
+    bin_counts TEXT NOT NULL DEFAULT '{}',
+    start_time TEXT,
+    stop_time TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(oem_product_id, batch_id, wafer_id)
+);
+
 -- =======================================
 -- Indexes for Faster Lookup
 -- =======================================
@@ -107,6 +132,8 @@ ON product_defect_map (oem_product_id, lot_id, wafer_id);
 CREATE INDEX IF NOT EXISTS idx_substrate_defect_path
 ON substrate_defect (file_path);
 
+CREATE INDEX IF NOT EXISTS idx_product_bin_selection_id
+ON product_bin_selection (oem_product_id);
 
 -- Lookup wafer maps by file path
 CREATE INDEX IF NOT EXISTS idx_wafer_file_path

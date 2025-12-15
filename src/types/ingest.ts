@@ -41,3 +41,22 @@ export interface IngestReport {
   substrateDefects: SubstrateDefectIngestStats | null;
   waferMaps: WaferMapIngestStats | null;
 }
+
+
+export interface WaferStats {
+  oemProductId: string;
+  lotId: string;
+  waferId: string;
+  total: number;
+  pass: number;
+  fail: number;
+  yield: number;
+  binCounts: Record<number, number>;
+  startTime: string;
+  stopTime: string;
+}
+
+export interface WaferStatsIngestResult {
+  inserted: number;
+  updated: number;
+}
