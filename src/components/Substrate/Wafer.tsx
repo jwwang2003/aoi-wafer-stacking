@@ -720,7 +720,7 @@ export default function SubstrateRenderer({
         if (!headerBounds) return;
         const { left, right, top, bottom } = headerBounds;
 
-        const minWorldX = Math.min(left, right);
+        const minWorldX = Math.min(left + gridWidth, right);
         const maxWorldX = Math.max(left, right);
         const minWorldY = Math.min(top, bottom);
         const maxWorldY = Math.max(top, bottom);
@@ -738,6 +738,10 @@ export default function SubstrateRenderer({
 
         const rawCursorX = pointerWorldRef.current?.x ?? colCenterX;
         const rawCursorY = pointerWorldRef.current?.y ?? rowCenterY;
+        if (rawCursorX < minWorldX || rawCursorX > maxWorldX) {
+            clearHoverOverlays();
+            return;
+        }
         const cursorX = Math.min(maxWorldX, Math.max(minWorldX, rawCursorX));
         const cursorY = Math.min(maxWorldY, Math.max(minWorldY, rawCursorY));
 
