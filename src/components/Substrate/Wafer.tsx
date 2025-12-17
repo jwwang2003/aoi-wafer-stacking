@@ -383,7 +383,7 @@ export default function SubstrateRenderer({
         const gridMeshCoords: Array<{ mesh: THREE.Mesh, coord: { x: number; y: number } }> = [];
         const extents = getCoordExtents();
         if (!extents) return;
-        const { minCoordX, minCoordY, maxCoordX, maxCoordY } = extents;
+        const { minCoordX, minCoordY } = extents;
 
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
             const gridLeft = xCoord * gridWidth + offsetX;
@@ -636,7 +636,8 @@ export default function SubstrateRenderer({
         if (!bounds) return null;
         const { left, right, top, bottom, minCoordX, maxCoordX, minCoordY, maxCoordY } = bounds;
 
-        const startX = Math.min(left, right);
+        // Align with visual highlight: exclude the left header column from valid coords
+        const startX = Math.min(left + gridWidth, right);
         const endX = Math.max(left, right);
         const topEdge = Math.max(top, bottom);
         const bottomEdge = Math.min(top, bottom);
@@ -644,7 +645,7 @@ export default function SubstrateRenderer({
         if (wx < startX || wx > endX) return null;
         if (wy > topEdge || wy < bottomEdge) return null;
 
-        const headerMinX = minCoordX - 1;
+        const headerMinX = minCoordX;
         const headerMinY = minCoordY;
 
         const relX = wx - startX;

@@ -1,6 +1,6 @@
 # Wafer Overlay (智能叠图)
 
-> This was a built using [Tauri V2](https://v2.tauri.app/start/) with `yarn create tauri-app`.
+Wafer Overlay by Sichain is a desktop app for intelligent wafer stacking and AOI. It renders accurate wafer maps, stacks multi-stage data, and can run TorchScript AOI (segmentation first, optional YOLO detection).
 
 **Development stack**
 - [Tauri](https://v2.tauri.app/start/): Tauri + React + Typescript

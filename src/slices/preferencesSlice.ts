@@ -205,27 +205,17 @@ const preferencesSlice = createSlice({
     extraReducers: (builder) => {
         builder
             // for init preferences only
-            .addCase(initPreferences.pending, (state) => {
-                state.status = 'loading';
-                state.error = null;
-            })
             .addCase(initPreferences.fulfilled, (_, action) => {
-                action.payload.status = 'idle';
                 action.payload.error = null;
-
                 return action.payload;
             })
             .addCase(initPreferences.rejected, (state, action) => {
                 state.stepper = ConfigStepperState.ConfigInfo;      // rollback
-                state.status = 'failed';
                 state.error = action.payload ?? 'Unknown error';
-                // return action.payload;
             })
 
             .addCase(revalidatePreferencesFile.fulfilled, (state, action) => {
-                state.status = 'idle';
                 state.error = null;
-
                 const { preferenceFilePath, dataSourceConfigPath } = action.payload.preferences;
                 state = {
                     ...state,
@@ -236,14 +226,12 @@ const preferencesSlice = createSlice({
                 if (!action.payload.valid) {
                     state = {
                         ...state,
-                        status: 'failed',
                         error: '设置文件(.json)无效'
                     }
                 }
             })
             .addCase(revalidatePreferencesFile.rejected, (state, action) => {
                 state.stepper = ConfigStepperState.Initial;      // rollback
-                state.status = 'failed';
                 state.error = action.payload ?? 'Unknown error';
             })
     },

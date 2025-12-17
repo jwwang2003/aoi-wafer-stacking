@@ -12,6 +12,7 @@ use tch::{vision::image, CModule, Cuda, Device, IndexOp, Kind, QEngine, Tensor};
 
 const CPU_WEIGHT_NAME: &str = "aoi_cpu.ts";
 const GPU_WEIGHT_NAME: &str = "aoi_gpu.ts";
+const MIN_INPUT_FALLBACK: i64 = 608;
 
 // Regex-friendly filename patterns we will consider when auto-discovering weights.
 // Supported examples (CPU):
@@ -210,7 +211,7 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
 
     let preview_len = req.preview_values.unwrap_or(16).clamp(1, 64);
     let prefer_gpu = req.prefer_gpu.unwrap_or(true);
-    let mask_threshold = req.mask_threshold.unwrap_or(0.5);
+    let mask_threshold = req.mask_threshold.unwrap_or(0.75);
     let resize_cfg = req.resize;
     let detect_enabled = req.detect_enabled.unwrap_or(true);
     let detect_prefer_gpu = req.detect_prefer_gpu.unwrap_or(true);
@@ -248,6 +249,10 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
     };
 
     let cached = get_or_load_model(&model_path, target_device)?;
+    // Try to infer the model's expected grid/stride from the TorchScript weights; always
+    // enforce a 608px floor to satisfy typical YOLO requirements.
+    let inferred_min_side = infer_min_side_from_model(&cached).unwrap_or(MIN_INPUT_FALLBACK);
+    let min_side = inferred_min_side.max(MIN_INPUT_FALLBACK);
     let detection_device = if detect_enabled && detect_weight.is_some() {
         if detect_prefer_gpu && Cuda::is_available() {
             Some(Device::Cuda(0))
@@ -266,7 +271,7 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
     let processed: Vec<_> = req
         .images
         .into_par_iter()
-        .map(|img| preprocess_image(img, target_device, resize_cfg))
+        .map(|img| preprocess_image(img, target_device, resize_cfg, min_side))
         .collect();
 
     let mut results = Vec::new();
@@ -278,15 +283,23 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
                 match forward_image(&cached, tensor, preview_len, mask_threshold) {
                     Ok((duration_ms, preview, mask)) => {
                         let detection = if let (Some(det_cache), Some(det_dev)) = (detection_cached.as_ref(), detection_device) {
-                            match run_detection(det_cache, det_dev, &mask, detect_threshold, width, height) {
-                                Ok(det) => Some(det),
-                                Err(err) => {
-                                    errors.push(InferenceFailure {
-                                        name: name.clone(),
-                                        message: format!("Detection failed: {err}"),
-                                    });
-                                    None
+                            if mask.is_some() {
+                                match run_detection(det_cache, det_dev, &mask, detect_threshold, width, height) {
+                                    Ok(det) => Some(det),
+                                    Err(err) => {
+                                        errors.push(InferenceFailure {
+                                            name: name.clone(),
+                                            message: format!("Detection failed: {err}"),
+                                        });
+                                        None
+                                    }
                                 }
+                            } else {
+                                errors.push(InferenceFailure {
+                                    name: name.clone(),
+                                    message: "Skipped YOLO detection because segmentation mask was missing".to_string(),
+                                });
+                                None
                             }
                         } else {
                             None
@@ -461,6 +474,7 @@ fn preprocess_image(
     img: InferenceImagePayload,
     device: Device,
     resize_cfg: Option<ResizeConfig>,
+    min_side: i64,
 ) -> Result<(String, Tensor, (i64, i64, i64)), (String, String)> {
     match image::load_from_memory(&img.data) {
         Ok(tensor) => {
@@ -482,15 +496,65 @@ fn preprocess_image(
                 chw = up.squeeze_dim(0);
             }
             let final_size = chw.size();
-            let fin_dims = if final_size.len() == 3 {
+            let mut fin_dims = if final_size.len() == 3 {
                 (final_size[2], final_size[1], final_size[0])
             } else {
                 (width, height, channels)
             };
+
+            // If the image is smaller than the model's expected side length (or 608px), pad
+            // symmetrically with zeros to avoid shape mismatches in downstream detection.
+            if fin_dims.0 < min_side || fin_dims.1 < min_side {
+                let target_w = fin_dims.0.max(min_side);
+                let target_h = fin_dims.1.max(min_side);
+                let pad_w = target_w - fin_dims.0;
+                let pad_h = target_h - fin_dims.1;
+                let pad_left = pad_w / 2;
+                let pad_right = pad_w - pad_left;
+                let pad_top = pad_h / 2;
+                let pad_bottom = pad_h - pad_top;
+
+                chw = chw
+                    .f_constant_pad_nd(&[pad_left, pad_right, pad_top, pad_bottom])
+                    .map_err(|e| (img.name.clone(), format!("Padding failed: {e}")))?;
+                fin_dims = (target_w, target_h, fin_dims.2);
+            }
             let input = chw.unsqueeze(0).to_device(device);
             Ok((img.name, input, fin_dims))
         }
         Err(err) => Err((img.name, format!("Failed to decode image: {err}"))),
+    }
+}
+
+fn infer_min_side_from_model(model: &CachedModel) -> Option<i64> {
+    let guard = model.model.lock().ok()?;
+    let params = guard.named_parameters().ok()?;
+
+    let mut stride_hint: Option<i64> = None;
+    let mut grid_hint: Option<i64> = None;
+
+    for (name, tensor) in params {
+        let lower = name.to_lowercase();
+        if lower.contains("stride") {
+            let flat: Result<Vec<i64>, _> = tensor.to_device(Device::Cpu).flatten(0, -1).try_into();
+            if let Ok(vals) = flat {
+                if let Some(max_stride) = vals.into_iter().filter(|v| *v > 0 && *v < 4096).max() {
+                    stride_hint = Some(stride_hint.map_or(max_stride, |cur| cur.max(max_stride)));
+                }
+            }
+        }
+
+        if lower.contains("grid") || lower.contains("anchor") {
+            let size = tensor.size();
+            if let Some(max_dim) = size.into_iter().filter(|d| *d > 1).max() {
+                grid_hint = Some(grid_hint.map_or(max_dim, |cur| cur.max(max_dim)));
+            }
+        }
+    }
+
+    match (grid_hint, stride_hint) {
+        (Some(grid), Some(stride)) if grid > 0 && stride > 0 => Some(grid * stride),
+        _ => None,
     }
 }
 

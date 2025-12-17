@@ -246,7 +246,7 @@ async function scanEntries({
                 if (!cache) return;
                 folder_upserts.push({ folder_path: path, last_mtime: mtime });
             }
-            : async (_path: string, _mtime: number) => {
+            : async () => {
                 // no-op; file hashing is batched after the loop
             };
 

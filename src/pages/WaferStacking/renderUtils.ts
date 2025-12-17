@@ -304,9 +304,10 @@ export async function renderAsJpg(
         const binCounts = countBinValues(dies);
         const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts);
 
+        const notchDir = header?.['Flat/Notch'] || header?.['Notch'];
         const infoLines = header ? [
             `产品名称: ${(header['Product'] || header['Device Name']) + '_' + (header['Lot No.'] || '') + '_' + (header['Wafer ID'] || '')}       Wafer厚度:0.000`,
-            `晶圆尺寸: ${header['Wafer Size'] || 0}       布距: [${header['Index X'] || 0}.000, ${header['Index Y'] || 0}.000]       切角: ${header['??'] || 'Unknown'}[${header['Flat/Notch'] || 'Unknown'}]`,
+            `晶圆尺寸: ${header['Wafer Size'] || 0}       布距: [${header['Index X'] || 0}.000, ${header['Index Y'] || 0}.000]       切角: ${notchDir || 'Unknown'}`,
             `时间: ${new Date().toLocaleString()}    测试总数: ${totalTested}    良品: ${totalPass}    次品: ${totalTested - totalPass}    良率: ${yieldRate}%`
         ] : [];
 
@@ -433,9 +434,10 @@ export async function renderSubstrateAsJpg(
         const binCounts = countBinValues(dies);
         const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts);
 
+        const notchDir = header?.['Flat/Notch'] || header?.['Notch'];
         const infoLines = header ? [
             `产品名称: ${(header['Product'] || header['Device Name']) + '_' + (header['Lot No.'] || '') + '_' + (header['Wafer ID'] || '')}       Wafer厚度:0.000`,
-            `晶圆尺寸: ${header['Wafer Size'] || 0}       布距: [${header['Index X'] || 0}.000, ${header['Index Y'] || 0}.000]       切角: ${header['??'] || 'Unknown'}[${header['Flat/Notch'] || 'Unknown'}]`,
+            `晶圆尺寸: ${header['Wafer Size'] || 0}       布距: [${header['Index X'] || 0}.000, ${header['Index Y'] || 0}.000]       切角: ${notchDir || 'Unknown'}`,
             `时间: ${new Date().toLocaleString()}    测试总数: ${totalTested}    良品: ${totalPass}    次品: ${totalTested - totalPass}    良率: ${yieldRate}%`
         ] : [];
 

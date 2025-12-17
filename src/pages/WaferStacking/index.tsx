@@ -3,7 +3,7 @@ import { mkdir } from '@tauri-apps/plugin-fs';
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/hooks';
 import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
-import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge, Card, Alert } from '@mantine/core';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge, Card, Box } from '@mantine/core';
 import { PathPicker } from '@/components';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import JobManager from '@/components/JobManager';
@@ -20,6 +20,7 @@ import { getOemOffset } from '@/db/offsets';
 import { getProductSize } from '@/db/productSize';
 import { upsertWaferStackStats } from '@/db/waferStackStats';
 import { exportWaferStatsReport } from '@/utils/exportWaferReport';
+import { colorMap } from '@/components/Substrate/Constants';
 
 // TYPES
 import { ExcelType } from '@/types/wafer';
@@ -90,6 +91,9 @@ export type OutputOption2 = {
     disabled?: boolean;
 };
 
+const toHexColor = (num: number) =>
+    `#${Math.max(0, Math.min(0xffffff, num)).toString(16).padStart(6, '0')}`;
+
 const OUTPUT_OPTIONS = [
     { id: 'mapEx', label: 'WaferMapEx' },
     { id: 'bin', label: 'BinMap' },
@@ -150,6 +154,23 @@ export default function WaferStacking() {
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
     const [batchErrors, setBatchErrors] = useState<Array<{ id: string; message: string }>>([]);
     const [exportAsciiDieData, setExportAsciiDieData] = useState(false);
+    const renderBinLabel = (opt: OutputOption2) => {
+        const color = colorMap.get(opt.id) ?? 0x999999;
+        return (
+            <Group gap={6} align="center">
+                <Box
+                    w={12}
+                    h={12}
+                    style={{
+                        backgroundColor: toHexColor(color),
+                        borderRadius: 3,
+                        border: '1px solid #e2e8f0',
+                    }}
+                />
+                <Text size="sm">{opt.label}</Text>
+            </Group>
+        );
+    };
 
     const [selectedOutputs, setSelectedOutputs] = useState<OutputId[]>([
         'mapEx',
@@ -336,6 +357,29 @@ export default function WaferStacking() {
             const tempCombinedHeaders: Record<string, string> = {};
             let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number, class: string }> = [];
             let dieLayoutMap: DieLayoutMap | null = null;
+            let layoutDies: AsciiDie[] | undefined;
+
+            // Prefer explicit layout map from Excel over deriving map bounds from data files
+            if (dieLayoutPath) {
+                try {
+                    dieLayoutMap = await invokeParseDieLayoutXls(dieLayoutPath);
+                    const keys = Object.keys(dieLayoutMap || {});
+                    layoutDies =
+                        dieLayoutMap[jobProductId || '']?.dies ||
+                        dieLayoutMap[jobOemId || '']?.dies ||
+                        (keys.length > 0 ? dieLayoutMap[keys[0]]?.dies : undefined);
+                } catch (err) {
+                    console.warn('[wafer stacking] Failed to load die layout map; falling back to map files', err);
+                }
+            }
+
+            const mergeWithLayout = (layout: AsciiDie[], source: AsciiDie[]): AsciiDie[] => {
+                const binLookup = new Map(source.map(d => [`${d.x},${d.y}`, d.bin]));
+                return layout.map(d => {
+                    const bin = binLookup.get(`${d.x},${d.y}`);
+                    return bin ? { ...d, bin } : d;
+                });
+            };
 
             for (const layer of sortedLayers) {
                 const { filePath, layerType, stage } = layer;
@@ -357,32 +401,33 @@ export default function WaferStacking() {
                             content = await parseWaferMapEx(filePath);
                             if (content && content.map.dies) {
                                 header = extractMapDataHeader(content);
-                                dies = content.map.dies;
+                                dies = layoutDies ? mergeWithLayout(layoutDies, content.map.dies) : content.map.dies;
                                 if (cpType === '1') cp1Header = { ...header };
                             }
                         } else if (cpType === '3') {
                             content = await invokeParseWafer(filePath);
                             if (content && content.map.dies) {
                                 header = extractWaferHeader(content);
-                                dies = content.map.dies;
+                                dies = layoutDies ? mergeWithLayout(layoutDies, content.map.dies) : content.map.dies;
                             }
                         }
                     } else if (stage === DataSourceType.Wlbi) {
                         content = await parseWaferMap(filePath);
                         if (content && content.map) {
                             header = extractBinMapHeader(content);
-                            dies = content.map.map((die) => {
+                            const wlbiDies = content.map.map((die) => {
                                 if (isNumberBin(die.bin) && die.bin.number === 257) {
                                     return { ...die, bin: { special: '*' } };
                                 }
                                 return die;
                             });
+                            dies = layoutDies ? mergeWithLayout(layoutDies, wlbiDies) : wlbiDies;
                         }
                     } else if (stage === DataSourceType.Aoi) {
                         content = await parseWaferMapEx(filePath);
                         if (content && content.map.dies) {
                             header = extractMapDataHeader(content);
-                            dies = content.map.dies;
+                            dies = layoutDies ? mergeWithLayout(layoutDies, content.map.dies) : content.map.dies;
                         }
                     }
                 }
@@ -390,22 +435,6 @@ export default function WaferStacking() {
                 if (layerType === 'substrate') {
                     layerName = 'Substrate';
                     content = await invokeParseSubstrateDefectXls(filePath);
-                    let baseLayout: AsciiDie[] | undefined;
-                    const layoutPath = dieLayoutPath || filePath;
-                    if (layoutPath && !dieLayoutMap) {
-                        try {
-                            dieLayoutMap = await invokeParseDieLayoutXls(layoutPath);
-                            console.log(dieLayoutMap);
-                        } catch (err) {
-                            console.warn('[substrate] Failed to load die layout map', err);
-                        }
-                    }
-                    if (dieLayoutMap) {
-                        baseLayout =
-                            dieLayoutMap[jobProductId || '']?.dies ||
-                            dieLayoutMap[jobOemId || '']?.dies ||
-                            (Object.keys(dieLayoutMap).length > 0 ? dieLayoutMap[Object.keys(dieLayoutMap)[0]]?.dies : undefined);
-                    }
                     if (content) {
                         allSubstrateDefects = [];
                         const plDefects = content['PL defect list'] || [];
@@ -446,7 +475,7 @@ export default function WaferStacking() {
                             currentSubstrateOffset.y,
                             currentDefectSizeOffset.x,
                             currentDefectSizeOffset.y,
-                            baseLayout
+                            layoutDies
                         );
                     }
                 }
@@ -655,67 +684,70 @@ export default function WaferStacking() {
     };
 
     return (
-        <Container fluid p='md'>
-            <Stack gap='md'>
+        <Container fluid p="md">
+            <Stack gap="md">
                 <Title order={1}>晶圆叠图</Title>
 
                 <Title order={2}>输出设置</Title>
                 <Stack>
-                    <Checkbox.Group
-                        label='选择导出格式'
-                        value={selectedOutputs}
-                        onChange={(vals) => setSelectedOutputs(vals as OutputId[])}
-                    >
-                        <Group gap='md' mt='xs'>
-                            {OUTPUT_OPTIONS.map((opt) => (
-                                <Checkbox
-                                    key={opt.id}
-                                    value={opt.id}
-                                    label={opt.label}
-                                />
-                            ))}
-                        </Group>
-                    </Checkbox.Group>
-
-                    <Checkbox.Group
-                        label='选择参与叠图的BIN/缺陷类别'
-                        value={selectedOutputs2}
-                        onChange={(vals) => setSelectedOutputs2(vals as BinId[])}
-                        mt='md'
-                    >
-                        <SimpleGrid cols={3} spacing='sm' mt='xs'>
-                            {OUTPUT_OPTIONS2.map((opt) => (
-                                <Checkbox
-                                    key={opt.id}
-                                    value={opt.id}
-                                    label={opt.label}
-                                />
-                            ))}
-                        </SimpleGrid>
-                    </Checkbox.Group>
-
-                    {selectedOutputs.includes('image') && (
-                        <Radio.Group
-                            label='图像渲染器'
-                            value={imageRenderer}
-                            onChange={(v) => {
-                                const next = (v as 'bin' | 'substrate') || 'bin';
-                                // 禁用“真实衬底样式”，强制为 bin
-                                setImageRenderer(next === 'substrate' ? 'bin' : next);
-                            }}
+                    <Group align="flex-start" grow>
+                        <Checkbox.Group
+                            label="选择导出格式"
+                            value={selectedOutputs}
+                            onChange={(vals) => setSelectedOutputs(vals as OutputId[])}
+                            style={{ flex: 1 }}
                         >
-                            <Group gap='md' mt='xs'>
-                                <Radio value='bin' label='方块 (Bin颜色)' />
-                                <Radio value='substrate' label='真实衬底样式' disabled />
+                            <Group gap="md" mt="xs">
+                                {OUTPUT_OPTIONS.map((opt) => (
+                                    <Checkbox
+                                        key={opt.id}
+                                        value={opt.id}
+                                        label={opt.label}
+                                    />
+                                ))}
                             </Group>
-                        </Radio.Group>
-                    )}
+                        </Checkbox.Group>
+
+                        {selectedOutputs.includes('image') && (
+                            <Radio.Group
+                                label="图像渲染器"
+                                value={imageRenderer}
+                                onChange={(v) => {
+                                    const next = (v as 'bin' | 'substrate') || 'bin';
+                                    // 禁用“真实衬底样式”，强制为 bin
+                                    setImageRenderer(next === 'substrate' ? 'bin' : next);
+                                }}
+                            >
+                                <Group gap="md" mt="xs">
+                                    <Radio value="bin" label="方块 (Bin颜色)" />
+                                    <Radio value="substrate" label="真实衬底样式" disabled />
+                                </Group>
+                            </Radio.Group>
+                        )}
+
+                        <Checkbox.Group
+                            label="选择参与叠图的BIN/缺陷类别"
+                            value={selectedOutputs2}
+                            onChange={(vals) => setSelectedOutputs2(vals as BinId[])}
+                            style={{ flex: 1 }}
+                        >
+                            <SimpleGrid cols={3} spacing="sm" mt="xs">
+                                {OUTPUT_OPTIONS2.map((opt) => (
+                                    <Checkbox
+                                        key={opt.id}
+                                        value={opt.id}
+                                        label={renderBinLabel(opt)}
+                                    />
+                                ))}
+                            </SimpleGrid>
+                        </Checkbox.Group>
+                    </Group>
 
                     {/* Top-level output directory selector with Desktop default */}
-                    <Group align='end' grow>
+                    <Group align="end" grow>
                         <PathPicker
-                            label='输出目录'
-                            placeholder='默认：桌面(Desktop)'
+                            label="输出目录"
+                            placeholder="默认：桌面(Desktop)"
                             value={outputDir}
                             onChange={(e) => setOutputDir(e)}
                             readOnly
@@ -725,23 +757,23 @@ export default function WaferStacking() {
 
                 <Divider />
 
-                <Group align='flex-start'>
+                <Group align="flex-start">
                     {/* 右侧：任务列表区 → 嵌入 JobManager */}
-                    <Stack w='25%' gap='sm'>
+                    <Stack w="25%" gap="sm">
                         <Title order={3}>待处理任务</Title>
                         <JobManager disableAddFromCurrent />
                         {batchProcessing && (
-                            <Stack gap='sm'>
+                            <Stack gap="sm">
                                 <Progress
                                     value={(batchProgress.current / batchProgress.total) * 100}
                                 />
-                                <Text size='sm'>
+                                <Text size="sm">
                                     正在处理第 {batchProgress.current} 个任务
                                 </Text>
                             </Stack>
                         )}
                         {!batchProcessing && batchErrors.length > 0 && (
-                            <Text size='sm'>
+                            <Text size="sm">
                                 有 {batchErrors.length} 个任务处理失败
                             </Text>
                         )}
@@ -810,8 +842,8 @@ export default function WaferStacking() {
                                     boxShadow: '0 0 0 1px var(--mantine-color-blue-1) inset',
                                 }}
                             >
-                                <Title order={4}>当前Wafer数据</Title>
-                                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing='md'>
+                                <Title order={3} pb="sm">当前Wafer数据</Title>
+                                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
                                     {layerChoice.includeSubstrate && jobSubstrate && (
                                         <ExcelMetadataCard
                                             data={{
@@ -837,7 +869,7 @@ export default function WaferStacking() {
 
                         <Divider />
 
-                        <Stack gap='sm'>
+                        <Stack gap="sm">
                             <LayersSelector onChange={setLayerChoice} />
                             {layerChoice.includeSubstrate && (
                                 <Stack style={{ flex: 1, minWidth: 0 }} gap="sm">
@@ -865,7 +897,7 @@ export default function WaferStacking() {
                                 </Stack>
                             )}
                         </Stack>
-                        <Group align='end' grow>
+                        <Group align="end" grow>
                             <Checkbox
                                 checked={exportAsciiDieData}
                                 onChange={(e) => setExportAsciiDieData(e.target.checked)}
@@ -874,7 +906,7 @@ export default function WaferStacking() {
                                 size="sm"
                             />
                             <Button
-                                color='blue'
+                                color="blue"
                                 leftSection={processing ? <IconRefresh size={16} /> : <IconDownload size={16} />}
                                 loading={processing}
                                 onClick={processMapping}
@@ -883,7 +915,7 @@ export default function WaferStacking() {
                                 处理当前
                             </Button>
                             <Button
-                                color='green'
+                                color="green"
                                 onClick={handleBatchProcess}
                                 disabled={batchProcessing || queue.length === 0}
                                 leftSection={batchProcessing ? <IconRefresh size={16} /> : <IconRepeat size={16} />}

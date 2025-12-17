@@ -24,6 +24,8 @@ pub struct InferenceStatus {
     pub libtorch_enabled: bool,
 }
 
+// Stub-only payload mirrors real backend input; suppress dead_code warnings in libtorch-disabled builds.
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceImagePayload {
@@ -31,6 +33,7 @@ pub struct InferenceImagePayload {
     pub data: Vec<u8>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceRequest {
@@ -121,6 +124,7 @@ pub struct InferenceBatchResult {
     pub errors: Vec<InferenceFailure>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct ResizeConfig {

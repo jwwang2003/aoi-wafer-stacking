@@ -12,7 +12,6 @@ export interface PreferencesState {
 
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState;
-    status: 'idle' | 'loading' | 'failed';
     error: string | null;
 }
 

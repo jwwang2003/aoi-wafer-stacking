@@ -43,7 +43,7 @@ export default function SubstratePane({
 
     // Fetched data
     const [sheetsData, setSheetsData] = useState<SubstrateDefectXlsResult | null>(null);
-    const [dieData, setDieData] = useState<AsciiDie[] | WaferMapDie[] | null>(null);
+    const [, setDieData] = useState<AsciiDie[] | WaferMapDie[] | null>(null);
     // Sheet selection via dropdown ("__ALL__" = All)
     const [selectedSheetKey, setSelectedSheetKey] = useState<string>('__ALL__');
     const layoutMap = useAppSelector(s => s.waferLayouts.data);

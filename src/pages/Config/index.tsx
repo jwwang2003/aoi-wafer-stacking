@@ -5,6 +5,8 @@ import {
     SegmentedControl,
     Title,
     Button,
+    Text,
+    Alert,
 } from '@mantine/core';
 import {
     Routes,
@@ -13,21 +15,17 @@ import {
     useLocation,
     Navigate,
 } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '@/store';
-import { useAppSelector } from '@/hooks';
 
 import Preferences from './Preferences';
 import DataConfig from './DataConfig';
 // import SubstrateConfig from "./SubstrateConfig"; // 搬家了
 import MetadataIngest from './MetadataIngest';
 
-import { FlowStepper } from '@/components';
-import { DataSourceFlowSteps } from '@/flows';
-
-import { initDataSourceConfig, scanDataSourceFolders } from '@/slices/dataSourceConfigSlice';
-import { initPreferences } from '@/slices/preferencesSlice';
+import { initDataSourceConfig, revalidateDataSource } from '@/slices/dataSourceConfigSlice';
+import { initPreferences, revalidatePreferencesFile } from '@/slices/preferencesSlice';
 import ComingSoon from '../ComingSoon';
 import { initDataSourceState } from '@/slices/dataSourceStateSlice';
 
@@ -41,9 +39,8 @@ export default function ConfigPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const dispatch = useDispatch<AppDispatch>();
-    const [mounted, setMounted] = useState<boolean>(false);
-
-    const flowStep = useAppSelector((s) => s.preferences.stepper);
+    const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const currentValue =
         subpageOptions.find((opt) => location.pathname.endsWith(opt.value))
@@ -53,16 +50,25 @@ export default function ConfigPage() {
         navigate(`/config/${value}`);
     };
 
-    useEffect(() => {
-        if (!mounted) setMounted(true);
-    }, [mounted]);
+    const handleBootstrap = useCallback(async () => {
+        try {
+            setLoading(true);
+            setLoadError(null);
+            await dispatch(initPreferences()).unwrap();
+            await dispatch(initDataSourceConfig()).unwrap();
+            await dispatch(initDataSourceState()).unwrap();
+            await dispatch(revalidatePreferencesFile()).unwrap();
+            await dispatch(revalidateDataSource()).unwrap();
+        } catch (err) {
+            setLoadError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setLoading(false);
+        }
+    }, [dispatch]);
 
-    const handleRunAll = async () => {
-        await dispatch(initPreferences());
-        await dispatch(initDataSourceConfig());
-        await dispatch(scanDataSourceFolders());
-        await dispatch(initDataSourceState());
-    };
+    useEffect(() => {
+        handleBootstrap();
+    }, [handleBootstrap]);
 
     return (
         <Group grow>
@@ -70,23 +76,25 @@ export default function ConfigPage() {
                 <Stack gap="md">
                     <Title order={1}>设置</Title>
 
-                    <FlowStepper
-                        active={flowStep}
-                        onStepClick={() => { }}
-                        steps={DataSourceFlowSteps}
-                    >
-                        <></>
-                    </FlowStepper>
+                    <Group>
+                        <Button loading={loading} variant="outline" onClick={handleBootstrap}>
+                            重新加载配置
+                        </Button>
+                        <Text size="sm" c="dimmed">顺序: 加载通用设置 → 数据源配置 → 子目录状态</Text>
+                    </Group>
 
-                    <Button variant="outline" onClick={handleRunAll}>
-                        {'RUN (1~3)'}
-                    </Button>
+                    {loadError && (
+                        <Alert color="red" title="加载失败">
+                            {loadError}
+                        </Alert>
+                    )}
 
                     <SegmentedControl
                         autoFocus
                         data={subpageOptions}
                         value={currentValue}
                         onChange={handleChange}
+                        disabled={loading}
                     />
 
                     <Routes>

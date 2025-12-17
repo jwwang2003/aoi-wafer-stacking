@@ -38,7 +38,6 @@ export function SubfolderSelectorSection({ title, type }: { title: string, type:
 }
 
 export default function DataConfigSubpage() {
-    const [mounted, setMounted] = useState<boolean>(false);
     // React-Redux stuff
     const dispatch = useAppDispatch();
 
@@ -66,13 +65,6 @@ export default function DataConfigSubpage() {
     const dataSourceFlow = DataSources;   // Path flows
 
     // =========================================================================
-    // NOTE: INIT
-    // =========================================================================
-    useEffect(() => {
-        if (!mounted) setMounted(true);
-    }, []);
-
-    // =========================================================================
     // NOTE: METHODS
     // =========================================================================
     const handleAutoFolderRecognition = async () => {
@@ -97,14 +89,9 @@ export default function DataConfigSubpage() {
     // NOTE: REACT
     // =========================================================================
     useEffect(() => {
-        const init = async () => {
-            if (autoTrigger) {
-                await dispatch(scanDataSourceFolders());
-            }
-            await dispatch(revalidateDataSource());
-        }
-        if (mounted) init();
-    }, [mounted]);
+        // Keep config state aligned with file contents; avoid auto-scanning folders on mount.
+        dispatch(revalidateDataSource());
+    }, [dispatch, autoTrigger, rootPath, regexPatterns]);
 
     return (
         <>

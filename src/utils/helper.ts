@@ -36,6 +36,6 @@ export async function createDefaultPreferences(): Promise<PreferencesState> {
 
 export function prepPreferenceWriteOut(pref: PreferencesState): string {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { status, error, stepper, ...persistable } = pref;
+    const { error, stepper, ...persistable } = pref;
     return JSON.stringify(persistable, null, 2)
 }

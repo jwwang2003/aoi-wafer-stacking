@@ -189,11 +189,10 @@ export default function AoiPage() {
     const [preferGpu, setPreferGpu] = useState(true);
     const [cpuWeightPath, setCpuWeightPath] = useState('');
     const [gpuWeightPath, setGpuWeightPath] = useState('');
-    const [previewCount, setPreviewCount] = useState<number>(12);
     const [resizeEnabled, setResizeEnabled] = useState(false);
     const [resizeWidth, setResizeWidth] = useState<number>(256);
     const [resizeHeight, setResizeHeight] = useState<number>(256);
-    const [maskThreshold, setMaskThreshold] = useState(0.5);
+    const [maskThreshold, setMaskThreshold] = useState(0.75);
     const [detectEnabled, setDetectEnabled] = useState(true);
     const [detectPreferGpu, setDetectPreferGpu] = useState(true);
     const [detectWeightPath, setDetectWeightPath] = useState('');
@@ -322,7 +321,6 @@ export default function AoiPage() {
                 preferGpu,
                 cpuWeightPath: cpuWeightPath || undefined,
                 gpuWeightPath: gpuWeightPath || undefined,
-                previewValues: previewCount,
                 resize: resizeEnabled ? { width: resizeWidth, height: resizeHeight } : undefined,
                 maskThreshold,
                 detectEnabled,
@@ -337,7 +335,7 @@ export default function AoiPage() {
         } finally {
             setRunning(false);
         }
-    }, [cpuWeightPath, files, gpuWeightPath, preferGpu, previewCount]);
+    }, [cpuWeightPath, files, gpuWeightPath, preferGpu]);
 
     const removeFile = useCallback((name: string) => {
         setFiles(prev => {
@@ -438,7 +436,7 @@ export default function AoiPage() {
             return true;
         });
         return weights
-            .filter(w => w.model.toLowerCase().includes("yolo"))
+            .filter(w => w.model.toLowerCase().includes('yolo'))
             .map(w => ({ value: w.path, label: `${w.model} | ${w.device} | ${w.format} (${w.extension})` }));
     }, [status]);
 
@@ -538,112 +536,128 @@ export default function AoiPage() {
             <Card withBorder radius="md" p="md">
                 <Card.Section inheritPadding py="xs">
                     <Group justify="space-between">
-                        <Text fw={600}>权重路径</Text>
+                        <div>
+                            <Text fw={600}>权重路径与流程</Text>
+                            <Text c="dimmed" size="xs">分割先运行，YOLO 检测随后执行（如启用）。</Text>
+                        </div>
                         <Text c="dimmed" size="xs">可在此覆盖默认权重路径</Text>
                     </Group>
                 </Card.Section>
                 <Divider my="sm" />
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                    <TextInput
-                        label="CPU TorchScript (.ts)"
-                        placeholder="assets/models/aoi_cpu.ts"
-                        value={cpuWeightPath}
-                        onChange={e => setCpuWeightPath(e.currentTarget.value)}
-                        leftSection={<IconCpu size={16} />}
-                    />
-                    <TextInput
-                        label="GPU TorchScript (.ts)"
-                        placeholder="assets/models/aoi_gpu.ts"
-                        value={gpuWeightPath}
-                        onChange={e => setGpuWeightPath(e.currentTarget.value)}
-                        leftSection={<IconBolt size={16} />}
-                    />
-                </SimpleGrid>
-                <Group mt="sm" gap="md">
-                    <NumberInput
-                        label="返回的输出预览长度"
-                        value={previewCount}
-                        min={1}
-                        max={64}
-                        onChange={val => setPreviewCount(Number(val) || 1)}
-                    />
-                    <NumberInput
-                        label="掩膜阈值 (0-1)"
-                        value={maskThreshold}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={val => setMaskThreshold(
-                            Math.min(1, Math.max(0, Number(val) || 0))
-                        )}
-                    />
-                    <Select
-                        label="CPU 权重"
-                        placeholder="自动选择 CPU 权重"
-                        data={cpuOptions}
-                        clearable
-                        value={cpuWeightPath || null}
-                        onChange={val => setCpuWeightPath(val || '')}
-                        searchable
-                    />
-                    <Select
-                        label="GPU 权重"
-                        placeholder="自动选择 GPU 权重"
-                        data={gpuOptions}
-                        clearable
-                        value={gpuWeightPath || null}
-                        onChange={val => setGpuWeightPath(val || '')}
-                        searchable
-                    />
-                    <Select
-                        label="YOLO 权重"
-                        placeholder="自动选择 YOLO 权重"
-                        data={yoloOptions}
-                        clearable
-                        value={detectWeightPath || null}
-                        onChange={val => setDetectWeightPath(val || '')}
-                        searchable
-                    />
-                    <Switch
-                        label="启用检测（YOLO）"
-                        checked={detectEnabled}
-                        onChange={e => setDetectEnabled(e.currentTarget.checked)}
-                    />
-                    <Switch
-                        label="YOLO 优先 GPU"
-                        checked={detectPreferGpu}
-                        onChange={e => setDetectPreferGpu(e.currentTarget.checked)}
-                    />
-                    <NumberInput
-                        label="YOLO 置信度阈值"
-                        value={detectThreshold}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={val => setDetectThreshold(Math.min(1, Math.max(0, Number(val) || 0)))}
-                    />
-                    <Switch
-                        label="推理前调整尺寸"
-                        checked={resizeEnabled}
-                        onChange={e => setResizeEnabled(e.currentTarget.checked)}
-                    />
-                    <NumberInput
-                        label="宽度"
-                        value={resizeWidth}
-                        min={1}
-                        max={4096}
-                        disabled={!resizeEnabled}
-                        onChange={val => setResizeWidth(Number(val) || resizeWidth)}
-                    />
-                    <NumberInput
-                        label="高度"
-                        value={resizeHeight}
-                        min={1}
-                        max={4096}
-                        disabled={!resizeEnabled}
-                        onChange={val => setResizeHeight(Number(val) || resizeHeight)}
-                    />
-                </Group>
+                <Stack gap="lg">
+                    <Stack gap="xs">
+                        <Group justify="space-between">
+                            <Text fw={600}>分割 (Segmentation)</Text>
+                            <Text size="xs" c="dimmed">先输出掩膜，再决定是否进行检测</Text>
+                        </Group>
+                        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+                            <TextInput
+                                label="CPU TorchScript (.ts)"
+                                placeholder="assets/models/aoi_cpu.ts"
+                                value={cpuWeightPath}
+                                onChange={e => setCpuWeightPath(e.currentTarget.value)}
+                                leftSection={<IconCpu size={16} />}
+                            />
+                            <TextInput
+                                label="GPU TorchScript (.ts)"
+                                placeholder="assets/models/aoi_gpu.ts"
+                                value={gpuWeightPath}
+                                onChange={e => setGpuWeightPath(e.currentTarget.value)}
+                                leftSection={<IconBolt size={16} />}
+                            />
+                            <NumberInput
+                                label="掩膜阈值 (0-1)"
+                                value={maskThreshold}
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                onChange={val => setMaskThreshold(
+                                    Math.min(1, Math.max(0, Number(val) || 0))
+                                )}
+                            />
+                            <Select
+                                label="CPU 权重"
+                                placeholder="自动选择 CPU 权重"
+                                data={cpuOptions}
+                                clearable
+                                value={cpuWeightPath || null}
+                                onChange={val => setCpuWeightPath(val || '')}
+                                searchable
+                            />
+                            <Select
+                                label="GPU 权重"
+                                placeholder="自动选择 GPU 权重"
+                                data={gpuOptions}
+                                clearable
+                                value={gpuWeightPath || null}
+                                onChange={val => setGpuWeightPath(val || '')}
+                                searchable
+                            />
+                        </SimpleGrid>
+                        <Group gap="md" align="flex-end" wrap="wrap">
+                            <Switch
+                                label="推理前调整尺寸"
+                                checked={resizeEnabled}
+                                onChange={e => setResizeEnabled(e.currentTarget.checked)}
+                            />
+                            <NumberInput
+                                label="宽度"
+                                value={resizeWidth}
+                                min={1}
+                                max={4096}
+                                disabled={!resizeEnabled}
+                                onChange={val => setResizeWidth(Number(val) || resizeWidth)}
+                            />
+                            <NumberInput
+                                label="高度"
+                                value={resizeHeight}
+                                min={1}
+                                max={4096}
+                                disabled={!resizeEnabled}
+                                onChange={val => setResizeHeight(Number(val) || resizeHeight)}
+                            />
+                        </Group>
+                    </Stack>
+
+                    <Divider label="检测 (YOLO) - 在分割之后" labelPosition="center" />
+
+                    <Stack gap="xs">
+                        <Group gap="md" wrap="wrap">
+                            <Switch
+                                label="启用检测（YOLO）"
+                                checked={detectEnabled}
+                                onChange={e => setDetectEnabled(e.currentTarget.checked)}
+                            />
+                            <Switch
+                                label="YOLO 优先 GPU"
+                                checked={detectPreferGpu}
+                                disabled={!detectEnabled}
+                                onChange={e => setDetectPreferGpu(e.currentTarget.checked)}
+                            />
+                            <NumberInput
+                                label="YOLO 置信度阈值"
+                                value={detectThreshold}
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                disabled={!detectEnabled}
+                                onChange={val => setDetectThreshold(Math.min(1, Math.max(0, Number(val) || 0)))}
+                            />
+                        </Group>
+                        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                            <Select
+                                label="YOLO 权重"
+                                placeholder="自动选择 YOLO 权重"
+                                data={yoloOptions}
+                                clearable
+                                value={detectWeightPath || null}
+                                onChange={val => setDetectWeightPath(val || '')}
+                                searchable
+                                disabled={!detectEnabled}
+                            />
+                        </SimpleGrid>
+                    </Stack>
+                </Stack>
             </Card>
 
             {files.length > 0 && (
@@ -713,24 +727,6 @@ export default function AoiPage() {
                                 <Divider my="xs" />
                                 <Text size="sm" fw={600}>检测 (YOLO)</Text>
                                 <DetectionOverlay sample={sample} files={files} />
-                                <Divider my="xs" />
-                                <Text size="sm" fw={600}>输出预览</Text>
-                                <Text size="sm" c="dimmed">
-                                    总长度 {sample.preview.totalValues}，前 {sample.preview.values.length} 个:
-                                </Text>
-                                <Box
-                                    component="pre"
-                                    style={{
-                                        background: '#f8fafc',
-                                        borderRadius: 8,
-                                        padding: 8,
-                                        fontSize: 12,
-                                        overflowX: 'auto',
-                                    }}
-                                >
-{`[${sample.preview.values.map(v => v.toFixed(4)).join(', ')}]`}
-                                </Box>
-                                <Text size="xs" c="dimmed">输出 shape: [{sample.preview.shape.join(', ')}]</Text>
                             </Card>
                         ))}
                     </SimpleGrid>

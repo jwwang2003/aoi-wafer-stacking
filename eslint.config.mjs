@@ -16,6 +16,7 @@ export default tseslint.config(
         },
         rules: {
             quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+            'jsx-quotes': ['error', 'prefer-double'],
             '@typescript-eslint/no-explicit-any': ['error', { ignoreRestArgs: true }],
             '@typescript-eslint/ban-types': 'off',
             '@typescript-eslint/no-empty-object-type': 'off',

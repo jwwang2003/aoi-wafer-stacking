@@ -19,7 +19,6 @@ export const initialPreferencesState: PreferencesState = {
 
     // NOTE: DO NOT PERSIST
     stepper: ConfigStepperState.Initial,
-    status: 'idle',
     error: null,
 };
 

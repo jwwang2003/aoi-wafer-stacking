@@ -6,7 +6,7 @@ export default function AboutPage() {
   return (
     <Box p="md" style={{ maxWidth: 720, marginInline: 'auto' }}>
       <Title order={2} mb="md">
-        About Wafer Overlay (智能叠图)
+        {"About AOI Wafer Overlay (AOI优化与叠图)"}
       </Title>
 
       <Text mb="xs" c="dimmed">
@@ -14,7 +14,7 @@ export default function AboutPage() {
       </Text>
 
       <Text mb="lg">
-        Wafer Overlay is a desktop application built with Tauri V2, React, and TypeScript, designed for accurate 3D drawing and stacking of wafer data. It combines a Rust backend with a modern React-based frontend to deliver a fast, lightweight, and native experience.
+        Wafer Overlay by Sichain is a desktop application built with Tauri V2, React, and TypeScript, designed for accurate 3D drawing and stacking of wafer data. It combines a Rust backend with a modern React-based frontend to deliver a fast, lightweight, and native experience, and now includes AOI TorchScript inference (segmentation first, optional YOLO detection) alongside intelligent wafer stacking.
       </Text>
 
       <Divider mb="lg" />
