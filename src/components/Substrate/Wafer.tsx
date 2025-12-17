@@ -62,6 +62,16 @@ export default function SubstrateRenderer({
     const pointerRef = useRef<THREE.Vector2 | null>(null);
     const pointerWorldRef = useRef<{ x: number; y: number } | null>(null);
 
+    // Shared helpers
+    // Remove a tracked set of objects from the scene without touching refs.
+    const clearSceneObjects = useCallback((objects: THREE.Object3D[]) => {
+        const scene = sceneRef.current;
+        if (!scene) return;
+        objects.forEach((obj) => scene.remove(obj));
+    }, []);
+
+    // Guard against negative defect dimensions from upstream data.
+    const clampDefectSize = useCallback((val: number) => Math.max(0, val), []);
 
     // Manual refresh — re-run WebGL init effect
     const refreshRenderer = useCallback(() => {
@@ -113,27 +123,51 @@ export default function SubstrateRenderer({
         }
     };
 
-    const getBounds = useCallback(() => {
-        const coords = mapCoordinatesRef.current;
-        if (!coords.length) return null;
+    // Coordinate helpers ------------------------------------------------------
+    const mapCoordinatesRef = useRef<[number, number][]>([]);
+    const mapCoordinates = useMemo<[number, number][]>(() => {
+        // Deduplicate dies to avoid overlapping cells
+        if (!dies || dies.length === 0) return [];
+        const seen = new Set<string>();
+        const coords: [number, number][] = [];
+        for (const d of dies) {
+            const k = `${d.x}|${d.y}`;
+            if (!seen.has(k)) {
+                seen.add(k);
+                coords.push([d.x, d.y]);
+            }
+        }
+        return coords;
+    }, [dies]);
+    useEffect(() => {
+        mapCoordinatesRef.current = mapCoordinates;
+    }, [mapCoordinates]);
 
+    const getCoordExtents = useCallback(() => {
         let minCoordX = Infinity, maxCoordX = -Infinity, minCoordY = Infinity, maxCoordY = -Infinity;
-        for (const [xCoord, yCoord] of coords) {
+        for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
             minCoordX = Math.min(minCoordX, xCoord);
             maxCoordX = Math.max(maxCoordX, xCoord);
             minCoordY = Math.min(minCoordY, yCoord);
             maxCoordY = Math.max(maxCoordY, yCoord);
         }
         if (!isFinite(minCoordX) || !isFinite(minCoordY)) return null;
+        return { minCoordX, maxCoordX, minCoordY, maxCoordY };
+    }, []);
+
+    const getBounds = useCallback(() => {
+        const extents = getCoordExtents();
+        if (!extents) return null;
+        const { minCoordX, maxCoordX, minCoordY, maxCoordY } = extents;
 
         // Include header row/column plus a right/bottom padding cell
-        const minX = (minCoordX) * gridWidth + offsetX;            // header column
-        const maxX = (maxCoordX) * gridWidth + offsetX;            // right padding
-        const maxY = -(minCoordY - 2) * gridHeight + offsetY;          // header row top edge
-        const minY = -(maxCoordY) * gridHeight + offsetY;          // extra row below data
+        const minX = minCoordX * gridWidth + offsetX;                // header column
+        const maxX = maxCoordX * gridWidth + offsetX;                // right padding
+        const maxY = -(minCoordY - 2) * gridHeight + offsetY;        // header row top edge
+        const minY = -maxCoordY * gridHeight + offsetY;              // extra row below data
 
         return { minX, maxX, minY, maxY };
-    }, [gridHeight, gridWidth, offsetX, offsetY]);
+    }, [getCoordExtents, gridHeight, gridWidth, offsetX, offsetY]);
 
     const fitCameraToData = () => {
         const el = squareRef.current;
@@ -153,7 +187,7 @@ export default function SubstrateRenderer({
         const dataH = maxY - minY;
         const margin = 1.0;
 
-        // Incorporate current zoom so effective view (frustum/zoom) fits content.
+        // Incorporate current zoom so effective view (frustum/zoom) fits content
         const currentZoom = camera.zoom || zoom || 1;
         const baseScale = Math.min(
             side / (dataW * margin || 1),
@@ -173,26 +207,8 @@ export default function SubstrateRenderer({
         controls.update();
     };
 
-    // Keep latest coordinates
-    const mapCoordinatesRef = useRef<[number, number][]>([]);
-    const mapCoordinates = useMemo<[number, number][]>(() => {
-        if (!dies || dies.length === 0) return [];
-        const seen = new Set<string>();
-        const coords: [number, number][] = [];
-        for (const d of dies) {
-            const k = `${d.x}|${d.y}`;
-            if (!seen.has(k)) {
-                seen.add(k);
-                coords.push([d.x, d.y]);
-            }
-        }
-        return coords;
-    }, [dies]);
-    useEffect(() => {
-        mapCoordinatesRef.current = mapCoordinates;
-    }, [mapCoordinates]);
-
-    // Init: dynamically import three.js and OrbitControls, then construct scene
+    // Init: dynamically import three.js and OrbitControls, then construct scene.
+    // Kept inside an effect to avoid loading heavy deps when the component is unused.
     useEffect(() => {
         let disposed = false;
         let animationId = 0;
@@ -358,117 +374,26 @@ export default function SubstrateRenderer({
         return Array.isArray(arr) ? arr : [];
     }, [selectedSheetId, sheetsData]);
 
-    // Rebuild scene on data changes
-    useEffect(() => {
-        if (!threeReady || !sceneRef.current || !threeRef.current) return;
-        const THREE = threeRef.current;
-        defectObjectsRef.current.forEach((o) => sceneRef.current!.remove(o));
-        gridObjectsRef.current.forEach((o) => sceneRef.current!.remove(o));
-        hoverOverlayRef.current.forEach((o) => sceneRef.current!.remove(o));
-        defectObjectsRef.current = [];
-        gridObjectsRef.current = [];
-        gridMeshCoordsRef.current = [];
-        hoverOverlayRef.current = [];
-
-        if (mapCoordinates.length === 0) {
-            setError(dies && dies.length === 0 ? '没有可显示的晶圆点位' : null);
-            return;
-        }
-
-        createGridFromCoordinates();
-
-        // Helper: create a red question mark sprite
-        const makeQuestionMarkSprite = (w: number, h: number) => {
-            const canvas = document.createElement('canvas');
-            const size = 256;
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext('2d')!;
-            ctx.clearRect(0, 0, size, size);
-            ctx.fillStyle = 'rgba(0,0,0,0)';
-            ctx.fillRect(0, 0, size, size);
-            ctx.fillStyle = '#ff0000';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = 'bold 160px Arial';
-            ctx.fillText('?', size / 2, size / 2 + 6);
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.needsUpdate = true;
-            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-            const sprite = new THREE.Sprite(mat);
-            sprite.scale.set(w, h, 1);
-            return sprite;
-        };
-
-        const clampDefectSize = (val: number) => Math.max(0, val);
-
-        if (activeDefects && activeDefects.length) {
-            const nodes: THREE.Object3D[] = [];
-            activeDefects.forEach((item) => {
-                const adjW = clampDefectSize(item.w + offsetX_defect) / 300;
-                const adjH = clampDefectSize(item.h + offsetY_defect) / 300;
-                const hasColor = colorMap.has(item.class);
-                const sizeX = Math.max(adjW, gridWidth * 0.5);
-                const sizeY = Math.max(adjH, gridHeight * 0.5);
-                if (!hasColor) {
-                    const sprite = makeQuestionMarkSprite(sizeX, sizeY);
-                    sprite.position.set(item.x, item.y, 0.2);
-                    sceneRef.current!.add(sprite);
-                    nodes.push(sprite);
-                } else {
-                    const geometry = new THREE.PlaneGeometry(adjW, adjH);
-                    const color = colorMap.get(item.class)!;
-                    // Use fully opaque material for accurate, saturated color
-                    const material = new THREE.MeshBasicMaterial({
-                        color,
-                        side: THREE.DoubleSide,
-                        transparent: false,
-                        opacity: 1,
-                    });
-                    const mesh = new THREE.Mesh(geometry, material);
-                    mesh.position.set(item.x, item.y, 0);
-                    sceneRef.current!.add(mesh);
-                    nodes.push(mesh);
-                }
-            });
-            defectObjectsRef.current = nodes;
-        }
-
-        fitCameraToData();
-        if (shouldResetViewRef.current) {
-            centerCameraToData();
-            shouldResetViewRef.current = false;
-        }
-        setError(null);
-    }, [threeReady, mapCoordinates, activeDefects, gridWidth, gridHeight, overlapColor, offsetX, offsetY, offsetX_defect, offsetY_defect]);
-
-    const createGridFromCoordinates = () => {
+    const createGridFromCoordinates = useCallback(() => {
         if (!threeReady || !sceneRef.current || !threeRef.current) return;
         const THREE = threeRef.current;
         const baseGridColor = 0x8cefa1;
         const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
         const gridObjs: THREE.Object3D[] = [];
         const gridMeshCoords: Array<{ mesh: THREE.Mesh, coord: { x: number; y: number } }> = [];
-
-        let minCoordX = Infinity;
-        let minCoordY = Infinity;
-        let maxCoordX = -Infinity;
-        let maxCoordY = -Infinity;
+        const extents = getCoordExtents();
+        if (!extents) return;
+        const { minCoordX, minCoordY, maxCoordX, maxCoordY } = extents;
 
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
-            minCoordX = Math.min(minCoordX, xCoord);
-            maxCoordX = Math.max(maxCoordX, xCoord);
-            minCoordY = Math.min(minCoordY, yCoord);
-            maxCoordY = Math.max(maxCoordY, yCoord);
-
             const gridLeft = xCoord * gridWidth + offsetX;
             const gridRight = gridLeft + gridWidth;
             const gridTop = -yCoord * gridHeight + offsetY;
             const gridBottom = gridTop + gridHeight;
             const hasOverlap = activeDefects && activeDefects.length
                 ? activeDefects.some(defect => {
-                    const adjW = Math.max(0, defect.w + offsetX_defect) / 300;
-                    const adjH = Math.max(0, defect.h + offsetY_defect) / 300;
+                    const adjW = clampDefectSize(defect.w + offsetX_defect) / 300;
+                    const adjH = clampDefectSize(defect.h + offsetY_defect) / 300;
                     const defectLeft = defect.x - adjW / 2;
                     const defectRight = defect.x + adjW / 2;
                     const defectTop = defect.y - adjH / 2;
@@ -575,7 +500,89 @@ export default function SubstrateRenderer({
 
         gridObjectsRef.current = gridObjs;
         gridMeshCoordsRef.current = gridMeshCoords;
-    };
+    }, [activeDefects, clampDefectSize, getCoordExtents, gridHeight, gridWidth, offsetX, offsetX_defect, offsetY, offsetY_defect, overlapColor, threeReady]);
+
+    // Rebuild scene on data changes (dies, sheet selection, offsets, etc.)
+    useEffect(() => {
+        if (!threeReady || !sceneRef.current || !threeRef.current) return;
+        const THREE = threeRef.current;
+        clearSceneObjects(defectObjectsRef.current);
+        clearSceneObjects(gridObjectsRef.current);
+        clearSceneObjects(hoverOverlayRef.current);
+        defectObjectsRef.current = [];
+        gridObjectsRef.current = [];
+        gridMeshCoordsRef.current = [];
+        hoverOverlayRef.current = [];
+
+        if (mapCoordinates.length === 0) {
+            setError(dies && dies.length === 0 ? '没有可显示的晶圆点位' : null);
+            return;
+        }
+
+        createGridFromCoordinates();
+
+        // Helper: create a red question mark sprite
+        const makeQuestionMarkSprite = (w: number, h: number) => {
+            const canvas = document.createElement('canvas');
+            const size = 256;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d')!;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#ff0000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 160px Arial';
+            ctx.fillText('?', size / 2, size / 2 + 6);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.needsUpdate = true;
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            const sprite = new THREE.Sprite(mat);
+            sprite.scale.set(w, h, 1);
+            return sprite;
+        };
+
+        if (activeDefects && activeDefects.length) {
+            const nodes: THREE.Object3D[] = [];
+            activeDefects.forEach((item) => {
+                const adjW = clampDefectSize(item.w + offsetX_defect) / 300;
+                const adjH = clampDefectSize(item.h + offsetY_defect) / 300;
+                const hasColor = colorMap.has(item.class);
+                const sizeX = Math.max(adjW, gridWidth * 0.5);
+                const sizeY = Math.max(adjH, gridHeight * 0.5);
+                if (!hasColor) {
+                    const sprite = makeQuestionMarkSprite(sizeX, sizeY);
+                    sprite.position.set(item.x, item.y, 0.2);
+                    sceneRef.current!.add(sprite);
+                    nodes.push(sprite);
+                } else {
+                    const geometry = new THREE.PlaneGeometry(adjW, adjH);
+                    const color = colorMap.get(item.class)!;
+                    // Use fully opaque material for accurate, saturated color
+                    const material = new THREE.MeshBasicMaterial({
+                        color,
+                        side: THREE.DoubleSide,
+                        transparent: false,
+                        opacity: 1,
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.set(item.x, item.y, 0);
+                    sceneRef.current!.add(mesh);
+                    nodes.push(mesh);
+                }
+            });
+            defectObjectsRef.current = nodes;
+        }
+
+        fitCameraToData();
+        if (shouldResetViewRef.current) {
+            centerCameraToData();
+            shouldResetViewRef.current = false;
+        }
+        setError(null);
+    }, [activeDefects, clampDefectSize, clearSceneObjects, createGridFromCoordinates, dies, gridHeight, gridWidth, mapCoordinates, offsetX, offsetX_defect, offsetY, offsetY_defect, threeReady]);
 
     const centerCameraToData = () => {
         const camera = cameraRef.current;
@@ -595,72 +602,10 @@ export default function SubstrateRenderer({
         controls.update();
     };
 
-    // Hover coordinate detection
-    useEffect(() => {
-        const canvas = rendererRef.current?.domElement;
-        const camera = cameraRef.current;
-        const raycaster = raycasterRef.current;
-        const THREE = threeRef.current;
-        const pointer = pointerRef.current;
-        if (!canvas || !camera || !raycaster || !THREE || !pointer) return;
-
-        const handlePointerMove = (evt: MouseEvent) => {
-            const rect = canvas.getBoundingClientRect();
-            pointer.set(
-                ((evt.clientX - rect.left) / rect.width) * 2 - 1,
-                -((evt.clientY - rect.top) / rect.height) * 2 + 1
-            );
-            raycaster.setFromCamera(pointer, camera);
-            const world = new THREE.Vector3(pointer.x, pointer.y, 0);
-            world.unproject(camera);
-            pointerWorldRef.current = { x: world.x, y: world.y };
-            setPointerVersion((v) => v + 1);
-            const meshes = gridMeshCoordsRef.current.map((m) => m.mesh);
-            const intersects = raycaster.intersectObjects(meshes, false);
-            
-            const fallbackCoord = coordFromWorld(world.x, world.y);
-            if (intersects.length > 0) {
-                const hitMesh = intersects[0].object as THREE.Mesh;
-                const found = gridMeshCoordsRef.current.find((m) => m.mesh === hitMesh);
-                const nextCoord = found?.coord ?? fallbackCoord;
-                if (!nextCoord) clearHoverOverlays();
-                setHoverCoord(nextCoord);
-            } else {
-                if (!fallbackCoord) clearHoverOverlays();
-                setHoverCoord(fallbackCoord);
-            }
-        };
-        const handleLeave = () => {
-            setHoverCoord(null);
-            pointerWorldRef.current = null;
-            setPointerVersion((v) => v + 1);
-        };
-
-        canvas.addEventListener('pointermove', handlePointerMove);
-        canvas.addEventListener('pointerleave', handleLeave);
-        return () => {
-            canvas.removeEventListener('pointermove', handlePointerMove);
-            canvas.removeEventListener('pointerleave', handleLeave);
-        };
-    }, [threeReady]);
-
     const clearHoverOverlays = useCallback(() => {
-        if (!sceneRef.current) return;
-        hoverOverlayRef.current.forEach((o) => sceneRef.current!.remove(o));
+        clearSceneObjects(hoverOverlayRef.current);
         hoverOverlayRef.current = [];
-    }, []);
-
-    const getCoordExtents = useCallback(() => {
-        let minCoordX = Infinity, maxCoordX = -Infinity, minCoordY = Infinity, maxCoordY = -Infinity;
-        for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
-            minCoordX = Math.min(minCoordX, xCoord);
-            maxCoordX = Math.max(maxCoordX, xCoord);
-            minCoordY = Math.min(minCoordY, yCoord);
-            maxCoordY = Math.max(maxCoordY, yCoord);
-        }
-        if (!isFinite(minCoordX) || !isFinite(minCoordY)) return null;
-        return { minCoordX, maxCoordX, minCoordY, maxCoordY };
-    }, []);
+    }, [clearSceneObjects]);
 
     const getHeaderBounds = useCallback(() => {
         const extents = getCoordExtents();
@@ -710,6 +655,56 @@ export default function SubstrateRenderer({
         return { x, y };
     }, [getHeaderBounds, gridWidth, gridHeight]);
 
+    // Hover coordinate detection (raycast + fallback from world coords)
+    useEffect(() => {
+        const canvas = rendererRef.current?.domElement;
+        const camera = cameraRef.current;
+        const raycaster = raycasterRef.current;
+        const THREE = threeRef.current;
+        const pointer = pointerRef.current;
+        if (!canvas || !camera || !raycaster || !THREE || !pointer) return;
+
+        const handlePointerMove = (evt: MouseEvent) => {
+            const rect = canvas.getBoundingClientRect();
+            pointer.set(
+                ((evt.clientX - rect.left) / rect.width) * 2 - 1,
+                -((evt.clientY - rect.top) / rect.height) * 2 + 1
+            );
+            raycaster.setFromCamera(pointer, camera);
+            const world = new THREE.Vector3(pointer.x, pointer.y, 0);
+            world.unproject(camera);
+            pointerWorldRef.current = { x: world.x, y: world.y };
+            setPointerVersion((v) => v + 1);
+            const meshes = gridMeshCoordsRef.current.map((m) => m.mesh);
+            const intersects = raycaster.intersectObjects(meshes, false);
+            
+            const fallbackCoord = coordFromWorld(world.x, world.y);
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object as THREE.Mesh;
+                const found = gridMeshCoordsRef.current.find((m) => m.mesh === hitMesh);
+                const nextCoord = found?.coord ?? fallbackCoord;
+                if (!nextCoord) clearHoverOverlays();
+                setHoverCoord(nextCoord);
+            } else {
+                if (!fallbackCoord) clearHoverOverlays();
+                setHoverCoord(fallbackCoord);
+            }
+        };
+        const handleLeave = () => {
+            setHoverCoord(null);
+            pointerWorldRef.current = null;
+            setPointerVersion((v) => v + 1);
+        };
+
+        canvas.addEventListener('pointermove', handlePointerMove);
+        canvas.addEventListener('pointerleave', handleLeave);
+        return () => {
+            canvas.removeEventListener('pointermove', handlePointerMove);
+            canvas.removeEventListener('pointerleave', handleLeave);
+        };
+    }, [clearHoverOverlays, coordFromWorld, threeReady]);
+
+    // Draw Excel-like row/column hover highlight plus a floating label
     const updateHoverOverlays = useCallback(() => {
         if (!sceneRef.current || !threeRef.current) return;
         const THREE = threeRef.current;
@@ -769,26 +764,29 @@ export default function SubstrateRenderer({
 
         const ctor = css2dObjectCtorRef.current;
         if (ctor) {
-            const el = document.createElement('div');
-            el.textContent = `(${hoverCoord.x}, ${hoverCoord.y})`;
-            el.style.fontFamily = 'Inter, "Segoe UI", Arial, sans-serif';
-            el.style.fontSize = '12px';
-            el.style.fontWeight = '600';
-            el.style.color = '#0f172a';
-            el.style.background = 'rgba(255, 255, 255, 0.92)';
-            el.style.border = '1px solid rgba(0, 0, 0, 0.12)';
-            el.style.borderRadius = '6px';
-            el.style.padding = '2px 6px';
-            el.style.pointerEvents = 'none';
-            el.style.transform = 'translate(-100%, 120%)';
-            const label = new ctor(el);
+            // Apply custom offset to a child so the renderer's own transform isn't overwritten
+            const outer = document.createElement('div');
+            const bubble = document.createElement('div');
+            bubble.textContent = `(${hoverCoord.x}, ${hoverCoord.y})`;
+            bubble.style.fontFamily = 'Inter, "Segoe UI", Arial, sans-serif';
+            bubble.style.fontSize = '12px';
+            bubble.style.fontWeight = '600';
+            bubble.style.color = '#0f172a';
+            bubble.style.background = 'rgba(255, 255, 255, 0.92)';
+            bubble.style.border = '1px solid rgba(0, 0, 0, 0.12)';
+            bubble.style.borderRadius = '6px';
+            bubble.style.padding = '2px 6px';
+            bubble.style.pointerEvents = 'none';
+            bubble.style.transform = 'translate(-50%, 80%)';
+            outer.appendChild(bubble);
+            const label = new ctor(outer);
             label.position.set(cursorX, cursorY, 0.25);
             nodes.push(label);
         }
 
         nodes.forEach(n => sceneRef.current!.add(n));
         hoverOverlayRef.current = nodes;
-    }, [clearHoverOverlays, getCoordExtents, gridHeight, gridWidth, hoverCoord, offsetX, offsetY]);
+    }, [clearHoverOverlays, getHeaderBounds, gridHeight, gridWidth, hoverCoord, offsetX, offsetY]);
 
     useEffect(() => {
         updateHoverOverlays();
