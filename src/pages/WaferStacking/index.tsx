@@ -34,9 +34,10 @@ import {
     parseWaferMapEx,
     parseWaferMap,
     invokeParseSubstrateDefectXls,
+    invokeParseDieLayoutXls,
 } from '@/api/tauri/wafer';
 // IPC types for Tauri API calls
-import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult } from '@/types/ipc';
+import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult, DieLayoutMap } from '@/types/ipc';
 
 import { LayerMeta } from './priority';
 import { exportWaferFiles } from './outputHandler';
@@ -179,6 +180,7 @@ export default function WaferStacking() {
 
     const dispatch = useAppDispatch();
     const jobState = useAppSelector((s) => s.stackingJob);
+    const dieLayoutPath = useAppSelector((s) => s.preferences.dieLayoutXlsPath);
     const { queue } = jobState;
     const currentJob = jobState;
 
@@ -333,6 +335,7 @@ export default function WaferStacking() {
             let cp1Header: Record<string, string> = {};
             const tempCombinedHeaders: Record<string, string> = {};
             let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number, class: string }> = [];
+            let dieLayoutMap: DieLayoutMap | null = null;
 
             for (const layer of sortedLayers) {
                 const { filePath, layerType, stage } = layer;
@@ -387,6 +390,22 @@ export default function WaferStacking() {
                 if (layerType === 'substrate') {
                     layerName = 'Substrate';
                     content = await invokeParseSubstrateDefectXls(filePath);
+                    let baseLayout: AsciiDie[] | undefined;
+                    const layoutPath = dieLayoutPath || filePath;
+                    if (layoutPath && !dieLayoutMap) {
+                        try {
+                            dieLayoutMap = await invokeParseDieLayoutXls(layoutPath);
+                            console.log(dieLayoutMap);
+                        } catch (err) {
+                            console.warn('[substrate] Failed to load die layout map', err);
+                        }
+                    }
+                    if (dieLayoutMap) {
+                        baseLayout =
+                            dieLayoutMap[jobProductId || '']?.dies ||
+                            dieLayoutMap[jobOemId || '']?.dies ||
+                            (Object.keys(dieLayoutMap).length > 0 ? dieLayoutMap[Object.keys(dieLayoutMap)[0]]?.dies : undefined);
+                    }
                     if (content) {
                         allSubstrateDefects = [];
                         const plDefects = content['PL defect list'] || [];
@@ -423,11 +442,11 @@ export default function WaferStacking() {
                         dies = generateGridWithSubstrateDefects(
                             originalDiesList[0] || [],
                             filteredSubstrateDefects,
-                            selectedOutputs2,
                             currentSubstrateOffset.x,
                             currentSubstrateOffset.y,
                             currentDefectSizeOffset.x,
-                            currentDefectSizeOffset.y
+                            currentDefectSizeOffset.y,
+                            baseLayout
                         );
                     }
                 }
@@ -488,7 +507,7 @@ export default function WaferStacking() {
             const statsToSave = {
                 oem_product_id: oemProductId!,
                 batch_id: batchId,
-                wafer_id: waferId.toString(),
+                wafer_id: waferId!.toString(),
                 total_tested: stats.totalTested,
                 total_pass: stats.totalPass,
                 total_fail: stats.totalFail,

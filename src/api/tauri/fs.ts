@@ -50,6 +50,15 @@ export async function invokeSha1(input: string): Promise<string> {
 }
 
 /**
+ * Compute SHA1 hashes for many strings at once in Rust.
+ * @param inputs - Strings to hash.
+ * @returns Promise resolving to hashes in the same order.
+ */
+export async function invokeSha1Batch(inputs: string[]): Promise<string[]> {
+    return invokeSafe<string[]>('rust_sha1_batch', { inputs });
+}
+
+/**
  * Compute SHA256 hash in Rust.
  * @param input - The string to hash.
  * @returns Promise resolving to the SHA256 hash as a string.

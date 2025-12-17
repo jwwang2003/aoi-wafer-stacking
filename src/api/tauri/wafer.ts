@@ -5,6 +5,7 @@ import type {
     ProductMappingXlsResult,
     ProductXlsResult,
     SubstrateDefectXlsResult,
+    DieLayoutMap,
 
     Wafer
 } from '@/types/ipc';
@@ -25,6 +26,15 @@ export async function invokeParseProductXls(path: string): Promise<ProductXlsRes
 
 export async function invokeParseSubstrateDefectXls(path: string): Promise<SubstrateDefectXlsResult> {
     return invokeSafe('rust_parse_substrate_defect_xls', { path });
+}
+
+export async function invokeParseDieLayoutXls(path: string): Promise<DieLayoutMap> {
+    return invokeSafe('rust_parse_die_layout_xls', { path });
+}
+
+// Debug helper: prints X/Y coords for each sheet server-side (console).
+export async function invokeDebugPrintDieLayout(path: string): Promise<void> {
+    await invokeSafe('rust_debug_print_die_layout_coords', { path });
 }
 
 // =============================================================================

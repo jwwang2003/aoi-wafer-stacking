@@ -19,6 +19,7 @@ import {
     About as AboutPage,
     ComingSoon,
     Admin as AdminPage,
+    Aoi as AoiPage,
 } from '@/pages';
 
 export type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'log' | 'help' | 'about' | 'admin';
@@ -59,7 +60,7 @@ const menuItems: MenuItem[] = [
         label: 'AOI',
         value: 'aoi',
         path: '/aoi',
-        component: ComingSoon,
+        component: AoiPage,
     },
     {
         icon: IconStack3,

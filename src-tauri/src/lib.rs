@@ -4,6 +4,11 @@ mod file;
 mod parser;
 mod wafer;
 mod commands;
+#[cfg(feature = "libtorch")]
+mod inference;
+#[cfg(not(feature = "libtorch"))]
+#[path = "inference_stub.rs"]
+mod inference;
 
 use file::file_lock;
 use tauri::{RunEvent};
@@ -58,11 +63,14 @@ fn run_once() -> Result<(), tauri::Error> {
             commands::rust_read_dir,
             // Cryptography
             commands::rust_sha1,
+            commands::rust_sha1_batch,
             commands::rust_sha256,
             // Excel file parsing methods
             commands::rust_parse_product_mapping_xls,
             commands::rust_parse_product_xls,
             commands::rust_parse_substrate_defect_xls,
+            commands::rust_parse_die_layout_xls,
+            commands::rust_debug_print_die_layout_coords,
             // Wafer parsing methods
             commands::rust_parse_wafer,
             commands::rust_parse_wafer_bin,
@@ -75,7 +83,10 @@ fn run_once() -> Result<(), tauri::Error> {
             commands::rust_print_wafer_map_data,
             commands::rust_export_wafer_hex,
             commands::rust_print_wafer_hex,
-            commands::rust_export_wafer_jpg
+            commands::rust_export_wafer_jpg,
+            // AOI inference
+            commands::rust_aoi_inference_status,
+            commands::rust_aoi_run_inference
         ])
         .build(tauri::generate_context!())?;
 

@@ -175,6 +175,9 @@ const preferencesSlice = createSlice({
             state.dataSourceConfigPath = action.payload;    // set the new value
             // no need to save because the middleware takes care of that
         },
+        setDieLayoutXlsPath(state, action: PayloadAction<string>) {
+            state.dieLayoutXlsPath = action.payload;
+        },
         setSqlDebug(state, action: PayloadAction<boolean>) {
             state.sqlDebug = action.payload;
         },
@@ -246,5 +249,5 @@ const preferencesSlice = createSlice({
     },
 });
 
-export const { setDataSourceConfigPath, setSqlDebug, setAutoTriggerState, setStepper, advanceStepper } = preferencesSlice.actions;
+export const { setDataSourceConfigPath, setDieLayoutXlsPath, setSqlDebug, setAutoTriggerState, setStepper, advanceStepper } = preferencesSlice.actions;
 export default preferencesSlice.reducer;

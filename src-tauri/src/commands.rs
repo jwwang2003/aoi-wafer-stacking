@@ -94,13 +94,19 @@ pub fn rust_sha256(input: String) -> String {
     crypto::sha256_hash(input)
 }
 
+#[tauri::command]
+pub fn rust_sha1_batch(inputs: Vec<String>) -> Vec<String> {
+    inputs.into_iter().map(crypto::sha1_hash).collect()
+}
+
 // =============================================================================
 
 use crate::parser::{
-    parse_product_mapping_xls as do_parse_product_mapping_xls,
-    parse_product_xls as do_parse_product_xls,
-    parse_substrate_defect_xls as do_parse_substrate_defect_xls,
+    debug_print_die_layout_coords, parse_die_layout_xls, parse_product_mapping_xls,
+    parse_product_xls, parse_substrate_defect_xls, parse_wafer, parse_wafer_bin,
+    parse_wafer_map_data, DieLayoutSheet,
 };
+use crate::inference;
 
 use crate::wafer::ds::{
     BinMapData, DefectRecord, HexMapData, MapData, ProductMappingRecord, ProductRecord, Wafer,
@@ -112,14 +118,14 @@ use crate::wafer::ds::{
 pub fn rust_parse_product_mapping_xls(
     path: String,
 ) -> Result<HashMap<String, Vec<ProductMappingRecord>>, String> {
-    do_parse_product_mapping_xls(path)
+    parse_product_mapping_xls(path)
 }
 
 #[tauri::command]
 /// Object key is the sheet name<br/>
 /// Typescript eqv. Record<string, ProductRecord[]>;
 pub fn rust_parse_product_xls(path: String) -> Result<HashMap<String, Vec<ProductRecord>>, String> {
-    do_parse_product_xls(path)
+    parse_product_xls(path)
 }
 
 #[tauri::command]
@@ -127,89 +133,113 @@ pub fn rust_parse_product_xls(path: String) -> Result<HashMap<String, Vec<Produc
 pub fn rust_parse_substrate_defect_xls(
     path: String,
 ) -> Result<HashMap<String, Vec<DefectRecord>>, String> {
-    do_parse_substrate_defect_xls(path)
+    parse_substrate_defect_xls(path)
+}
+
+#[tauri::command]
+/// Parse a substrate die layout Excel (sheet per product id; x/y headers + grid).
+pub fn rust_parse_die_layout_xls(
+    path: String,
+) -> Result<HashMap<String, DieLayoutSheet>, String> {
+    parse_die_layout_xls(path)
+}
+
+#[tauri::command]
+pub fn rust_debug_print_die_layout_coords(path: String) -> Result<(), String> {
+    debug_print_die_layout_coords(path)
 }
 
 // =============================================================================
 
-use crate::parser::{
-    parse_wafer as do_parse_wafer, parse_wafer_bin as do_parse_wafer_bin,
-    parse_wafer_map_data as do_parse_wafer_map_data,
-};
-
 #[tauri::command]
 /// Typescript eqv. Record<string, DefectRecord[]>;
 pub fn rust_parse_wafer(path: String) -> Result<Wafer, String> {
-    do_parse_wafer(path)
+    parse_wafer(path)
 }
 
 #[tauri::command]
 /// Typescript eqv. Record<string, DefectRecord[]>;
 pub fn rust_parse_wafer_bin(path: String) -> Result<BinMapData, String> {
-    do_parse_wafer_bin(path)
+    parse_wafer_bin(path)
 }
 
 #[tauri::command]
 /// Typescript eqv. Record<string, DefectRecord[]>;
 pub fn rust_parse_wafer_map_data(path: String) -> Result<MapData, String> {
-    do_parse_wafer_map_data(path)
+    parse_wafer_map_data(path)
 }
 
-//
+fn export_bytes<L: AsRef<str>, D: Into<Vec<u8>>>(label: L, output_path: &str, data: D) -> Result<(), String> {
+    fs::write(output_path, data.into())
+        .map_err(|e| format!("Failed to write {} to file: {}", label.as_ref(), e))
+}
+
+fn print_value(content: String) -> Result<(), String> {
+    println!("{}", content);
+    Ok(())
+}
 
 #[tauri::command]
 pub fn rust_export_wafer(wafer: Wafer, output_path: String) -> Result<(), String> {
-    fs::write(&output_path, wafer.to_string())
-        .map_err(|e| format!("Failed to write wafer to file: {}", e))
+    export_bytes("wafer", &output_path, wafer.to_string())
 }
 
 #[tauri::command]
 pub fn rust_print_wafer(wafer: Wafer) -> Result<(), String> {
-    println!("{}", wafer.to_string());
-    Ok(())
+    print_value(wafer.to_string())
 }
 
 #[tauri::command]
 pub fn rust_export_wafer_bin(wafer_bin: BinMapData, output_path: String) -> Result<(), String> {
-    fs::write(&output_path, wafer_bin.to_string())
-        .map_err(|e| format!("Failed to write bin map to file: {}", e))
+    export_bytes("bin map", &output_path, wafer_bin.to_string())
 }
 
 #[tauri::command]
 pub fn rust_print_wafer_bin(wafer_bin: BinMapData) -> Result<(), String> {
-    println!("{}", wafer_bin.to_string());
-    Ok(())
+    print_value(wafer_bin.to_string())
 }
 
 #[tauri::command]
 pub fn rust_export_wafer_map_data(data: MapData, output_path: String) -> Result<(), String> {
-    fs::write(&output_path, data.to_string())
-        .map_err(|e| format!("Failed to write map data to file: {}", e))
+    export_bytes("map data", &output_path, data.to_string())
 }
 
 #[tauri::command]
 pub fn rust_print_wafer_map_data(data: MapData) -> Result<(), String> {
-    println!("{}", data.to_string());
-    Ok(())
+    print_value(data.to_string())
 }
 
 // HEX/.sinf
 
 #[tauri::command]
 pub fn rust_export_wafer_hex(wafer_hex: HexMapData, output_path: String) -> Result<(), String> {
-    fs::write(&output_path, wafer_hex.to_string())
-        .map_err(|e| format!("Failed to write map data to file: {}", e))
+    export_bytes("map data", &output_path, wafer_hex.to_string())
 }
 
 #[tauri::command]
 pub fn rust_print_wafer_hex(wafer_hex: HexMapData) -> Result<(), String> {
-    println!("{}", wafer_hex.to_string());
-    Ok(())
+    print_value(wafer_hex.to_string())
 }
 
 
 #[tauri::command]
 pub fn rust_export_wafer_jpg(image_data: Vec<u8>, output_path: String) -> Result<(), String> {
-   fs::write(&output_path, image_data)
-        .map_err(|e| format!("Failed to write image data to file: {}", e))
+   export_bytes("image data", &output_path, image_data)
+}
+
+// =============================================================================
+// AOI TorchScript inference
+
+#[tauri::command]
+pub fn rust_aoi_inference_status() -> inference::InferenceStatus {
+    inference::inference_status()
+}
+
+#[tauri::command]
+pub async fn rust_aoi_run_inference(
+    req: inference::InferenceRequest,
+) -> Result<inference::InferenceBatchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || inference::run_inference(req))
+        .await
+        .map_err(|e| format!("Task join error: {e}"))?
 }

@@ -1,0 +1,662 @@
+use once_cell::sync::Lazy;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashSet,
+    convert::TryInto,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::Instant,
+};
+use tch::{vision::image, CModule, Cuda, Device, IndexOp, Kind, QEngine, Tensor};
+
+const CPU_WEIGHT_NAME: &str = "aoi_cpu.ts";
+const GPU_WEIGHT_NAME: &str = "aoi_gpu.ts";
+
+// Regex-friendly filename patterns we will consider when auto-discovering weights.
+// Supported examples (CPU):
+//   attention_r2unet_cpu_fp32.ts
+//   attention_r2unet_cpu_int8.ts
+// Supported examples (GPU):
+//   attention_r2unet_gpu_fp16.ts
+//   attention_r2unet_gpu_fp32.ts
+//   attention_r2unet_inference_fp16.pt (treated as GPU/FP16)
+//   attention_r2unet_inference_fp32.pt (treated as GPU/FP32)
+const CPU_WEIGHT_REGEX: &str = r"(?i)attention_r2unet_cpu_(fp32|int8)\.ts$";
+const GPU_WEIGHT_REGEX: &str = r"(?i)attention_r2unet_(gpu_(fp16|fp32)\.ts|inference_fp(16|32)\.pt)$";
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WeightStatus {
+    pub cpu_path: Option<String>,
+    pub gpu_path: Option<String>,
+    pub available: Vec<WeightInfo>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceStatus {
+    pub gpu_available: bool,
+    pub gpu_count: usize,
+    pub prefer_gpu: bool,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceStatus {
+    pub device: DeviceStatus,
+    pub weights: WeightStatus,
+    pub libtorch_enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceImagePayload {
+    pub name: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceRequest {
+    pub images: Vec<InferenceImagePayload>,
+    pub prefer_gpu: Option<bool>,
+    pub cpu_weight_path: Option<String>,
+    pub gpu_weight_path: Option<String>,
+    pub preview_values: Option<usize>,
+    pub resize: Option<ResizeConfig>,
+    pub mask_threshold: Option<f32>,
+    pub detect_enabled: Option<bool>,
+    pub detect_prefer_gpu: Option<bool>,
+    pub detect_weight_path: Option<String>,
+    pub detect_threshold: Option<f32>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WeightInfo {
+    pub model: String,
+    pub device: String,
+    pub format: String,
+    pub path: String,
+    pub extension: String,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct ResizeConfig {
+    pub width: i64,
+    pub height: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceOutputPreview {
+    pub values: Vec<f32>,
+    pub total_values: usize,
+    pub shape: Vec<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaskData {
+    pub width: i64,
+    pub height: i64,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectionBox {
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
+    pub score: f32,
+    pub class_id: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectionResult {
+    pub model_path: String,
+    pub device: String,
+    pub boxes: Vec<DetectionBox>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceSampleResult {
+    pub name: String,
+    pub duration_ms: u128,
+    pub width: i64,
+    pub height: i64,
+    pub channels: i64,
+    pub device: String,
+    pub preview: InferenceOutputPreview,
+    pub mask: Option<MaskData>,
+    pub detection: Option<DetectionResult>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceFailure {
+    pub name: String,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendInfo {
+    pub device: String,
+    pub gpu: bool,
+    pub gpu_count: usize,
+    pub model_path: String,
+    pub weights: WeightStatus,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceBatchResult {
+    pub backend: BackendInfo,
+    pub results: Vec<InferenceSampleResult>,
+    pub errors: Vec<InferenceFailure>,
+}
+
+#[derive(Clone)]
+struct CachedModel {
+    path: PathBuf,
+    model: Arc<Mutex<CModule>>,
+}
+
+#[derive(Default)]
+struct ModelCache {
+    cpu: Option<CachedModel>,
+    gpu: Option<CachedModel>,
+}
+
+static MODEL_CACHE: Lazy<Mutex<ModelCache>> = Lazy::new(|| Mutex::new(ModelCache::default()));
+
+pub fn inference_status() -> InferenceStatus {
+    let gpu_available = Cuda::is_available();
+    let gpu_count = if gpu_available {
+        Cuda::device_count()
+    } else {
+        0
+    } as usize;
+    InferenceStatus {
+        device: DeviceStatus {
+            gpu_available,
+            gpu_count,
+            prefer_gpu: gpu_available,
+        },
+        weights: WeightStatus {
+            cpu_path: locate_weight(CPU_WEIGHT_NAME)
+                .as_deref()
+                .map(path_to_string),
+            gpu_path: locate_weight(GPU_WEIGHT_NAME)
+                .as_deref()
+                .map(path_to_string),
+            available: discover_weights(),
+        },
+        libtorch_enabled: true,
+    }
+}
+
+pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, String> {
+    if req.images.is_empty() {
+        return Err("No images provided for inference".into());
+    }
+
+    let preview_len = req.preview_values.unwrap_or(16).clamp(1, 64);
+    let prefer_gpu = req.prefer_gpu.unwrap_or(true);
+    let mask_threshold = req.mask_threshold.unwrap_or(0.5);
+    let resize_cfg = req.resize;
+    let detect_enabled = req.detect_enabled.unwrap_or(true);
+    let detect_prefer_gpu = req.detect_prefer_gpu.unwrap_or(true);
+    let detect_threshold = req.detect_threshold.unwrap_or(0.25);
+
+    let available = discover_weights();
+    let cpu_weight = resolve_weight(req.cpu_weight_path, CPU_WEIGHT_NAME, CPU_WEIGHT_REGEX, &available, "cpu");
+    let gpu_weight = resolve_weight(req.gpu_weight_path, GPU_WEIGHT_NAME, GPU_WEIGHT_REGEX, &available, "gpu");
+    let detect_weight = resolve_weight(req.detect_weight_path.clone(), "yolo_auto.ts", GPU_WEIGHT_REGEX, &available, "gpu")
+        .or_else(|| resolve_weight(req.detect_weight_path, "yolo_auto.ts", CPU_WEIGHT_REGEX, &available, "cpu"));
+
+    // Try to enable QNNPACK first, fall back to FBGEMM so quantized models can load.
+    QEngine::QNNPACK
+        .set()
+        .or_else(|err_qnnpack| {
+            QEngine::FBGEMM
+                .set()
+                .map_err(|err_fbgemm| format!("Failed to set QNNPACK ({err_qnnpack}) or FBGEMM ({err_fbgemm})"))
+        })
+        .map_err(|err| format!("Quantization backend unavailable: {err}"))?;
+
+    let gpu_available = Cuda::is_available() && gpu_weight.is_some();
+    let gpu_count = if gpu_available {
+        Cuda::device_count()
+    } else {
+        0
+    } as usize;
+
+    let use_gpu = prefer_gpu && gpu_available;
+    let target_device = if use_gpu { Device::Cuda(0) } else { Device::Cpu };
+    let model_path = if use_gpu {
+        gpu_weight.clone().ok_or_else(|| "GPU weight file not found".to_string())?
+    } else {
+        cpu_weight.clone().ok_or_else(|| "CPU weight file not found".to_string())?
+    };
+
+    let cached = get_or_load_model(&model_path, target_device)?;
+    let detection_device = if detect_enabled && detect_weight.is_some() {
+        if detect_prefer_gpu && Cuda::is_available() {
+            Some(Device::Cuda(0))
+        } else {
+            Some(Device::Cpu)
+        }
+    } else {
+        None
+    };
+    let detection_cached = if let (Some(det_path), Some(det_dev)) = (detect_weight.clone(), detection_device) {
+        Some(get_or_load_model(&det_path, det_dev)?)
+    } else {
+        None
+    };
+
+    let processed: Vec<_> = req
+        .images
+        .into_par_iter()
+        .map(|img| preprocess_image(img, target_device, resize_cfg))
+        .collect();
+
+    let mut results = Vec::new();
+    let mut errors = Vec::new();
+
+    for item in processed {
+        match item {
+            Ok((name, tensor, (width, height, channels))) => {
+                match forward_image(&cached, tensor, preview_len, mask_threshold) {
+                    Ok((duration_ms, preview, mask)) => {
+                        let detection = if let (Some(det_cache), Some(det_dev)) = (detection_cached.as_ref(), detection_device) {
+                            match run_detection(det_cache, det_dev, &mask, detect_threshold, width, height) {
+                                Ok(det) => Some(det),
+                                Err(err) => {
+                                    errors.push(InferenceFailure {
+                                        name: name.clone(),
+                                        message: format!("Detection failed: {err}"),
+                                    });
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        };
+                        results.push(InferenceSampleResult {
+                            name,
+                            duration_ms,
+                            width,
+                            height,
+                            channels,
+                            device: format_device(target_device),
+                            preview,
+                            mask,
+                            detection,
+                        });
+                    }
+                    Err(err) => errors.push(InferenceFailure {
+                        name,
+                        message: err,
+                    }),
+                }
+            }
+            Err((name, err)) => errors.push(InferenceFailure { name, message: err }),
+        }
+    }
+
+    Ok(InferenceBatchResult {
+        backend: BackendInfo {
+            device: format_device(target_device),
+            gpu: matches!(target_device, Device::Cuda(_)),
+            gpu_count,
+            model_path: path_to_string(&model_path),
+            weights: WeightStatus {
+                cpu_path: cpu_weight.as_deref().map(path_to_string),
+                gpu_path: gpu_weight.as_deref().map(path_to_string),
+                available,
+            },
+        },
+        results,
+        errors,
+    })
+}
+
+fn forward_image(
+    cached: &CachedModel,
+    tensor: Tensor,
+    preview_len: usize,
+    mask_threshold: f32,
+) -> Result<(u128, InferenceOutputPreview, Option<MaskData>), String> {
+    let start = Instant::now();
+    let output = {
+        let guard = cached
+            .model
+            .lock()
+            .map_err(|_| "Model mutex poisoned".to_string())?;
+        guard
+            .forward_ts(&[tensor])
+            .map_err(|e| format!("Forward pass failed: {e}"))?
+    };
+    let duration_ms = start.elapsed().as_millis();
+
+    let output_cpu = output
+        .to_device(Device::Cpu)
+        .to_kind(Kind::Float);
+    let flat: Vec<f32> = output_cpu
+        .flatten(0, -1)
+        .try_into()
+        .map_err(|e| format!("Failed to convert output tensor: {e}"))?;
+    let preview = InferenceOutputPreview {
+        values: flat.iter().copied().take(preview_len).collect(),
+        total_values: flat.len(),
+        shape: output_cpu.size(),
+    };
+    let mask = extract_mask(&output_cpu, mask_threshold);
+    Ok((duration_ms, preview, mask))
+}
+
+fn extract_mask(output: &Tensor, threshold: f32) -> Option<MaskData> {
+    let size = output.size();
+    let (h, w, plane) = match size.len() {
+        4 if size.len() >= 4 => (size[2], size[3], output.i((0, 0))),
+        3 => (size[1], size[2], output.i(0)),
+        2 => (size[0], size[1], output.shallow_clone()),
+        _ => return None,
+    };
+
+    let probs = plane.sigmoid();
+    let bin = probs.gt(threshold as f64);
+    let data: Vec<u8> = bin
+        .to_kind(Kind::Uint8)
+        .f_mul_scalar(255i64)
+        .ok()?
+        .flatten(0, -1)
+        .try_into()
+        .ok()?;
+
+    Some(MaskData {
+        width: w,
+        height: h,
+        data,
+    })
+}
+
+fn run_detection(
+    cached: &CachedModel,
+    device: Device,
+    mask: &Option<MaskData>,
+    threshold: f32,
+    width: i64,
+    height: i64,
+) -> Result<DetectionResult, String> {
+    // Build a masked input using a blank image with mask as alpha; since we
+    // don't keep the original RGB tensor here, we create a single-channel mask
+    // tensor for the detector. If no mask, we pass a blank tensor.
+    let mut input = Tensor::zeros([1, 1, height, width], (Kind::Float, device));
+    if let Some(m) = mask {
+        let mut mask_tensor = Tensor::f_from_slice(&m.data)
+            .map_err(|e| format!("Failed to build mask tensor: {e}"))?
+            .to_kind(Kind::Float)
+            / 255.0;
+        mask_tensor = mask_tensor.reshape([1, 1, m.height, m.width]);
+        if m.height != height || m.width != width {
+            mask_tensor = mask_tensor.upsample_nearest2d(&[height, width], None, None);
+        }
+        input = mask_tensor.to_device(device);
+    }
+
+    let output = {
+        let guard = cached
+            .model
+            .lock()
+            .map_err(|_| "Detection model mutex poisoned".to_string())?;
+        guard
+            .forward_ts(&[input])
+            .map_err(|e| format!("Detection forward failed: {e}"))?
+    };
+
+    let out_cpu = output.to_device(Device::Cpu).to_kind(Kind::Float);
+    let size = out_cpu.size();
+    if size.len() != 2 || size.get(1).cloned().unwrap_or(0) < 6 {
+        return Err(format!("Unexpected detection output shape: {:?}", size));
+    }
+    let flat: Vec<f32> = out_cpu.flatten(0, -1).try_into().map_err(|e| format!("Convert det output failed: {e}"))?;
+    let stride = size[1] as usize;
+    let mut boxes = Vec::new();
+    for chunk in flat.chunks(stride) {
+        if chunk.len() < 6 {
+            continue;
+        }
+        let score = chunk[4];
+        if score < threshold {
+            continue;
+        }
+        boxes.push(DetectionBox {
+            x1: chunk[0],
+            y1: chunk[1],
+            x2: chunk[2],
+            y2: chunk[3],
+            score,
+            class_id: chunk[5].round() as i64,
+        });
+    }
+
+    Ok(DetectionResult {
+        model_path: path_to_string(&cached.path),
+        device: format_device(device),
+        boxes,
+    })
+}
+
+fn preprocess_image(
+    img: InferenceImagePayload,
+    device: Device,
+    resize_cfg: Option<ResizeConfig>,
+) -> Result<(String, Tensor, (i64, i64, i64)), (String, String)> {
+    match image::load_from_memory(&img.data) {
+        Ok(tensor) => {
+            let dims = tensor.size();
+            if dims.len() != 3 {
+                return Err((img.name, format!("Unexpected image dims: {:?}", dims)));
+            }
+            let channels = dims[0];
+            let height = dims[1];
+            let width = dims[2];
+            let normalized = tensor.to_kind(Kind::Float) / 255.0;
+            let mut chw = normalized;
+            if let Some(cfg) = resize_cfg {
+                let target = [cfg.height, cfg.width];
+                let up = chw
+                    .unsqueeze(0)
+                    .upsample_bilinear2d(&target, false, None, None);
+                // back to CHW
+                chw = up.squeeze_dim(0);
+            }
+            let final_size = chw.size();
+            let fin_dims = if final_size.len() == 3 {
+                (final_size[2], final_size[1], final_size[0])
+            } else {
+                (width, height, channels)
+            };
+            let input = chw.unsqueeze(0).to_device(device);
+            Ok((img.name, input, fin_dims))
+        }
+        Err(err) => Err((img.name, format!("Failed to decode image: {err}"))),
+    }
+}
+
+fn get_or_load_model(path: &Path, device: Device) -> Result<CachedModel, String> {
+    let mut cache = MODEL_CACHE
+        .lock()
+        .map_err(|_| "Model cache mutex poisoned".to_string())?;
+    let slot = match device {
+        Device::Cuda(_) => &mut cache.gpu,
+        _ => &mut cache.cpu,
+    };
+
+    if let Some(existing) = slot {
+        if existing.path == path {
+            return Ok(existing.clone());
+        }
+    }
+
+    let mut module =
+        CModule::load_on_device(path, device).map_err(|e| format!("Load model failed: {e}"))?;
+    module.to(device, Kind::Float, false);
+
+    let cached = CachedModel {
+        path: path.to_path_buf(),
+        model: Arc::new(Mutex::new(module)),
+    };
+    *slot = Some(cached.clone());
+    Ok(cached)
+}
+
+fn locate_weight(file_name: &str) -> Option<PathBuf> {
+    let dirs = candidate_dirs();
+
+    let mut seen = HashSet::new();
+    for dir in dirs {
+        let candidate = dir.join(file_name);
+        if candidate.exists() {
+            let key = candidate.to_string_lossy().to_string();
+            if seen.insert(key) {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+fn locate_weight_by_regex(pattern: &str) -> Option<PathBuf> {
+    let re = regex::Regex::new(pattern).ok()?;
+    let dirs = candidate_dirs();
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if re.is_match(name) {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+fn resolve_weight(
+    custom: Option<String>,
+    default_name: &str,
+    regex: &str,
+    available: &[WeightInfo],
+    target_device: &str,
+) -> Option<PathBuf> {
+    if let Some(p) = custom {
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    // First, see if any discovered weight matches device hint
+    for info in available {
+        let dev = info.device.to_lowercase();
+        if (target_device == "cpu" && dev.contains("cpu"))
+            || (target_device == "gpu" && (dev.contains("gpu") || dev.contains("inference")))
+        {
+            let pb = PathBuf::from(&info.path);
+            if pb.exists() {
+                return Some(pb);
+            }
+        }
+    }
+    // Prefer explicit filename first, then regex match
+    locate_weight(default_name).or_else(|| locate_weight_by_regex(regex))
+}
+
+fn candidate_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Ok(cwd) = std::env::current_dir() {
+        dirs.push(cwd.join("assets/models"));
+        dirs.push(cwd.join("public/models"));
+        dirs.push(cwd.join("dist/models"));
+        dirs.push(cwd.join("resources"));
+        dirs.push(cwd.join("resources/models"));
+        dirs.push(cwd.join("3rdparty/pytorch/build/lib"));
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            dirs.push(dir.to_path_buf());
+            dirs.push(dir.join("models"));
+            dirs.push(dir.join("resources"));
+            dirs.push(dir.join("resources/models"));
+            if let Some(parent) = dir.parent() {
+                dirs.push(parent.join("Resources"));
+                dirs.push(parent.join("resources"));
+                dirs.push(parent.join("resources/models"));
+            }
+        }
+    }
+
+    dirs
+}
+
+fn discover_weights() -> Vec<WeightInfo> {
+    // Pattern: <model>_<device>_<format>.(ts|pt)
+    let re = match regex::Regex::new(r"(?i)^(?P<model>.+?)_(?P<device>cpu|gpu|inference)_(?P<format>fp32|fp16|int8)\.(?P<ext>ts|pt)$") {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    let dirs = candidate_dirs();
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir.clone()) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if let Some(caps) = re.captures(name) {
+                let model = caps.name("model").map(|m| m.as_str().to_string()).unwrap_or_default();
+                let device = caps.name("device").map(|m| m.as_str().to_string()).unwrap_or_default();
+                let format = caps.name("format").map(|m| m.as_str().to_string()).unwrap_or_default();
+                let ext = caps.name("ext").map(|m| m.as_str().to_string()).unwrap_or_default();
+                out.push(WeightInfo {
+                    model,
+                    device,
+                    format,
+                    extension: ext,
+                    path: path.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+    out
+}
+
+fn format_device(device: Device) -> String {
+    match device {
+        Device::Cpu => "cpu".to_string(),
+        Device::Cuda(idx) => format!("cuda:{idx}"),
+        Device::Mps => "mps".to_string(),
+        other => format!("{other:?}"),
+    }
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().to_string()
+}

@@ -22,7 +22,7 @@ import ComingSoon from '../ComingSoon';
 
 const subpageOptions = [
     { label: '晶圆数据', value: 'data' },
-    { label: '晶粒尺寸 / 偏移', value: 'offsets' },
+    { label: '参数', value: 'offsets' },
     { label: '缓存', value: 'cache' },
 ];
 

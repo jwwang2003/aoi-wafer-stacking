@@ -9,6 +9,7 @@ const Log = lazy(() => import('./Log'));
 const About = lazy(() => import('./About'));
 const ComingSoon = lazy(() => import('./ComingSoon'));
 const Admin = lazy(() => import('./Admin'));
+const Aoi = lazy(() => import('./Aoi'));
 
 export {
     Welcome,
@@ -18,5 +19,6 @@ export {
     Log,
     About,
     ComingSoon,
-    Admin
+    Admin,
+    Aoi,
 }

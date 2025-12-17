@@ -15,7 +15,7 @@ import { IconCheck, IconX } from '@tabler/icons-react';
 import { exists, stat } from '@tauri-apps/plugin-fs';
 
 import { useAppDispatch, useAppSelector } from '@/hooks';
-import { initPreferences, revalidatePreferencesFile, resetPreferencesToDefault, setDataSourceConfigPath, setAutoTriggerState } from '@/slices/preferencesSlice';
+import { initPreferences, revalidatePreferencesFile, resetPreferencesToDefault, setDataSourceConfigPath, setAutoTriggerState, setDieLayoutXlsPath } from '@/slices/preferencesSlice';
 import { resetDataSourceConfigToDefault } from '@/slices/dataSourceConfigSlice';
 import { resetFolders } from '@/slices/dataSourceStateSlice';
 import { PathPicker, JsonCode } from '@/components';
@@ -36,10 +36,11 @@ export default function PreferencesSubpage() {
     const dispatch = useAppDispatch();
     const preferences = useAppSelector((s) => s.preferences);
     const dataSourceConfig = useAppSelector((s) => s.dataSourceConfig);
-    const { preferenceFilePath, dataSourceConfigPath, stepper, status, error } = preferences;
+    const { preferenceFilePath, dataSourceConfigPath, dieLayoutXlsPath, stepper, status, error } = preferences;
 
     // for the dataSourceConfig (json) file
     const [fileExists, setFileExists] = useState<boolean>(false);
+    const [layoutExists, setLayoutExists] = useState<boolean>(false);
     const [modifiedTime, setModifiedTime] = useState<string | null>(null);
 
     const [dbPath, setDbPath] = useState<string | null>(null);
@@ -145,6 +146,24 @@ export default function PreferencesSubpage() {
             mounted = false;
         };
     }, [dataSourceConfigPath, stepper]);
+
+    useEffect(() => {
+        let mounted = true;
+        async function checkLayout() {
+            if (!dieLayoutXlsPath) {
+                setLayoutExists(false);
+                return;
+            }
+            try {
+                const ok = await exists(dieLayoutXlsPath);
+                if (mounted) setLayoutExists(ok);
+            } catch {
+                if (mounted) setLayoutExists(false);
+            }
+        }
+        checkLayout();
+        return () => { mounted = false; };
+    }, [dieLayoutXlsPath]);
 
     return (
         <Stack gap="lg">
@@ -255,6 +274,25 @@ export default function PreferencesSubpage() {
                     </Button>
                 </Tooltip>
             </Group>
+
+            <Divider />
+
+            <Title order={2}>基板布局 Excel</Title>
+            <Stack gap="xs">
+                <PathPicker
+                    label="基板布局 Excel 文件"
+                    value={dieLayoutXlsPath || ''}
+                    onChange={(e) => dispatch(setDieLayoutXlsPath(e))}
+                    mode="file"
+                />
+                <Group gap="sm">
+                    {layoutExists ? (
+                        <Badge color="green" leftSection={<IconCheck size={12} />}>存在</Badge>
+                    ) : (
+                        <Badge color="red" leftSection={<IconX size={12} />}>不存在</Badge>
+                    )}
+                </Group>
+            </Stack>
 
             <Divider />
 

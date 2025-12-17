@@ -8,9 +8,11 @@ import {
     setAutoTriggerState,
     resetPreferencesToDefault,
     setDataSourceConfigPath,
+    setDieLayoutXlsPath,
     setSqlDebug,
     setStepper
 } from './preferencesSlice';
+import { loadWaferLayouts } from './waferLayoutSlice';
 import {
     setDataSourcePaths,
     addDataSourcePath,
@@ -25,7 +27,7 @@ import { isDataSourceFoldersValid } from '@/utils/validators';
 import { prepPreferenceWriteOut } from '@/utils/helper';
 
 import { setSqlDebugLogging } from '@/db';
-import { RootState } from '@/store';
+import { AppDispatch, RootState } from '@/store';
 import { ConfigStepperState } from '@/types/stepper';
 
 /**
@@ -44,6 +46,7 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
     const prefTypes: string[] = [
         // Preference files config types
         setDataSourceConfigPath.type,
+        setDieLayoutXlsPath.type,
         setAutoTriggerState.type,
         setSqlDebug.type,
         resetPreferencesToDefault.typePrefix,
@@ -90,6 +93,14 @@ export const validationPersistenceMiddleware: Middleware = storeApi => next => a
                 if (ok) storeApi.dispatch(advanceStepper(ConfigStepperState.Subdirectories));
                 else storeApi.dispatch(setStepper(ConfigStepperState.ConfigInfo));
             });
+            break;
+        }
+        case setDieLayoutXlsPath.type: {
+            (storeApi.dispatch as AppDispatch)(loadWaferLayouts());
+            break;
+        }
+        case 'preferences/init/fulfilled': {
+            (storeApi.dispatch as AppDispatch)(loadWaferLayouts());
             break;
         }
         default:

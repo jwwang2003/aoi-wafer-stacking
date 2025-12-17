@@ -568,6 +568,7 @@ export default function ProductBatchNavigator({
             {job &&
                 <SubstratePane
                     showParameters
+                    productId={jobProductId}
                     oemProductId={jobOemId}
                     waferSubstrate={jobSubstrate}
                     waferMaps={jobWaferMaps}

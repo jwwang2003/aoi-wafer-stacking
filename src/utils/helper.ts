@@ -30,6 +30,7 @@ export async function createDefaultPreferences(): Promise<PreferencesState> {
         ...initialState,
         preferenceFilePath,
         dataSourceConfigPath,
+        dieLayoutXlsPath: initialState.dieLayoutXlsPath,
     };
 }
 

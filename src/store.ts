@@ -4,6 +4,7 @@ import preferencesReducer from './slices/preferencesSlice';
 import dataSourceConfigReducer from './slices/dataSourceConfigSlice';
 import dataSourceStateReducer from './slices/dataSourceStateSlice';
 import waferMetadataReducer from './slices/waferMetadataSlice';
+import waferLayoutReducer from './slices/waferLayoutSlice';
 import stackingJobReducer from './slices/job';
 import loggingReducer from './slices/logSlice';
 import authReducer from './slices/authSlice';
@@ -17,6 +18,7 @@ const store = configureStore({
         dataSourceConfig: dataSourceConfigReducer,
         dataSourceState: dataSourceStateReducer,
         waferMetadata: waferMetadataReducer,
+        waferLayouts: waferLayoutReducer,
         stackingJob: stackingJobReducer,
         log: loggingReducer,
     },

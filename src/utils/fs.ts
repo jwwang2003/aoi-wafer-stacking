@@ -4,7 +4,7 @@ import { stat } from '@tauri-apps/plugin-fs'; // or @tauri-apps/api/fs if you're
 import { DirResult } from '@/types/ipc';
 import { FileIndexRow, FolderIndexRow } from '@/db/types';
 import { deleteFolderIndexesByPaths, getAllFolderIndexes, getManyFolderIndexesByPaths, upsertManyFolderIndexes, upsertOneFolderIndex } from '@/db/folderIndex';
-import { invokeReadDir, invokeSha1 } from '@/api/tauri/fs';
+import { invokeReadDir, invokeSha1Batch } from '@/api/tauri/fs';
 import { deleteFileIndexesByPaths, getAllFileIndexes, getManyFileIndexesByPaths, upsertManyFileIndexes } from '@/db/fileIndex';
 
 // ---------- Globals ----------
@@ -188,6 +188,111 @@ export async function flushIndexQueues(): Promise<void> {
 
 //==============================================================================
 
+type ScanKind = 'file' | 'dir';
+type CachedRow = FileIndexRow | FolderIndexRow;
+
+type ScanOptions = {
+    root: string;
+    name?: RegExp;
+    kind: ScanKind;
+    cache?: boolean;
+    force?: boolean;
+    entryFilter?: (entry: DirResult) => boolean;
+    onProcess?: (path: string, mtime: number, entry: DirResult) => Promise<void> | void;
+};
+
+/** Shared scanner used by listDirs/listFiles/getSubfolders to reduce duplication. */
+async function scanEntries({
+    root,
+    name,
+    kind,
+    cache = true,
+    force = false,
+    entryFilter,
+    onProcess,
+}: ScanOptions): Promise<{
+    entries: DirResult[];
+    cached: CachedRow[];
+    totDir: number;
+    numRead: number;
+    numCached: number;
+}> {
+    let entries = await invokeReadDir(root);
+    entries = entries
+        .map(e => ({ ...e, path: norm(e.path) }))
+        .filter(entryFilter ?? (e => kind === 'dir' ? e.info?.isDirectory : e.info?.isFile));
+
+    const paths = entries.map(e => e.path);
+    const totDir = entries.length;
+
+    const re = safeRegex(name);
+    const names = re ? paths.map(nameFromPath) : undefined;
+
+    const indexMap: Map<string, CachedRow> = force
+        ? new Map()
+        : kind === 'dir'
+            ? await getFolderIndexesWithLocalCache(paths, cache)
+            : await getFileIndexesWithLocalCache(paths, cache);
+
+    const cached: CachedRow[] = [];
+    const out: DirResult[] = [];
+    const pendingFileHashes: { path: string; mtime: number }[] = [];
+    let numRead = 0, numCached = 0;
+
+    // Default upsert handler if none provided
+    const defaultProcess =
+        kind === 'dir'
+            ? async (path: string, mtime: number) => {
+                if (!cache) return;
+                folder_upserts.push({ folder_path: path, last_mtime: mtime });
+            }
+            : async (_path: string, _mtime: number) => {
+                // no-op; file hashing is batched after the loop
+            };
+
+    const doProcess = onProcess ?? defaultProcess;
+    const hasCustomProcess = Boolean(onProcess);
+
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const path = paths[i];
+        const nameHere = names ? names[i] : nameFromPath(path);
+
+        if (re && nameHere && !re.test(nameHere)) continue;
+
+        const mtime = Number(entry.info?.mtime);
+
+        const rec = force ? undefined : indexMap.get(path);
+        if (rec && rec.last_mtime >= mtime) {
+            cached.push(rec);
+            numCached++;
+            continue;
+        }
+
+        if (kind === 'file' && cache && !hasCustomProcess) {
+            pendingFileHashes.push({ path, mtime });
+        } else {
+            await doProcess(path, mtime, entry);
+        }
+        out.push(entry);
+        numRead++;
+    }
+
+    // Batch-hash files once (avoids per-file IPC)
+    if (kind === 'file' && cache && pendingFileHashes.length) {
+        const hashes = await invokeSha1Batch(pendingFileHashes.map(p => p.path));
+        for (let i = 0; i < pendingFileHashes.length; i++) {
+            const { path, mtime } = pendingFileHashes[i];
+            const hash = hashes[i];
+            file_upserts.push({ file_path: path, last_mtime: mtime, file_hash: hash });
+        }
+    }
+
+    return { entries: out, cached, totDir, numRead, numCached };
+}
+
+//==============================================================================
+
 /**
  * Scan a directory and return the **subfolders that need processing**.
  *
@@ -221,47 +326,22 @@ export async function getSubfolders(
     rootPath: string,
     force: boolean = false
 ): Promise<{ folders: string[]; totDir: number; numRead: number; numCached: number }> {
-    // 1) Read children once and filter to directories
-    let entries: DirResult[] = await invokeReadDir(rootPath);
-    entries = entries.filter(e => e.info?.isDirectory);
+    const { entries, totDir, numRead, numCached } = await scanEntries({
+        root: rootPath,
+        kind: 'dir',
+        force,
+        onProcess: async (path, mtime) => {
+            // Keep immediate durability for upstream workflows
+            await upsertOneFolderIndex({ folder_path: path, last_mtime: mtime });
+        },
+    });
 
-    const paths = entries.map(e => norm(e.path));
-    const totDir = entries.length;
-
-    // 2) Warm cache map for these paths (skip when forcing)
-    const indexMap: Map<string, FolderIndexRow> = !force
-        ? await getManyFolderIndexesByPaths(paths)
-        : new Map<string, FolderIndexRow>();
-
-    // 3) Decide which to read vs. skip
-    const folders: string[] = [];
-    let numRead = 0;
-    let numCached = 0;
-
-    for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
-        const path = paths[i];
-        const mtime = Number(entry.info!.mtime);
-
-        if (!force) {
-            const rec = indexMap.get(path);
-            if (rec && rec.last_mtime >= mtime) {
-                numCached++;
-                continue;
-            }
-        }
-
-        // Upsert after deciding to (re)process (await for durability; or batch upstream)
-        await upsertOneFolderIndex({
-            folder_path: path,
-            last_mtime: mtime,
-        });
-
-        folders.push(path);
-        numRead++;
-    }
-
-    return { folders, totDir, numRead, numCached };
+    return {
+        folders: entries.map(e => e.path),
+        totDir,
+        numRead,
+        numCached,
+    };
 }
 
 // Session-scoped cache
@@ -373,107 +453,35 @@ export async function listDirs(
     numRead: number;
     numCached: number;
 }> {
-    // 1) Read once and filter to directories early
-    let entries = await invokeReadDir(root);
-    entries = entries
-        .map(e => ({ ...e, path: norm(e.path) })) // normalize each path first
-        .filter(e => !dirOnly || e.info?.isDirectory);
+    const { entries, cached, totDir, numRead, numCached } = await scanEntries({
+        root,
+        name,
+        kind: 'dir',
+        cache,
+        entryFilter: dirOnly ? (e) => Boolean(e.info?.isDirectory) : () => true,
+        onProcess: async (path, mtime, entry) => {
+            // Respect dirOnly guard while still reusing the common scanner
+            if (dirOnly && !entry.info?.isDirectory) return;
+            if (!cache) return;
+            folder_upserts.push({ folder_path: path, last_mtime: mtime });
+        },
+    });
 
-    // Normalize paths once; re-use everywhere
-    const paths = entries.map(e => e.path);
-    const totDir = entries.length;
-
-    // 2) Prep optional name filter (fast, no async)
-    const re = safeRegex(name);
-    const names = re ? paths.map(nameFromPath) : undefined;
-
-    // 3) Bulk-fetch cache rows for these paths (skip if forcing)
-    const indexMap: Map<string, FolderIndexRow> = await getFolderIndexesWithLocalCache(paths, cache);
-
-    const dirs: DirResult[] = [];
-    const cached: FolderIndexRow[] = [];
-    let numRead = 0, numCached = 0;
-
-    for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
-        const path = paths[i];
-        const nameHere = names ? names[i] : undefined;
-
-        // Filter by name if provided
-        if (re && nameHere && !re.test(nameHere)) continue;
-
-        const entryMtime = Number(entry.info?.mtime);
-
-        const rec = indexMap.get(path);
-        if (rec && rec.last_mtime >= entryMtime) {
-            cached.push(rec);
-            numCached++;
-            continue;
-        }
-
-        // Queue cache write; update after the loop
-        if (cache) {
-            // Stage cache upserts; flush once at end (avoids per-row await)
-            folder_upserts.push({ folder_path: path, last_mtime: entryMtime });
-        }
-
-        dirs.push(entry);
-        numRead++;
-    }
-
-    return { dirs, cached, totDir, numRead, numCached };
+    const dirs = dirOnly ? entries.filter(e => e.info?.isDirectory) : entries;
+    return { dirs, cached: cached as FolderIndexRow[], totDir, numRead, numCached };
 }
 
 export async function listFiles(
     { root, name, cache = true }: FsListOptions
 ): Promise<{ dirs: DirResult[]; cached: FileIndexRow[]; totDir: number; numRead: number; numCached: number }> {
-    // 1) Read once and keep only files
-    let entries = await invokeReadDir(root);
-    entries = entries
-        .map(e => ({ ...e, path: norm(e.path) })) // normalize each path first
-        .filter(e => e.info?.isFile);
+    const { entries, cached, totDir, numRead, numCached } = await scanEntries({
+        root,
+        name,
+        kind: 'file',
+        cache,
+    });
 
-    // Normalize paths once
-    const paths = entries.map(e => e.path);
-    const totDir = entries.length;
-
-    // 2) Optional filename filter (sync + cheap)
-    const re = safeRegex(name);
-    const names = re ? paths.map(nameFromPath) : undefined;
-
-    // 3) Bulk cache lookup (skip when forcing)
-    const indexMap: Map<string, FileIndexRow> = await getFileIndexesWithLocalCache(paths, cache);
-
-    const dirs: DirResult[] = [];
-    const cached: FileIndexRow[] = [];
-    let numRead = 0, numCached = 0;
-
-    for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
-        const path = paths[i];
-        const fileName = names ? names[i] : nameFromPath(path);
-
-        if (re && !re.test(fileName)) continue;
-
-        const mtime = Number(entry.info?.mtime);
-
-        const rec = indexMap.get(path);
-        if (rec && rec.last_mtime >= mtime) {
-            cached.push(rec);
-            numCached++;
-            continue;
-        }
-
-        if (cache) {
-            // Stage DB upserts; flush once (replace with upsertMany for max speed)
-            file_upserts.push({ file_path: path, last_mtime: mtime, file_hash: await invokeSha1(path) });
-        }
-
-        dirs.push(entry);
-        numRead++;
-    }
-
-    return { dirs, cached, totDir, numRead, numCached };
+    return { dirs: entries, cached: cached as FileIndexRow[], totDir, numRead, numCached };
 }
 
 // =============================================================================

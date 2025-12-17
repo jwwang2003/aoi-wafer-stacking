@@ -1,6 +1,6 @@
 // NOTE: Paths stored in config are ABSOLUTE paths.
 
-import { FileInfo } from '@tauri-apps/plugin-fs';
+import type { FileInfo } from './ipc';
 
 // PathsState is stored inside of the .json file
 export type DataSourcePaths = {

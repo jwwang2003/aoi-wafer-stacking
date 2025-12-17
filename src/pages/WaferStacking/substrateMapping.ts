@@ -7,27 +7,26 @@ import { AsciiDie, isNumberBin, isSpecialBin } from '@/types/ipc';
  */
 export const generateGridWithSubstrateDefects = (
     baseDies: AsciiDie[] | undefined,
-    defects: Array<{ x: number; y: number; w: number; h: number; class: string }>,
-    selectedDefectClasses: string[] = [],
+    defects: Array<{ x: number; y: number; w: number; h: number }>,
     offsetX: number = 0,
     offsetY: number = 0,
     defectSizeOffsetX: number = 0,
     defectSizeOffsetY: number = 0,
+    baseLayout?: AsciiDie[],
 ): AsciiDie[] => {
     const GRID_WIDTH = 4.134;
     const GRID_HEIGHT = 3.74;
     defectSizeOffsetX = defectSizeOffsetX / 1000;
     defectSizeOffsetY = defectSizeOffsetY / 1000;
-    if (!baseDies || baseDies.length === 0) {
+    const seeds = (baseLayout && baseLayout.length > 0) ? baseLayout : baseDies;
+
+    if (!seeds || seeds.length === 0) {
         return [];
     }
 
     const defectiveGrids = new Set<string>();
 
-    const filteredDefects = selectedDefectClasses.length > 0
-        ? defects.filter(defect => selectedDefectClasses.includes(defect.class))
-        : defects;
-    filteredDefects.forEach(defect => {
+    defects.forEach(defect => {
 
         const adjustedDefectX = defect.x - offsetX;
         const adjustedDefectY = defect.y - offsetY;
@@ -63,7 +62,7 @@ export const generateGridWithSubstrateDefects = (
         }
     });
 
-    const substrateDies: AsciiDie[] = baseDies.map(baseDie => {
+    const substrateDies: AsciiDie[] = seeds.map(baseDie => {
         const gridKey = `${baseDie.x},${-baseDie.y}`;
         const isDefective = defectiveGrids.has(gridKey);
 

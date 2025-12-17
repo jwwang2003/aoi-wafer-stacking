@@ -23,6 +23,13 @@
     "frontendDist": "../dist"
   },
 
+  "bundle": {
+    "resources": {
+      "libtorch": "libtorch",
+      "assets": "assets"
+    }
+  },
+
   "app": {
     "windows": [
       {

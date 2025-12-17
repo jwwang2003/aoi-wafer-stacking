@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as THREE from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { CSS2DRenderer as CSS2DRendererType } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
-import { Box, Slider, Group, Text, Button, Card } from '@mantine/core';
+import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
 
-import { colorMap } from './constants';
+import { colorMap } from './Constants';
 
 interface SubstrateRendererProps {
     gridWidth?: number;
@@ -45,12 +46,21 @@ export default function SubstrateRenderer({
     const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const controlsRef = useRef<OrbitControlsType | null>(null);
+    const labelRendererRef = useRef<CSS2DRendererType | null>(null);
+    const css2dObjectCtorRef = useRef<typeof import('three/examples/jsm/renderers/CSS2DRenderer.js').CSS2DObject | null>(null);
     const [threeReady, setThreeReady] = useState(false);
     const defectObjectsRef = useRef<THREE.Object3D[]>([]);
     const gridObjectsRef = useRef<THREE.Object3D[]>([]);
+    const gridMeshCoordsRef = useRef<Array<{ mesh: THREE.Mesh, coord: { x: number, y: number } }>>([]);
+    const hoverOverlayRef = useRef<THREE.Object3D[]>([]);
+    const [hoverCoord, setHoverCoord] = useState<{ x: number; y: number } | null>(null);
+    const [pointerVersion, setPointerVersion] = useState(0);
     const { x: offsetX, y: offsetY } = gridOffset;
     const { x: offsetX_defect, y: offsetY_defect } = defectSizeOffset;
     const shouldResetViewRef = useRef(false);
+    const raycasterRef = useRef<THREE.Raycaster | null>(null);
+    const pointerRef = useRef<THREE.Vector2 | null>(null);
+    const pointerWorldRef = useRef<{ x: number; y: number } | null>(null);
 
 
     // Manual refresh — re-run WebGL init effect
@@ -67,6 +77,7 @@ export default function SubstrateRenderer({
         const el = squareRef.current;
         const renderer = rendererRef.current;
         const camera = cameraRef.current;
+        const labelRenderer = labelRendererRef.current;
         if (!el || !renderer || !camera) return;
 
         const rect = el.getBoundingClientRect();
@@ -89,27 +100,52 @@ export default function SubstrateRenderer({
         camera.top = side / 2;
         camera.bottom = -side / 2;
         camera.updateProjectionMatrix();
+
+        if (labelRenderer) {
+            labelRenderer.setSize(side, side);
+            const labelEl = labelRenderer.domElement;
+            labelEl.style.position = 'absolute';
+            labelEl.style.left = '0';
+            labelEl.style.top = '0';
+            labelEl.style.width = '100%';
+            labelEl.style.height = '100%';
+            labelEl.style.pointerEvents = 'none';
+        }
     };
+
+    const getBounds = useCallback(() => {
+        const coords = mapCoordinatesRef.current;
+        if (!coords.length) return null;
+
+        let minCoordX = Infinity, maxCoordX = -Infinity, minCoordY = Infinity, maxCoordY = -Infinity;
+        for (const [xCoord, yCoord] of coords) {
+            minCoordX = Math.min(minCoordX, xCoord);
+            maxCoordX = Math.max(maxCoordX, xCoord);
+            minCoordY = Math.min(minCoordY, yCoord);
+            maxCoordY = Math.max(maxCoordY, yCoord);
+        }
+        if (!isFinite(minCoordX) || !isFinite(minCoordY)) return null;
+
+        // Include header row/column plus a right/bottom padding cell
+        const minX = (minCoordX) * gridWidth + offsetX;            // header column
+        const maxX = (maxCoordX) * gridWidth + offsetX;            // right padding
+        const maxY = -(minCoordY - 2) * gridHeight + offsetY;          // header row top edge
+        const minY = -(maxCoordY) * gridHeight + offsetY;          // extra row below data
+
+        return { minX, maxX, minY, maxY };
+    }, [gridHeight, gridWidth, offsetX, offsetY]);
 
     const fitCameraToData = () => {
         const el = squareRef.current;
         const camera = cameraRef.current;
         const controls = controlsRef.current;
-        if (!el || !camera || !controls) return;
+        const bounds = getBounds();
+        if (!el || !camera || !controls || !bounds) return;
 
         const side = el.getBoundingClientRect().width; // square
         if (side <= 0) return;
 
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
-            const x = xCoord * gridWidth + offsetX;
-            const y = -yCoord * gridHeight + offsetY;
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x + gridWidth);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y + gridHeight);
-        }
-        if (!isFinite(minX)) return;
+        const { minX, maxX, minY, maxY } = bounds;
 
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
@@ -168,12 +204,14 @@ export default function SubstrateRenderer({
             if (!container) return;
 
             container.style.position = 'relative';
-            const [THREE, { OrbitControls }] = await Promise.all([
+            const [THREE, { OrbitControls }, { CSS2DRenderer, CSS2DObject }] = await Promise.all([
                 import('three'),
                 import('three/examples/jsm/controls/OrbitControls.js'),
+                import('three/examples/jsm/renderers/CSS2DRenderer.js'),
             ]);
             if (disposed) return;
             threeRef.current = THREE;
+            css2dObjectCtorRef.current = CSS2DObject;
 
             const scene = new THREE.Scene();
             sceneRef.current = scene;
@@ -198,6 +236,19 @@ export default function SubstrateRenderer({
             renderer.setClearColor(0xffffff);
             container.appendChild(renderer.domElement);
             rendererRef.current = renderer;
+            raycasterRef.current = new THREE.Raycaster();
+            pointerRef.current = new THREE.Vector2();
+
+            const labelRenderer = new CSS2DRenderer();
+            labelRenderer.setSize(side, side);
+            labelRenderer.domElement.style.position = 'absolute';
+            labelRenderer.domElement.style.top = '0';
+            labelRenderer.domElement.style.left = '0';
+            labelRenderer.domElement.style.width = '100%';
+            labelRenderer.domElement.style.height = '100%';
+            labelRenderer.domElement.style.pointerEvents = 'none';
+            container.appendChild(labelRenderer.domElement);
+            labelRendererRef.current = labelRenderer;
 
             const canvas = renderer.domElement;
             contextLostHandler = (event: Event) => {
@@ -231,6 +282,7 @@ export default function SubstrateRenderer({
                 if (!disposed && rendererRef.current && sceneRef.current && cameraRef.current) {
                     controls.update();
                     renderer.render(sceneRef.current, camera);
+                    labelRendererRef.current?.render(sceneRef.current, camera);
                 }
                 animationId = requestAnimationFrame(animate);
             };
@@ -248,6 +300,7 @@ export default function SubstrateRenderer({
             }
             const container = squareRef.current;
             const renderer = rendererRef.current;
+            const labelRenderer = labelRendererRef.current;
             const canvas = renderer?.domElement;
             if (canvas) {
                 if (contextLostHandler) {
@@ -257,18 +310,31 @@ export default function SubstrateRenderer({
                     canvas.removeEventListener('webglcontextrestored', contextRestoredHandler);
                 }
             }
+            const labelCanvas = labelRenderer?.domElement;
+            if (labelCanvas && container?.contains(labelCanvas)) {
+                container.removeChild(labelCanvas);
+            }
             if (renderer && container && container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }
             renderer?.dispose();
+            if (labelRenderer) {
+                const maybeDispose = (labelRenderer as unknown as { dispose?: () => void }).dispose;
+                if (typeof maybeDispose === 'function') {
+                    maybeDispose.call(labelRenderer);
+                }
+            }
             sceneRef.current?.clear();
             sceneRef.current = null;
             cameraRef.current = null;
             rendererRef.current = null;
+            labelRendererRef.current = null;
+            css2dObjectCtorRef.current = null;
             controlsRef.current?.dispose();
             controlsRef.current = null;
             defectObjectsRef.current = [];
             gridObjectsRef.current = [];
+            gridMeshCoordsRef.current = [];
         };
     }, [refreshRenderer, reloadToken]);
 
@@ -298,8 +364,11 @@ export default function SubstrateRenderer({
         const THREE = threeRef.current;
         defectObjectsRef.current.forEach((o) => sceneRef.current!.remove(o));
         gridObjectsRef.current.forEach((o) => sceneRef.current!.remove(o));
+        hoverOverlayRef.current.forEach((o) => sceneRef.current!.remove(o));
         defectObjectsRef.current = [];
         gridObjectsRef.current = [];
+        gridMeshCoordsRef.current = [];
+        hoverOverlayRef.current = [];
 
         if (mapCoordinates.length === 0) {
             setError(dies && dies.length === 0 ? '没有可显示的晶圆点位' : null);
@@ -311,7 +380,7 @@ export default function SubstrateRenderer({
         // Helper: create a red question mark sprite
         const makeQuestionMarkSprite = (w: number, h: number) => {
             const canvas = document.createElement('canvas');
-            const size = 128;
+            const size = 256;
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d')!;
@@ -321,7 +390,7 @@ export default function SubstrateRenderer({
             ctx.fillStyle = '#ff0000';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.font = 'bold 100px Arial';
+            ctx.font = 'bold 160px Arial';
             ctx.fillText('?', size / 2, size / 2 + 6);
             const tex = new THREE.CanvasTexture(canvas);
             tex.needsUpdate = true;
@@ -331,19 +400,23 @@ export default function SubstrateRenderer({
             return sprite;
         };
 
+        const clampDefectSize = (val: number) => Math.max(0, val);
+
         if (activeDefects && activeDefects.length) {
             const nodes: THREE.Object3D[] = [];
             activeDefects.forEach((item) => {
+                const adjW = clampDefectSize(item.w + offsetX_defect) / 300;
+                const adjH = clampDefectSize(item.h + offsetY_defect) / 300;
                 const hasColor = colorMap.has(item.class);
-                const sizeX = Math.max(item.w / 300, gridWidth * 0.5);
-                const sizeY = Math.max(item.h / 300, gridHeight * 0.5);
+                const sizeX = Math.max(adjW, gridWidth * 0.5);
+                const sizeY = Math.max(adjH, gridHeight * 0.5);
                 if (!hasColor) {
                     const sprite = makeQuestionMarkSprite(sizeX, sizeY);
                     sprite.position.set(item.x, item.y, 0.2);
                     sceneRef.current!.add(sprite);
                     nodes.push(sprite);
                 } else {
-                    const geometry = new THREE.PlaneGeometry((item.w + offsetX_defect) / 300, (item.h + offsetY_defect) / 300);
+                    const geometry = new THREE.PlaneGeometry(adjW, adjH);
                     const color = colorMap.get(item.class)!;
                     // Use fully opaque material for accurate, saturated color
                     const material = new THREE.MeshBasicMaterial({
@@ -375,18 +448,31 @@ export default function SubstrateRenderer({
         const baseGridColor = 0x8cefa1;
         const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
         const gridObjs: THREE.Object3D[] = [];
+        const gridMeshCoords: Array<{ mesh: THREE.Mesh, coord: { x: number; y: number } }> = [];
+
+        let minCoordX = Infinity;
+        let minCoordY = Infinity;
+        let maxCoordX = -Infinity;
+        let maxCoordY = -Infinity;
 
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
+            minCoordX = Math.min(minCoordX, xCoord);
+            maxCoordX = Math.max(maxCoordX, xCoord);
+            minCoordY = Math.min(minCoordY, yCoord);
+            maxCoordY = Math.max(maxCoordY, yCoord);
+
             const gridLeft = xCoord * gridWidth + offsetX;
             const gridRight = gridLeft + gridWidth;
             const gridTop = -yCoord * gridHeight + offsetY;
             const gridBottom = gridTop + gridHeight;
             const hasOverlap = activeDefects && activeDefects.length
                 ? activeDefects.some(defect => {
-                    const defectLeft = defect.x - ((defect.w + offsetX_defect) / 300) / 2;
-                    const defectRight = defect.x + ((defect.w + offsetX_defect) / 300) / 2;
-                    const defectTop = defect.y - ((defect.h + offsetY_defect) / 300) / 2;
-                    const defectBottom = defect.y + ((defect.h + offsetY_defect) / 300) / 2;
+                    const adjW = Math.max(0, defect.w + offsetX_defect) / 300;
+                    const adjH = Math.max(0, defect.h + offsetY_defect) / 300;
+                    const defectLeft = defect.x - adjW / 2;
+                    const defectRight = defect.x + adjW / 2;
+                    const defectTop = defect.y - adjH / 2;
+                    const defectBottom = defect.y + adjH / 2;
                     return !(
                         gridRight < defectLeft ||
                         gridLeft > defectRight ||
@@ -397,16 +483,16 @@ export default function SubstrateRenderer({
                 : false;
 
             const material = hasOverlap
-                // Opaque overlap to avoid washed-out colors
                 ? new THREE.MeshBasicMaterial({ color: overlapColor, transparent: false, opacity: 1, side: THREE.DoubleSide })
-                // Opaque base grid to ensure saturation
                 : new THREE.MeshBasicMaterial({ color: baseGridColor, transparent: false, opacity: 1, side: THREE.DoubleSide });
 
             const geometry = new THREE.PlaneGeometry(gridWidth, gridHeight);
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
+            mesh.userData.coord = { x: xCoord, y: yCoord };
             sceneRef.current!.add(mesh);
             gridObjs.push(mesh);
+            gridMeshCoords.push({ mesh, coord: { x: xCoord, y: yCoord } });
 
             const edges = new THREE.EdgesGeometry(geometry);
             const border = new THREE.LineSegments(edges, borderMaterial);
@@ -416,26 +502,88 @@ export default function SubstrateRenderer({
             gridObjs.push(border);
         }
 
+        // Header labels (Excel-like headers)
+        const makeLabel = (text: string, color = '#000000') => {
+            const size = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d')!;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = '#e1f4ff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.strokeStyle = '#9bbad1';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(0, 0, size, size);
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 128px Arial';
+            ctx.shadowColor = 'rgba(0,0,0,0.25)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.fillText(text, size / 2, size / 2 + 4);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.needsUpdate = true;
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            const sprite = new THREE.Sprite(mat);
+            // Match grid cell size so headers align flush with the grid
+            sprite.scale.set(gridWidth, gridHeight, 1);
+            return sprite;
+        };
+
+        if (isFinite(minCoordX) && isFinite(minCoordY)) {
+            const headerXCoord = minCoordX - 1;
+            const headerYCoord = minCoordY - 1;
+            const headerRowTop = -headerYCoord * gridHeight + offsetY;
+            const headerColLeft = headerXCoord * gridWidth + offsetX;
+
+            const seenX = new Set<number>();
+            for (const [xCoord] of mapCoordinatesRef.current) {
+                if (seenX.has(xCoord)) continue;
+                seenX.add(xCoord);
+                const label = makeLabel(String(xCoord));
+                if (label) {
+                    const gridLeft = xCoord * gridWidth + offsetX;
+                    label.position.set(gridLeft + gridWidth / 2, headerRowTop + gridHeight / 2, 0.3);
+                    sceneRef.current!.add(label);
+                    gridObjs.push(label);
+                }
+            }
+
+            const seenY = new Set<number>();
+            for (const [, yCoord] of mapCoordinatesRef.current) {
+                if (seenY.has(yCoord)) continue;
+                seenY.add(yCoord);
+                const label = makeLabel(String(yCoord));
+                if (label) {
+                    const gridTop = -yCoord * gridHeight + offsetY;
+                    label.position.set(headerColLeft + gridWidth / 2, gridTop + gridHeight / 2, 0.3);
+                    sceneRef.current!.add(label);
+                    gridObjs.push(label);
+                }
+            }
+
+            const corner = makeLabel('X/Y');
+            if (corner) {
+                corner.position.set(headerColLeft + gridWidth / 2, headerRowTop + gridHeight / 2, 0.3);
+                sceneRef.current!.add(corner);
+                gridObjs.push(corner);
+            }
+        }
+
         gridObjectsRef.current = gridObjs;
+        gridMeshCoordsRef.current = gridMeshCoords;
     };
 
     const centerCameraToData = () => {
         const camera = cameraRef.current;
         const controls = controlsRef.current;
-        const coords = mapCoordinatesRef.current;
-        if (!camera || !controls || !coords.length) return;
+        const bounds = getBounds();
+        if (!camera || !controls || !bounds) return;
 
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        for (const [xCoord, yCoord] of coords) {
-            const x = xCoord * gridWidth + offsetX;
-            const y = -yCoord * gridHeight + offsetY;
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x + gridWidth);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y + gridHeight);
-        }
-        if (!isFinite(minX)) return;
-
+        const { minX, maxX, minY, maxY } = bounds;
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
 
@@ -447,60 +595,269 @@ export default function SubstrateRenderer({
         controls.update();
     };
 
-    return (
-        // Outer block remains flexible — the inner square ensures at least a square area
-        <Card withBorder radius="md" style={{ padding: 0, width: '100%', height: '100%', ...style }}>
-            {/* Square enforcer: becomes a square based on width; height grows to match width */}
-            <div
-                ref={squareRef}
-                style={{
-                    position: 'relative',
-                    width: '100%',
-                    height: 'auto',
-                    aspectRatio: '1 / 1',    // 👈 enforce square
-                    minHeight: 240,          // optional: ensure a practical minimum
-                    overflow: 'visible',     // no letterboxing/cropping
-                }}
-            />
+    // Hover coordinate detection
+    useEffect(() => {
+        const canvas = rendererRef.current?.domElement;
+        const camera = cameraRef.current;
+        const raycaster = raycasterRef.current;
+        const THREE = threeRef.current;
+        const pointer = pointerRef.current;
+        if (!canvas || !camera || !raycaster || !THREE || !pointer) return;
 
-            {/* UI overlay lives on top of the Card, not inside the square div to avoid affecting its size */}
-            <Box style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
-                <Group justify="space-between" mb={6}>
+        const handlePointerMove = (evt: MouseEvent) => {
+            const rect = canvas.getBoundingClientRect();
+            pointer.set(
+                ((evt.clientX - rect.left) / rect.width) * 2 - 1,
+                -((evt.clientY - rect.top) / rect.height) * 2 + 1
+            );
+            raycaster.setFromCamera(pointer, camera);
+            const world = new THREE.Vector3(pointer.x, pointer.y, 0);
+            world.unproject(camera);
+            pointerWorldRef.current = { x: world.x, y: world.y };
+            setPointerVersion((v) => v + 1);
+            const meshes = gridMeshCoordsRef.current.map((m) => m.mesh);
+            const intersects = raycaster.intersectObjects(meshes, false);
+            
+            const fallbackCoord = coordFromWorld(world.x, world.y);
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object as THREE.Mesh;
+                const found = gridMeshCoordsRef.current.find((m) => m.mesh === hitMesh);
+                const nextCoord = found?.coord ?? fallbackCoord;
+                if (!nextCoord) clearHoverOverlays();
+                setHoverCoord(nextCoord);
+            } else {
+                if (!fallbackCoord) clearHoverOverlays();
+                setHoverCoord(fallbackCoord);
+            }
+        };
+        const handleLeave = () => {
+            setHoverCoord(null);
+            pointerWorldRef.current = null;
+            setPointerVersion((v) => v + 1);
+        };
+
+        canvas.addEventListener('pointermove', handlePointerMove);
+        canvas.addEventListener('pointerleave', handleLeave);
+        return () => {
+            canvas.removeEventListener('pointermove', handlePointerMove);
+            canvas.removeEventListener('pointerleave', handleLeave);
+        };
+    }, [threeReady]);
+
+    const clearHoverOverlays = useCallback(() => {
+        if (!sceneRef.current) return;
+        hoverOverlayRef.current.forEach((o) => sceneRef.current!.remove(o));
+        hoverOverlayRef.current = [];
+    }, []);
+
+    const getCoordExtents = useCallback(() => {
+        let minCoordX = Infinity, maxCoordX = -Infinity, minCoordY = Infinity, maxCoordY = -Infinity;
+        for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
+            minCoordX = Math.min(minCoordX, xCoord);
+            maxCoordX = Math.max(maxCoordX, xCoord);
+            minCoordY = Math.min(minCoordY, yCoord);
+            maxCoordY = Math.max(maxCoordY, yCoord);
+        }
+        if (!isFinite(minCoordX) || !isFinite(minCoordY)) return null;
+        return { minCoordX, maxCoordX, minCoordY, maxCoordY };
+    }, []);
+
+    const getHeaderBounds = useCallback(() => {
+        const extents = getCoordExtents();
+        if (!extents) return null;
+        const { minCoordX, maxCoordX, minCoordY, maxCoordY } = extents;
+        const headerMinX = minCoordX - 1;
+        const headerMinY = minCoordY - 1;
+        const width = (maxCoordX - headerMinX + 1) * gridWidth;
+        const height = (maxCoordY - headerMinY + 1) * gridHeight;
+        const left = headerMinX * gridWidth + offsetX;
+        const top = -headerMinY * gridHeight + offsetY; // top edge of header row
+        const right = left + width;
+        const bottom = top - height;
+        return {
+            left,
+            right,
+            top,
+            bottom,
+            minCoordX,
+            maxCoordX,
+            minCoordY,
+            maxCoordY,
+        };
+    }, [getCoordExtents, gridHeight, gridWidth, offsetX, offsetY]);
+
+    const coordFromWorld = useCallback((wx: number, wy: number) => {
+        const bounds = getHeaderBounds();
+        if (!bounds) return null;
+        const { left, right, top, bottom, minCoordX, maxCoordX, minCoordY, maxCoordY } = bounds;
+
+        const startX = Math.min(left, right);
+        const endX = Math.max(left, right);
+        const topEdge = Math.max(top, bottom);
+        const bottomEdge = Math.min(top, bottom);
+
+        if (wx < startX || wx > endX) return null;
+        if (wy > topEdge || wy < bottomEdge) return null;
+
+        const headerMinX = minCoordX - 1;
+        const headerMinY = minCoordY;
+
+        const relX = wx - startX;
+        const relY = topEdge - wy;
+        const x = Math.floor(relX / gridWidth + 1e-6) + headerMinX;
+        const y = Math.floor(relY / gridHeight + 1e-6) + headerMinY;
+        if (x < headerMinX || x > maxCoordX || y < headerMinY || y > maxCoordY) return null;
+        return { x, y };
+    }, [getHeaderBounds, gridWidth, gridHeight]);
+
+    const updateHoverOverlays = useCallback(() => {
+        if (!sceneRef.current || !threeRef.current) return;
+        const THREE = threeRef.current;
+        clearHoverOverlays();
+        if (!hoverCoord) return;
+
+        const headerBounds = getHeaderBounds();
+        if (!headerBounds) return;
+        const { left, right, top, bottom } = headerBounds;
+
+        const minWorldX = Math.min(left, right);
+        const maxWorldX = Math.max(left, right);
+        const minWorldY = Math.min(top, bottom);
+        const maxWorldY = Math.max(top, bottom);
+
+        const totalWidth = maxWorldX - minWorldX;
+        const totalHeight = maxWorldY - minWorldY;
+
+        const totalCenterX = (minWorldX + maxWorldX) / 2;
+        const totalCenterY = (minWorldY + maxWorldY) / 2;
+
+        const rowTop = -hoverCoord.y * gridHeight + offsetY;
+        const rowCenterY = rowTop + gridHeight / 2;
+        const colLeft = hoverCoord.x * gridWidth + offsetX;
+        const colCenterX = colLeft + gridWidth / 2;
+
+        const rawCursorX = pointerWorldRef.current?.x ?? colCenterX;
+        const rawCursorY = pointerWorldRef.current?.y ?? rowCenterY;
+        const cursorX = Math.min(maxWorldX, Math.max(minWorldX, rawCursorX));
+        const cursorY = Math.min(maxWorldY, Math.max(minWorldY, rawCursorY));
+
+        const rowMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.35, depthWrite: false });
+        const colMat = new THREE.MeshBasicMaterial({ color: 0xc4e4ff, transparent: true, opacity: 0.35, depthWrite: false });
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0x2563eb, transparent: true, opacity: 0.45, depthWrite: false });
+
+        const rowGeo = new THREE.PlaneGeometry(totalWidth, gridHeight);
+        const rowMesh = new THREE.Mesh(rowGeo, rowMat);
+        rowMesh.position.set(totalCenterX, rowCenterY, 0.12);
+
+        const colGeo = new THREE.PlaneGeometry(gridWidth, totalHeight);
+        const colMesh = new THREE.Mesh(colGeo, colMat);
+        colMesh.position.set(colCenterX, totalCenterY, 0.11);
+
+        const horizLineGeo = new THREE.PlaneGeometry(totalWidth, Math.max(gridHeight * 0.04, 0.15));
+        const horizLine = new THREE.Mesh(horizLineGeo, lineMat);
+        horizLine.position.set(totalCenterX, cursorY, 0.2);
+
+        const vertLineGeo = new THREE.PlaneGeometry(Math.max(gridWidth * 0.04, 0.15), totalHeight);
+        const vertLine = new THREE.Mesh(vertLineGeo, lineMat);
+        vertLine.position.set(cursorX, totalCenterY, 0.2);
+
+        const nodes: THREE.Object3D[] = [rowMesh, colMesh, horizLine, vertLine];
+
+        const ctor = css2dObjectCtorRef.current;
+        if (ctor) {
+            const el = document.createElement('div');
+            el.textContent = `(${hoverCoord.x}, ${hoverCoord.y})`;
+            el.style.fontFamily = 'Inter, "Segoe UI", Arial, sans-serif';
+            el.style.fontSize = '12px';
+            el.style.fontWeight = '600';
+            el.style.color = '#0f172a';
+            el.style.background = 'rgba(255, 255, 255, 0.92)';
+            el.style.border = '1px solid rgba(0, 0, 0, 0.12)';
+            el.style.borderRadius = '6px';
+            el.style.padding = '2px 6px';
+            el.style.pointerEvents = 'none';
+            el.style.transform = 'translate(-100%, 120%)';
+            const label = new ctor(el);
+            label.position.set(cursorX, cursorY, 0.25);
+            nodes.push(label);
+        }
+
+        nodes.forEach(n => sceneRef.current!.add(n));
+        hoverOverlayRef.current = nodes;
+    }, [clearHoverOverlays, getCoordExtents, gridHeight, gridWidth, hoverCoord, offsetX, offsetY]);
+
+    useEffect(() => {
+        updateHoverOverlays();
+    }, [updateHoverOverlays, pointerVersion]);
+
+    return (
+        <Card withBorder radius="md" padding="md" style={{ width: '100%', height: '100%', ...style }}>
+            <Paper
+                shadow="sm"
+                p="xs"
+                radius="md"
+                withBorder
+                mb="md"
+                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+            >
+                <Group justify="space-between" gap="xs">
                     <Text size="sm" c="dimmed">缩放</Text>
                     <Text size="sm">{zoom.toFixed(2)}×</Text>
                 </Group>
 
-                <Group mt="xs" grow>
+                <Group gap="xs" grow>
                     <Button size="xs" variant="light" onClick={() => centerCameraToData()}>居中视图</Button>
                     <Button size="xs" variant="light" onClick={() => setZoom(1)}>重置缩放</Button>
-                    <Button
-                        size="xs"
-                        variant="outline"
-                        mt="xs"
-                        leftSection={<IconRefresh size={14} />}
-                        onClick={refreshRenderer}
-                    >
-                        刷新渲染器
-                    </Button>
                 </Group>
-                <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} py="md" />
-            </Box>
 
-            {error && (
-                <Box
-                    style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        backgroundColor: '#ff4444ff',
-                        color: 'white',
-                        zIndex: 100,
-                    }}
+                <Slider min={0.5} max={5} step={0.01} value={zoom} onChange={setZoom} />
+
+                <Button
+                    size="xs"
+                    variant="outline"
+                    leftSection={<IconRefresh size={14} />}
+                    onClick={refreshRenderer}
                 >
-                    {error}
-                </Box>
-            )}
+                    刷新渲染器
+                </Button>
+
+                <Group gap="xs">
+                    <Text size="sm" c="dimmed">坐标:</Text>
+                    <Text size="sm" fw={600}>
+                        {hoverCoord ? `(${hoverCoord.x}, ${hoverCoord.y})` : '—'}
+                    </Text>
+                </Group>
+            </Paper>
+
+            <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <div
+                    ref={squareRef}
+                    style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: 'auto',
+                        aspectRatio: '1 / 1',
+                        minHeight: 240,
+                        overflow: 'visible',
+                    }}
+                />
+
+                {error && (
+                    <Box
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            backgroundColor: '#ff4444ff',
+                            color: 'white',
+                            zIndex: 100,
+                        }}
+                    >
+                        {error}
+                    </Box>
+                )}
+            </Box>
         </Card>
     );
 }

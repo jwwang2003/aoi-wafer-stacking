@@ -2,7 +2,30 @@
 // NOTE: Tauri IPC
 ////////////////////////////////////////////////////////////////////////////////
 
-import { FileInfo } from '@tauri-apps/plugin-fs';
+// Mirror of Rust's src-tauri/src/file/file_io.rs::FileInfo (camelCase, epoch ms)
+export interface FileInfo {
+    isFile: boolean;
+    isDirectory: boolean;
+    isSymlink: boolean;
+
+    size: number;
+    mtime: number | null;
+    atime: number | null;
+    birthtime: string | null;
+
+    readonly: boolean;
+    fileAttributes: number | null;
+
+    dev: number | null;
+    ino: number | null;
+    mode: number | null;
+    nlink: number | null;
+    uid: number | null;
+    gid: number | null;
+    rdev: number | null;
+    blksize: number | null;
+    blocks: number | null;
+}
 
 /**
  * Data read from the OEM product to in-house product ID mapping
@@ -42,6 +65,12 @@ export interface SubstrateDefectRecord {
 export type ProductMappingXlsResult = Record<string, ProductMappingRecord[]>;
 export type ProductXlsResult = Record<string, ProductRecord[]>;
 export type SubstrateDefectXlsResult = Record<string, SubstrateDefectRecord[]>;
+export interface DieLayoutSheet {
+    xHeaders: number[];
+    yHeaders: number[];
+    dies: AsciiDie[];
+}
+export type DieLayoutMap = Record<string, DieLayoutSheet>;
 
 // =============================================================================
 
@@ -224,6 +253,100 @@ export interface DirResult {
     path: string;
     exists: boolean;
     info?: FileInfo
+}
+
+// =============================================================================
+// AOI inference
+
+export interface AoiWeightStatus {
+    cpuPath?: string;
+    gpuPath?: string;
+    available: AoiWeightInfo[];
+}
+
+export interface AoiWeightInfo {
+    model: string;
+    device: string;
+    format: string;
+    path: string;
+    extension: string;
+}
+
+export interface AoiDeviceStatus {
+    gpuAvailable: boolean;
+    gpuCount: number;
+    preferGpu: boolean;
+}
+
+export interface AoiInferenceStatus {
+    device: AoiDeviceStatus;
+    weights: AoiWeightStatus;
+    libtorchEnabled: boolean;
+}
+
+export interface AoiInferencePreview {
+    values: number[];
+    totalValues: number;
+    shape: number[];
+}
+
+export interface AoiInferenceSample {
+    name: string;
+    durationMs: number;
+    width: number;
+    height: number;
+    channels: number;
+    device: string;
+    preview: AoiInferencePreview;
+    mask?: {
+        width: number;
+        height: number;
+        data: number[];
+    };
+    detection?: AoiDetectionResult;
+}
+
+export interface AoiInferenceError {
+    name: string;
+    message: string;
+}
+
+export interface AoiInferenceBackend {
+    device: string;
+    gpu: boolean;
+    gpuCount: number;
+    modelPath: string;
+    weights: AoiWeightStatus;
+}
+
+export interface AoiInferenceBatchResult {
+    backend: AoiInferenceBackend;
+    results: AoiInferenceSample[];
+    errors: AoiInferenceError[];
+}
+
+export interface AoiResizeConfig {
+    width: number;
+    height: number;
+}
+
+export interface AoiMaskConfig {
+    threshold?: number;
+}
+
+export interface AoiDetectionBox {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    score: number;
+    classId: number;
+}
+
+export interface AoiDetectionResult {
+    modelPath: string;
+    device: string;
+    boxes: AoiDetectionBox[];
 }
 // #[derive(Debug, Serialize)]
 // pub struct FileInfo {
