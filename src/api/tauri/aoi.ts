@@ -15,6 +15,7 @@ export interface RunAoiInferenceArgs {
     preferGpu?: boolean;
     cpuWeightPath?: string;
     gpuWeightPath?: string;
+    segmentationEnabled?: boolean;
     previewValues?: number;
     resize?: AoiResizeConfig;
     maskThreshold?: number;
@@ -37,6 +38,7 @@ export async function runAoiInference(
             preferGpu: args.preferGpu,
             cpuWeightPath: args.cpuWeightPath,
             gpuWeightPath: args.gpuWeightPath,
+            segmentationEnabled: args.segmentationEnabled,
             previewValues: args.previewValues,
             resize: args.resize,
             maskThreshold: args.maskThreshold,

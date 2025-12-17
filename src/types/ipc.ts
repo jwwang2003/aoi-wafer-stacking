@@ -346,6 +346,8 @@ export interface AoiDetectionBox {
 export interface AoiDetectionResult {
     modelPath: string;
     device: string;
+    inputShape: number[];
+    pad: number[];
     boxes: AoiDetectionBox[];
 }
 // #[derive(Debug, Serialize)]

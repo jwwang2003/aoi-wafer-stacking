@@ -40,6 +40,24 @@ import { resourceDir, join } from '@tauri-apps/api/path';
 import { exists } from '@tauri-apps/plugin-fs';
 import type { AoiWeightInfo } from '@/types/ipc';
 
+const YOLO_CLASS_NAMES = [
+    'Other defect',
+    'Acceptable',
+    'Ink spot',
+    'Edge chip',
+    'Stain',
+] as const;
+
+const isSegmentationPath = (p: string) => {
+    const lower = p.toLowerCase();
+    return lower.includes('/segmentation/') || lower.includes('\\segmentation\\');
+};
+
+const isDetectionPath = (p: string) => {
+    const lower = p.toLowerCase();
+    return lower.includes('/detection/') || lower.includes('\\detection\\');
+};
+
 interface LocalImage {
     name: string;
     size: number;
@@ -129,6 +147,13 @@ function DetectionOverlay({
 }) {
     const file = files.find(f => f.name === sample.name);
     const boxes = sample.detection?.boxes || [];
+    const pad = sample.detection?.pad || [0, 0, 0, 0];
+    const detShape = sample.detection?.inputShape || [];
+    const detW = detShape.length >= 4 ? detShape[3] : sample.width || 1;
+    const detH = detShape.length >= 4 ? detShape[2] : sample.height || 1;
+    const contentW = detW - pad[0] - pad[1];
+    const contentH = detH - pad[2] - pad[3];
+    const clamp01 = (v: number) => Math.min(100, Math.max(0, v));
     if (!file) return <Text c="red" size="sm">找不到对应的原始图片</Text>;
     if (boxes.length === 0) return <Text c="dimmed" size="sm">无检测结果</Text>;
     return (
@@ -139,12 +164,15 @@ function DetectionOverlay({
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
             />
             {boxes.map((b: AoiDetectionBox, idx: number) => {
-                const w = sample.width || 1;
-                const h = sample.height || 1;
-                const left = (b.x1 / w) * 100;
-                const top = (b.y1 / h) * 100;
-                const bw = ((b.x2 - b.x1) / w) * 100;
-                const bh = ((b.y2 - b.y1) / h) * 100;
+                const w = contentW || detW || 1;
+                const h = contentH || detH || 1;
+                const left = clamp01(((b.x1 - pad[0]) / w) * 100);
+                const top = clamp01(((b.y1 - pad[2]) / h) * 100);
+                const right = clamp01(((b.x2 - pad[0]) / w) * 100);
+                const bottom = clamp01(((b.y2 - pad[2]) / h) * 100);
+                const bw = Math.max(0, right - left);
+                const bh = Math.max(0, bottom - top);
+                const clsLabel = YOLO_CLASS_NAMES[b.classId] ?? `cls ${b.classId}`;
                 return (
                     <Box
                         key={idx}
@@ -170,9 +198,116 @@ function DetectionOverlay({
                                 padding: '0 6px',
                                 fontSize: 12,
                                 borderRadius: 4,
+                                whiteSpace: 'nowrap',
                             }}
                         >
-                            {`cls ${b.classId} | ${(b.score * 100).toFixed(1)}%`}
+                            {`${clsLabel} | ${(b.score * 100).toFixed(1)}%`}
+                        </Box>
+                    </Box>
+                );
+            })}
+        </Box>
+    );
+}
+
+function CombinedOverlay({
+    sample,
+    files,
+}: {
+    sample: AoiInferenceSample;
+    files: LocalImage[];
+}) {
+    const file = files.find(f => f.name === sample.name);
+    const maskUrl = buildMaskUrl(sample.mask);
+    const boxes = sample.detection?.boxes || [];
+    const pad = sample.detection?.pad || [0, 0, 0, 0];
+    const detShape = sample.detection?.inputShape || [];
+    const detW = detShape.length >= 4 ? detShape[3] : sample.width || 1;
+    const detH = detShape.length >= 4 ? detShape[2] : sample.height || 1;
+    const contentW = detW - pad[0] - pad[1];
+    const contentH = detH - pad[2] - pad[3];
+    const clamp01 = (v: number) => Math.min(100, Math.max(0, v));
+    if (!file) return <Text c="red" size="sm">找不到对应的原始图片</Text>;
+    return (
+        <Box
+            style={{
+                position: 'relative',
+                width: '100%',
+                paddingBottom: '56%',
+                backgroundImage:
+                    'linear-gradient(45deg, #f8fafc 25%, transparent 25%), linear-gradient(-45deg, #f8fafc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f8fafc 75%), linear-gradient(-45deg, transparent 75%, #f8fafc 75%)',
+                backgroundSize: '20px 20px',
+                backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
+                borderRadius: 8,
+                overflow: 'hidden',
+            }}
+        >
+            {maskUrl ? (
+                <Box
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        backgroundImage: `url(${file.previewUrl})`,
+                        backgroundSize: 'contain',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'center',
+                        maskImage: `url(${maskUrl})`,
+                        WebkitMaskImage: `url(${maskUrl})`,
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskSize: 'contain',
+                        WebkitMaskSize: 'contain',
+                        maskPosition: 'center',
+                        WebkitMaskPosition: 'center',
+                        backgroundColor: 'transparent',
+                    }}
+                />
+            ) : (
+                <img
+                    src={file.previewUrl}
+                    alt={sample.name}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+            )}
+            {boxes.map((b: AoiDetectionBox, idx: number) => {
+                const w = contentW || detW || 1;
+                const h = contentH || detH || 1;
+                const left = clamp01(((b.x1 - pad[0]) / w) * 100);
+                const top = clamp01(((b.y1 - pad[2]) / h) * 100);
+                const right = clamp01(((b.x2 - pad[0]) / w) * 100);
+                const bottom = clamp01(((b.y2 - pad[2]) / h) * 100);
+                const bw = Math.max(0, right - left);
+                const bh = Math.max(0, bottom - top);
+                const clsLabel = YOLO_CLASS_NAMES[b.classId] ?? `cls ${b.classId}`;
+                return (
+                    <Box
+                        key={idx}
+                        style={{
+                            position: 'absolute',
+                            border: '2px solid #22c55e',
+                            borderRadius: 6,
+                            left: `${left}%`,
+                            top: `${top}%`,
+                            width: `${bw}%`,
+                            height: `${bh}%`,
+                            pointerEvents: 'none',
+                            boxShadow: '0 0 0 1px rgba(34,197,94,0.4)',
+                        }}
+                    >
+                        <Box
+                            style={{
+                                position: 'absolute',
+                                top: -18,
+                                left: -2,
+                                background: 'rgba(34,197,94,0.9)',
+                                color: 'white',
+                                padding: '0 6px',
+                                fontSize: 12,
+                                borderRadius: 4,
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {`${clsLabel} | ${(b.score * 100).toFixed(1)}%`}
                         </Box>
                     </Box>
                 );
@@ -189,6 +324,7 @@ export default function AoiPage() {
     const [preferGpu, setPreferGpu] = useState(true);
     const [cpuWeightPath, setCpuWeightPath] = useState('');
     const [gpuWeightPath, setGpuWeightPath] = useState('');
+    const [segmentationEnabled, setSegmentationEnabled] = useState(true);
     const [resizeEnabled, setResizeEnabled] = useState(false);
     const [resizeWidth, setResizeWidth] = useState<number>(256);
     const [resizeHeight, setResizeHeight] = useState<number>(256);
@@ -321,6 +457,7 @@ export default function AoiPage() {
                 preferGpu,
                 cpuWeightPath: cpuWeightPath || undefined,
                 gpuWeightPath: gpuWeightPath || undefined,
+                segmentationEnabled,
                 resize: resizeEnabled ? { width: resizeWidth, height: resizeHeight } : undefined,
                 maskThreshold,
                 detectEnabled,
@@ -335,7 +472,7 @@ export default function AoiPage() {
         } finally {
             setRunning(false);
         }
-    }, [cpuWeightPath, files, gpuWeightPath, preferGpu]);
+    }, [cpuWeightPath, files, gpuWeightPath, preferGpu, segmentationEnabled, resizeEnabled, resizeHeight, resizeWidth, maskThreshold, detectEnabled, detectPreferGpu, detectWeightPath, detectThreshold]);
 
     const removeFile = useCallback((name: string) => {
         setFiles(prev => {
@@ -367,7 +504,7 @@ export default function AoiPage() {
                 GPU 不可用，使用 CPU
             </Badge>
         );
-    }, [status]);
+    }, [status, fallbackWeights]);
 
     const totalSize = useMemo(
         () => files.reduce((acc, file) => acc + file.size, 0),
@@ -389,7 +526,7 @@ export default function AoiPage() {
                 </Badge>
             </Group>
         );
-    }, [status]);
+    }, [status, fallbackWeights]);
 
     const summary = useMemo(() => {
         if (!result) return null;
@@ -412,9 +549,9 @@ export default function AoiPage() {
             return true;
         });
         return weights
-            .filter(w => w.device.toLowerCase().includes('cpu'))
+            .filter(w => w.device.toLowerCase().includes('cpu') && isSegmentationPath(w.path))
             .map(w => ({ value: w.path, label: `${w.model} | ${w.device} | ${w.format} (${w.extension})` }));
-    }, [status]);
+    }, [status, fallbackWeights]);
 
     const gpuOptions = useMemo(() => {
         const seen = new Set<string>();
@@ -424,7 +561,7 @@ export default function AoiPage() {
             return true;
         });
         return weights
-            .filter(w => w.device.toLowerCase().includes('gpu') || w.device.toLowerCase().includes('inference'))
+            .filter(w => (w.device.toLowerCase().includes('gpu') || w.device.toLowerCase().includes('inference')) && isSegmentationPath(w.path))
             .map(w => ({ value: w.path, label: `${w.model} | ${w.device} | ${w.format} (${w.extension})` }));
     }, [status]);
 
@@ -436,7 +573,7 @@ export default function AoiPage() {
             return true;
         });
         return weights
-            .filter(w => w.model.toLowerCase().includes('yolo'))
+            .filter(w => isDetectionPath(w.path))
             .map(w => ({ value: w.path, label: `${w.model} | ${w.device} | ${w.format} (${w.extension})` }));
     }, [status]);
 
@@ -535,12 +672,26 @@ export default function AoiPage() {
 
             <Card withBorder radius="md" p="md">
                 <Card.Section inheritPadding py="xs">
-                    <Group justify="space-between">
+                    <Group justify="space-between" align="flex-start">
                         <div>
                             <Text fw={600}>权重路径与流程</Text>
                             <Text c="dimmed" size="xs">分割先运行，YOLO 检测随后执行（如启用）。</Text>
                         </div>
-                        <Text c="dimmed" size="xs">可在此覆盖默认权重路径</Text>
+                        <Group gap="xs">
+                            <Switch
+                                size="sm"
+                                label="启用分割"
+                                checked={segmentationEnabled}
+                                onChange={e => setSegmentationEnabled(e.currentTarget.checked)}
+                            />
+                            <Switch
+                                size="sm"
+                                label="启用检测（YOLO）"
+                                checked={detectEnabled}
+                                onChange={e => setDetectEnabled(e.currentTarget.checked)}
+                            />
+                            <Text c="dimmed" size="xs">可在此覆盖默认权重路径</Text>
+                        </Group>
                     </Group>
                 </Card.Section>
                 <Divider my="sm" />
@@ -706,9 +857,8 @@ export default function AoiPage() {
                         <Text fw={600}>推理结果</Text>
                         {summary}
                     </Group>
-                    <Text size="sm" c="dimmed">模型: {result.backend.modelPath}</Text>
                     <Divider my="sm" />
-                    <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
+                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
                         {result.results.map((sample: AoiInferenceSample) => (
                             <Card key={sample.name} shadow="xs" padding="sm" radius="md" withBorder>
                                 <Group justify="space-between">
@@ -716,7 +866,7 @@ export default function AoiPage() {
                                     <Badge color="teal">{sample.durationMs} ms</Badge>
                                 </Group>
                                 <Text size="sm" c="dimmed">
-                                    维度: {sample.width}×{sample.height}×{sample.channels} · 设备: {sample.device}
+                                    Dims: [{sample.width}, {sample.height}, {sample.channels}] · 设备: {sample.device}
                                 </Text>
                                 <Divider my="xs" />
                                 <Text size="sm" fw={600}>掩膜</Text>
@@ -726,7 +876,15 @@ export default function AoiPage() {
                                 />
                                 <Divider my="xs" />
                                 <Text size="sm" fw={600}>检测 (YOLO)</Text>
+                                {sample.detection?.inputShape && (
+                                    <Text size="xs" c="dimmed" mb={4}>
+                                        Dims [{sample.detection.inputShape.join(', ')}]
+                                    </Text>
+                                )}
                                 <DetectionOverlay sample={sample} files={files} />
+                                <Divider my="xs" />
+                                <Text size="sm" fw={600}>综合视图 (原图 + 掩膜 + 检测)</Text>
+                                <CombinedOverlay sample={sample} files={files} />
                             </Card>
                         ))}
                     </SimpleGrid>

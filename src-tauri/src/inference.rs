@@ -8,11 +8,14 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tch::{vision::image, CModule, Cuda, Device, IndexOp, Kind, QEngine, Tensor};
+use tch::{vision::image, CModule, Cuda, Device, IndexOp, Kind, QEngine, Tensor, IValue};
 
 const CPU_WEIGHT_NAME: &str = "aoi_cpu.ts";
 const GPU_WEIGHT_NAME: &str = "aoi_gpu.ts";
 const MIN_INPUT_FALLBACK: i64 = 608;
+const DETECTION_STRIDE_FALLBACK: i64 = 32;
+const DETECTION_MIN_SIDE: i64 = 640;
+const DETECTION_IOU_THRESHOLD: f32 = 0.45;
 
 // Regex-friendly filename patterns we will consider when auto-discovering weights.
 // Supported examples (CPU):
@@ -23,8 +26,9 @@ const MIN_INPUT_FALLBACK: i64 = 608;
 //   attention_r2unet_gpu_fp32.ts
 //   attention_r2unet_inference_fp16.pt (treated as GPU/FP16)
 //   attention_r2unet_inference_fp32.pt (treated as GPU/FP32)
-const CPU_WEIGHT_REGEX: &str = r"(?i)attention_r2unet_cpu_(fp32|int8)\.ts$";
-const GPU_WEIGHT_REGEX: &str = r"(?i)attention_r2unet_(gpu_(fp16|fp32)\.ts|inference_fp(16|32)\.pt)$";
+const CPU_WEIGHT_REGEX: &str = r"(?i)attention_r2unet_cpu_(fp32|int8)\.(ts|pt|torchscript)$";
+const GPU_WEIGHT_REGEX: &str = r"(?i)attention_r2unet_(gpu_(fp16|fp32)\.(ts|torchscript)|inference_fp(16|32)\.(pt|torchscript))$";
+const DETECTION_WEIGHT_REGEX: &str = r"(?i)^(?P<model>yolo.*)_(?P<device>cpu|gpu|inference)_(?P<format>fp32|fp16|int8)\.(?P<ext>ts|pt|torchscript)$";
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +68,7 @@ pub struct InferenceRequest {
     pub prefer_gpu: Option<bool>,
     pub cpu_weight_path: Option<String>,
     pub gpu_weight_path: Option<String>,
+    pub segmentation_enabled: Option<bool>,
     pub preview_values: Option<usize>,
     pub resize: Option<ResizeConfig>,
     pub mask_threshold: Option<f32>,
@@ -122,6 +127,8 @@ pub struct DetectionBox {
 pub struct DetectionResult {
     pub model_path: String,
     pub device: String,
+    pub input_shape: Vec<i64>,
+    pub pad: [i64; 4],
     pub boxes: Vec<DetectionBox>,
 }
 
@@ -211,6 +218,7 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
 
     let preview_len = req.preview_values.unwrap_or(16).clamp(1, 64);
     let prefer_gpu = req.prefer_gpu.unwrap_or(true);
+    let segmentation_enabled = req.segmentation_enabled.unwrap_or(true);
     let mask_threshold = req.mask_threshold.unwrap_or(0.75);
     let resize_cfg = req.resize;
     let detect_enabled = req.detect_enabled.unwrap_or(true);
@@ -220,8 +228,8 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
     let available = discover_weights();
     let cpu_weight = resolve_weight(req.cpu_weight_path, CPU_WEIGHT_NAME, CPU_WEIGHT_REGEX, &available, "cpu");
     let gpu_weight = resolve_weight(req.gpu_weight_path, GPU_WEIGHT_NAME, GPU_WEIGHT_REGEX, &available, "gpu");
-    let detect_weight = resolve_weight(req.detect_weight_path.clone(), "yolo_auto.ts", GPU_WEIGHT_REGEX, &available, "gpu")
-        .or_else(|| resolve_weight(req.detect_weight_path, "yolo_auto.ts", CPU_WEIGHT_REGEX, &available, "cpu"));
+    let detect_weight = resolve_weight(req.detect_weight_path.clone(), "yolo_auto.ts", DETECTION_WEIGHT_REGEX, &available, "gpu")
+        .or_else(|| resolve_weight(req.detect_weight_path, "yolo_auto.ts", DETECTION_WEIGHT_REGEX, &available, "cpu"));
 
     // Try to enable QNNPACK first, fall back to FBGEMM so quantized models can load.
     QEngine::QNNPACK
@@ -262,12 +270,6 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
     } else {
         None
     };
-    let detection_cached = if let (Some(det_path), Some(det_dev)) = (detect_weight.clone(), detection_device) {
-        Some(get_or_load_model(&det_path, det_dev)?)
-    } else {
-        None
-    };
-
     let processed: Vec<_> = req
         .images
         .into_par_iter()
@@ -277,50 +279,86 @@ pub fn run_inference(req: InferenceRequest) -> Result<InferenceBatchResult, Stri
     let mut results = Vec::new();
     let mut errors = Vec::new();
 
+    let detection_cached = if let (Some(det_path), Some(det_dev)) = (detect_weight.clone(), detection_device) {
+        match get_or_load_model(&det_path, det_dev) {
+            Ok(m) => Some(m),
+            Err(err) => {
+                errors.push(InferenceFailure {
+                    name: "__model__/yolo".to_string(),
+                    message: format!("Detection model load failed ({:?}): {err}", det_path),
+                });
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     for item in processed {
         match item {
-            Ok((name, tensor, (width, height, channels))) => {
-                match forward_image(&cached, tensor, preview_len, mask_threshold) {
-                    Ok((duration_ms, preview, mask)) => {
-                        let detection = if let (Some(det_cache), Some(det_dev)) = (detection_cached.as_ref(), detection_device) {
-                            if mask.is_some() {
-                                match run_detection(det_cache, det_dev, &mask, detect_threshold, width, height) {
-                                    Ok(det) => Some(det),
-                                    Err(err) => {
-                                        errors.push(InferenceFailure {
-                                            name: name.clone(),
-                                            message: format!("Detection failed: {err}"),
-                                        });
-                                        None
-                                    }
+            Ok((name, tensor, det_base, (width, height, channels))) => {
+                let (duration_ms, preview, mask) = if segmentation_enabled {
+                    match forward_image(&cached, tensor, preview_len, mask_threshold) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            errors.push(InferenceFailure { name: name.clone(), message: err });
+                            continue;
+                        }
+                    }
+                } else {
+                    (
+                        0,
+                        InferenceOutputPreview { values: Vec::new(), total_values: 0, shape: vec![] },
+                        None,
+                    )
+                };
+
+                let detection = if let (Some(det_cache), Some(det_dev)) = (detection_cached.as_ref(), detection_device) {
+                    if segmentation_enabled {
+                        if let Some(m) = mask.as_ref() {
+                            match run_detection(det_cache, det_dev, &det_base, Some(m), detect_threshold, width, height) {
+                                Ok(det) => Some(det),
+                                Err(err) => {
+                                    errors.push(InferenceFailure {
+                                        name: name.clone(),
+                                        message: format!("Detection failed: {err}"),
+                                    });
+                                    None
                                 }
-                            } else {
+                            }
+                        } else {
+                            errors.push(InferenceFailure {
+                                name: name.clone(),
+                                message: "Segmentation enabled but mask missing; skipping YOLO".to_string(),
+                            });
+                            None
+                        }
+                    } else {
+                        match run_detection(det_cache, det_dev, &det_base, None, detect_threshold, width, height) {
+                            Ok(det) => Some(det),
+                            Err(err) => {
                                 errors.push(InferenceFailure {
                                     name: name.clone(),
-                                    message: "Skipped YOLO detection because segmentation mask was missing".to_string(),
+                                    message: format!("Detection failed: {err}"),
                                 });
                                 None
                             }
-                        } else {
-                            None
-                        };
-                        results.push(InferenceSampleResult {
-                            name,
-                            duration_ms,
-                            width,
-                            height,
-                            channels,
-                            device: format_device(target_device),
-                            preview,
-                            mask,
-                            detection,
-                        });
+                        }
                     }
-                    Err(err) => errors.push(InferenceFailure {
-                        name,
-                        message: err,
-                    }),
-                }
+                } else {
+                    None
+                };
+                results.push(InferenceSampleResult {
+                    name,
+                    duration_ms,
+                    width,
+                    height,
+                    channels,
+                    device: format_device(target_device),
+                    preview,
+                    mask,
+                    detection,
+                });
             }
             Err((name, err)) => errors.push(InferenceFailure { name, message: err }),
         }
@@ -406,67 +444,159 @@ fn extract_mask(output: &Tensor, threshold: f32) -> Option<MaskData> {
 fn run_detection(
     cached: &CachedModel,
     device: Device,
-    mask: &Option<MaskData>,
+    base_image: &Tensor,
+    mask: Option<&MaskData>,
     threshold: f32,
     width: i64,
     height: i64,
 ) -> Result<DetectionResult, String> {
-    // Build a masked input using a blank image with mask as alpha; since we
-    // don't keep the original RGB tensor here, we create a single-channel mask
-    // tensor for the detector. If no mask, we pass a blank tensor.
-    let mut input = Tensor::zeros([1, 1, height, width], (Kind::Float, device));
-    if let Some(m) = mask {
+    // Use the original normalized image; apply mask as a gate over all channels.
+    let target_w = round_up_to_stride(width.max(DETECTION_MIN_SIDE), DETECTION_STRIDE_FALLBACK);
+    let target_h = round_up_to_stride(height.max(DETECTION_MIN_SIDE), DETECTION_STRIDE_FALLBACK);
+    let pad_w = target_w - width;
+    let pad_h = target_h - height;
+    let pad_left = pad_w / 2;
+    let pad_right = pad_w - pad_left;
+    let pad_top = pad_h / 2;
+    let pad_bottom = pad_h - pad_top;
+
+    let padded_image = base_image
+        .f_constant_pad_nd(&[pad_left, pad_right, pad_top, pad_bottom])
+        .map_err(|e| format!("Detection padding failed: {e}"))?;
+
+    // Build a binary mask (0/1) aligned to the padded image, then gate the image.
+    let masked_input = if let Some(m) = mask {
         let mut mask_tensor = Tensor::f_from_slice(&m.data)
             .map_err(|e| format!("Failed to build mask tensor: {e}"))?
             .to_kind(Kind::Float)
             / 255.0;
         mask_tensor = mask_tensor.reshape([1, 1, m.height, m.width]);
-        if m.height != height || m.width != width {
-            mask_tensor = mask_tensor.upsample_nearest2d(&[height, width], None, None);
+        if m.height != target_h || m.width != target_w {
+            mask_tensor = mask_tensor.upsample_nearest2d(&[target_h, target_w], None, None);
         }
-        input = mask_tensor.to_device(device);
-    }
+        padded_image.to_device(device) * mask_tensor.to_device(device)
+    } else {
+        padded_image.to_device(device)
+    };
+
+    let input_shape = masked_input.size();
 
     let output = {
         let guard = cached
             .model
             .lock()
             .map_err(|_| "Detection model mutex poisoned".to_string())?;
-        guard
-            .forward_ts(&[input])
-            .map_err(|e| format!("Detection forward failed: {e}"))?
+        // Some YOLO exports return tuples/lists; try forward_ts first, fall back to forward_is.
+        match guard.forward_ts(&[masked_input.shallow_clone()]) {
+            Ok(t) => t,
+            Err(e_ts) => {
+                let iv = guard
+                    .forward_is(&[IValue::Tensor(masked_input)])
+                    .map_err(|e| format!("Detection forward failed: {e}; original: {e_ts}"))?;
+                match iv {
+                    IValue::Tensor(t) => t,
+                    IValue::Tuple(items) | IValue::GenericList(items) => {
+                        items
+                            .into_iter()
+                            .find_map(|v| match v {
+                                IValue::Tensor(t) => Some(t),
+                                _ => None,
+                            })
+                            .ok_or_else(|| "Detection forward did not return a tensor".to_string())?
+                    }
+                    other => {
+                        return Err(format!(
+                            "Detection forward did not return a tensor: {other:?}; original: {e_ts}"
+                        ))
+                    }
+                }
+            }
+        }
     };
 
     let out_cpu = output.to_device(Device::Cpu).to_kind(Kind::Float);
     let size = out_cpu.size();
-    if size.len() != 2 || size.get(1).cloned().unwrap_or(0) < 6 {
-        return Err(format!("Unexpected detection output shape: {:?}", size));
-    }
-    let flat: Vec<f32> = out_cpu.flatten(0, -1).try_into().map_err(|e| format!("Convert det output failed: {e}"))?;
-    let stride = size[1] as usize;
-    let mut boxes = Vec::new();
-    for chunk in flat.chunks(stride) {
-        if chunk.len() < 6 {
-            continue;
+    // If the model already returns an N x M matrix, keep existing path; otherwise fall back to YOLO-style decoding.
+    let boxes = if size.len() == 2 && size.get(1).cloned().unwrap_or(0) >= 6 {
+        let flat: Vec<f32> = out_cpu
+            .flatten(0, -1)
+            .try_into()
+            .map_err(|e| format!("Convert det output failed: {e}"))?;
+        let stride = size[1] as usize;
+        let mut boxes = Vec::new();
+        for chunk in flat.chunks(stride) {
+            if chunk.len() < 6 {
+                continue;
+            }
+            let score = chunk[4];
+            if score < threshold {
+                continue;
+            }
+            boxes.push(DetectionBox {
+                x1: chunk[0],
+                y1: chunk[1],
+                x2: chunk[2],
+                y2: chunk[3],
+                score,
+                class_id: chunk[5].round() as i64,
+            });
         }
-        let score = chunk[4];
-        if score < threshold {
-            continue;
+        boxes
+    } else {
+        // YOLOv5/8 TorchScript often returns [B, anchors, grid, grid, channels] or [B, boxes, channels]
+        let channels = *size.last().unwrap_or(&0);
+        if channels >= 6 {
+            let flat: Vec<f32> = out_cpu
+                .flatten(0, -1)
+                .try_into()
+                .map_err(|e| format!("Convert det output failed: {e}"))?;
+            let stride = channels as usize;
+            let mut boxes = Vec::new();
+            for chunk in flat.chunks(stride) {
+                if chunk.len() < 6 {
+                    continue;
+                }
+                // Assume xywh + obj + class scores
+                let (x, y, w, h, obj) = (chunk[0], chunk[1], chunk[2], chunk[3], chunk[4]);
+                let mut best_cls = 0i64;
+                let mut best_conf = 0f32;
+                for (idx, cls_score) in chunk.iter().enumerate().skip(5) {
+                    let conf = obj * *cls_score;
+                    if conf > best_conf {
+                        best_conf = conf;
+                        best_cls = (idx - 5) as i64;
+                    }
+                }
+                if best_conf < threshold {
+                    continue;
+                }
+                let x1 = x - w / 2.0;
+                let y1 = y - h / 2.0;
+                let x2 = x + w / 2.0;
+                let y2 = y + h / 2.0;
+                boxes.push(DetectionBox {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    score: best_conf,
+                    class_id: best_cls,
+                });
+            }
+            boxes
+        } else {
+            Vec::new()
         }
-        boxes.push(DetectionBox {
-            x1: chunk[0],
-            y1: chunk[1],
-            x2: chunk[2],
-            y2: chunk[3],
-            score,
-            class_id: chunk[5].round() as i64,
-        });
-    }
+    };
+
+    let nmsed = non_max_suppression(boxes, DETECTION_IOU_THRESHOLD);
 
     Ok(DetectionResult {
         model_path: path_to_string(&cached.path),
         device: format_device(device),
-        boxes,
+        input_shape,
+        pad: [pad_left, pad_right, pad_top, pad_bottom],
+        boxes: nmsed,
     })
 }
 
@@ -475,7 +605,7 @@ fn preprocess_image(
     device: Device,
     resize_cfg: Option<ResizeConfig>,
     min_side: i64,
-) -> Result<(String, Tensor, (i64, i64, i64)), (String, String)> {
+) -> Result<(String, Tensor, Tensor, (i64, i64, i64)), (String, String)> {
     match image::load_from_memory(&img.data) {
         Ok(tensor) => {
             let dims = tensor.size();
@@ -520,7 +650,8 @@ fn preprocess_image(
                 fin_dims = (target_w, target_h, fin_dims.2);
             }
             let input = chw.unsqueeze(0).to_device(device);
-            Ok((img.name, input, fin_dims))
+            let det_base = chw.unsqueeze(0); // keep on CPU; will move to detection device later
+            Ok((img.name, input, det_base, fin_dims))
         }
         Err(err) => Err((img.name, format!("Failed to decode image: {err}"))),
     }
@@ -583,6 +714,41 @@ fn get_or_load_model(path: &Path, device: Device) -> Result<CachedModel, String>
     };
     *slot = Some(cached.clone());
     Ok(cached)
+}
+
+fn round_up_to_stride(val: i64, stride: i64) -> i64 {
+    if stride <= 1 {
+        return val;
+    }
+    ((val + stride - 1) / stride) * stride
+}
+
+fn iou(a: &DetectionBox, b: &DetectionBox) -> f32 {
+    let x1 = a.x1.max(b.x1);
+    let y1 = a.y1.max(b.y1);
+    let x2 = a.x2.min(b.x2);
+    let y2 = a.y2.min(b.y2);
+    let inter_w = (x2 - x1).max(0.0);
+    let inter_h = (y2 - y1).max(0.0);
+    let inter = inter_w * inter_h;
+    if inter <= 0.0 {
+        return 0.0;
+    }
+    let area_a = (a.x2 - a.x1).max(0.0) * (a.y2 - a.y1).max(0.0);
+    let area_b = (b.x2 - b.x1).max(0.0) * (b.y2 - b.y1).max(0.0);
+    inter / (area_a + area_b - inter + f32::EPSILON)
+}
+
+fn non_max_suppression(mut boxes: Vec<DetectionBox>, iou_thresh: f32) -> Vec<DetectionBox> {
+    boxes.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    let mut picked = Vec::new();
+    while let Some(b) = boxes.pop() {
+        let keep = picked.iter().all(|p| iou(&b, p) < iou_thresh);
+        if keep {
+            picked.push(b);
+        }
+    }
+    picked
 }
 
 fn locate_weight(file_name: &str) -> Option<PathBuf> {
@@ -650,27 +816,35 @@ fn resolve_weight(
 }
 
 fn candidate_dirs() -> Vec<PathBuf> {
+    fn with_subdirs(base: PathBuf) -> Vec<PathBuf> {
+        vec![
+            base.clone(),
+            base.join("segmentation"),
+            base.join("detection"),
+        ]
+    }
+
     let mut dirs = Vec::new();
 
     if let Ok(cwd) = std::env::current_dir() {
-        dirs.push(cwd.join("assets/models"));
-        dirs.push(cwd.join("public/models"));
-        dirs.push(cwd.join("dist/models"));
-        dirs.push(cwd.join("resources"));
-        dirs.push(cwd.join("resources/models"));
-        dirs.push(cwd.join("3rdparty/pytorch/build/lib"));
+        dirs.extend(with_subdirs(cwd.join("assets/models")));
+        dirs.extend(with_subdirs(cwd.join("public/models")));
+        dirs.extend(with_subdirs(cwd.join("dist/models")));
+        dirs.extend(with_subdirs(cwd.join("resources")));
+        dirs.extend(with_subdirs(cwd.join("resources/models")));
+        dirs.extend(with_subdirs(cwd.join("3rdparty/pytorch/build/lib")));
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            dirs.push(dir.to_path_buf());
-            dirs.push(dir.join("models"));
-            dirs.push(dir.join("resources"));
-            dirs.push(dir.join("resources/models"));
+            dirs.extend(with_subdirs(dir.to_path_buf()));
+            dirs.extend(with_subdirs(dir.join("models")));
+            dirs.extend(with_subdirs(dir.join("resources")));
+            dirs.extend(with_subdirs(dir.join("resources/models")));
             if let Some(parent) = dir.parent() {
-                dirs.push(parent.join("Resources"));
-                dirs.push(parent.join("resources"));
-                dirs.push(parent.join("resources/models"));
+                dirs.extend(with_subdirs(parent.join("Resources")));
+                dirs.extend(with_subdirs(parent.join("resources")));
+                dirs.extend(with_subdirs(parent.join("resources/models")));
             }
         }
     }
@@ -679,8 +853,8 @@ fn candidate_dirs() -> Vec<PathBuf> {
 }
 
 fn discover_weights() -> Vec<WeightInfo> {
-    // Pattern: <model>_<device>_<format>.(ts|pt)
-    let re = match regex::Regex::new(r"(?i)^(?P<model>.+?)_(?P<device>cpu|gpu|inference)_(?P<format>fp32|fp16|int8)\.(?P<ext>ts|pt)$") {
+    // Pattern: <model>_<device>_<format>.(ts|pt|torchscript)
+    let re = match regex::Regex::new(r"(?i)^(?P<model>.+?)_(?P<device>cpu|gpu|inference)_(?P<format>fp32|fp16|int8)\.(?P<ext>ts|pt|torchscript)$") {
         Ok(r) => r,
         Err(_) => return Vec::new(),
     };
