@@ -373,13 +373,19 @@ export default function WaferStacking() {
                 }
             }
 
-            const mergeWithLayout = (layout: AsciiDie[], source: AsciiDie[]): AsciiDie[] => {
-                const binLookup = new Map(source.map(d => [`${d.x},${d.y}`, d.bin]));
-                return layout.map(d => {
-                    const bin = binLookup.get(`${d.x},${d.y}`);
-                    return bin ? { ...d, bin } : d;
-                });
-            };
+            if (layoutDies && layoutDies.length > 0) {
+                originalDiesList.push(layoutDies);
+                formatNamesList.push('DieLayout');
+                headers.push({ 'LayerType': 'DieLayout', 'Priority': 'Highest' });
+            }
+
+            // const mergeWithLayout = (layout: AsciiDie[], source: AsciiDie[]): AsciiDie[] => {
+            //     const binLookup = new Map(source.map(d => [`${d.x},${d.y}`, d.bin]));
+            //     return layout.map(d => {
+            //         const bin = binLookup.get(`${d.x},${d.y}`);
+            //         return bin ? { ...d, bin } : d;
+            //     });
+            // };
 
             for (const layer of sortedLayers) {
                 const { filePath, layerType, stage } = layer;
@@ -401,14 +407,14 @@ export default function WaferStacking() {
                             content = await parseWaferMapEx(filePath);
                             if (content && content.map.dies) {
                                 header = extractMapDataHeader(content);
-                                dies = layoutDies ? mergeWithLayout(layoutDies, content.map.dies) : content.map.dies;
+                                dies = content.map.dies;
                                 if (cpType === '1') cp1Header = { ...header };
                             }
                         } else if (cpType === '3') {
                             content = await invokeParseWafer(filePath);
                             if (content && content.map.dies) {
                                 header = extractWaferHeader(content);
-                                dies = layoutDies ? mergeWithLayout(layoutDies, content.map.dies) : content.map.dies;
+                                dies = content.map.dies;
                             }
                         }
                     } else if (stage === DataSourceType.Wlbi) {
@@ -421,13 +427,13 @@ export default function WaferStacking() {
                                 }
                                 return die;
                             });
-                            dies = layoutDies ? mergeWithLayout(layoutDies, wlbiDies) : wlbiDies;
+                            dies = wlbiDies;
                         }
                     } else if (stage === DataSourceType.Aoi) {
                         content = await parseWaferMapEx(filePath);
                         if (content && content.map.dies) {
                             header = extractMapDataHeader(content);
-                            dies = layoutDies ? mergeWithLayout(layoutDies, content.map.dies) : content.map.dies;
+                            dies = content.map.dies;
                         }
                     }
                 }
@@ -510,13 +516,18 @@ export default function WaferStacking() {
 
             const { dieMap } = createDieMapStructure(alignedDiesList);
             alignedDiesList.forEach((dies, index) => {
-                const layer = sortedLayers[index];
-                if (!layer.stage) return;
-                const layerMeta: LayerMeta = {
-                    stage: layer.stage,
-                    subStage: layer.layerType === 'map' ? layer.subStage : undefined,
-                };
-                const priority = getLayerPriority(layerMeta);
+                let priority: number;
+                if (index === 0 && layoutDies && layoutDies.length > 0) {
+                    priority = 100;
+                } else {
+                    const layer = sortedLayers[index - (layoutDies ? 1 : 0)];
+                    if (!layer?.stage) return;
+                    const layerMeta: LayerMeta = {
+                        stage: layer.stage,
+                        subStage: layer.layerType === 'map' ? layer.subStage : undefined,
+                    };
+                    priority = getLayerPriority(layerMeta);
+                }
                 mergeLayerToDieMap(dieMap, dies, priority);
             });
 
@@ -632,6 +643,7 @@ export default function WaferStacking() {
         } finally {
             setProcessing(false);
         }
+        await exportWaferStatsReport(jobOemId, outputDir);
     };
 
     const handleBatchProcess = async () => {
