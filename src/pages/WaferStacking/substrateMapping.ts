@@ -38,7 +38,6 @@ export const generateGridWithSubstrateDefects = (
             const defectTop = defect.y - adjH / 2;
             const defectBottom = defect.y + adjH / 2;
 
-            // 问题：这里使用了 gridRight, gridLeft 等变量，但应该直接计算网格边界
             return !(
                 gridRight < defectLeft ||
                 gridLeft > defectRight ||
