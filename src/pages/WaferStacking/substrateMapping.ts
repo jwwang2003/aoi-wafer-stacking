@@ -12,9 +12,6 @@ export const generateGridWithSubstrateDefects = (
     const GRID_WIDTH = 4.134;
     const GRID_HEIGHT = 3.74;
 
-    const defectSizeOffsetX_mm = defectSizeOffsetX / 1000;
-    const defectSizeOffsetY_mm = defectSizeOffsetY / 1000;
-
     const seeds = (baseLayout && baseLayout.length > 0) ? baseLayout : baseDies;
 
     if (!seeds || seeds.length === 0) {
@@ -31,8 +28,10 @@ export const generateGridWithSubstrateDefects = (
         const gridBottom = gridTop + GRID_HEIGHT;
 
         const hasOverlap = defects.some(defect => {
-            const adjW = clampDefectSize(defect.w + offsetX) / 300;
-            const adjH = clampDefectSize(defect.h + offsetY) / 300;
+            let adjW = clampDefectSize(defect.w + defectSizeOffsetX) / 300;
+            adjW = adjW * 1000;
+            let adjH = clampDefectSize(defect.h + defectSizeOffsetY) / 300;
+            adjH = adjH * 1000;
             const defectLeft = defect.x - adjW / 2;
             const defectRight = defect.x + adjW / 2;
             const defectTop = defect.y - adjH / 2;

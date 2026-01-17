@@ -554,7 +554,7 @@ export default function SubstrateRenderer({
                 const sizeY = Math.max(adjH, gridHeight * 0.5);
                 if (!hasColor) {
                     const sprite = makeQuestionMarkSprite(sizeX, sizeY);
-                    sprite.position.set(item.x, item.y, 0.2);
+                    sprite.position.set(item.x + sizeX / 2, item.y + sizeY / 2, 0.2);
                     sceneRef.current!.add(sprite);
                     nodes.push(sprite);
                 } else {
@@ -568,7 +568,7 @@ export default function SubstrateRenderer({
                         opacity: 1,
                     });
                     const mesh = new THREE.Mesh(geometry, material);
-                    mesh.position.set(item.x, item.y, 0);
+                    mesh.position.set(item.x + adjW / 2, item.y + adjH / 2, 0);
                     sceneRef.current!.add(mesh);
                     nodes.push(mesh);
                 }
