@@ -1,10 +1,5 @@
 import { AsciiDie, isNumberBin, isSpecialBin } from '@/types/ipc';
 
-/**
- * 传入的baseDies Y轴需取反后再与原始缺陷坐标叠加
- * @param baseDies 基础图层的芯片数据
- * @param defects 基板缺陷数据
- */
 export const generateGridWithSubstrateDefects = (
     baseDies: AsciiDie[] | undefined,
     defects: Array<{ x: number; y: number; w: number; h: number }>,
@@ -16,60 +11,55 @@ export const generateGridWithSubstrateDefects = (
 ): AsciiDie[] => {
     const GRID_WIDTH = 4.134;
     const GRID_HEIGHT = 3.74;
-    defectSizeOffsetX = defectSizeOffsetX / 1000;
-    defectSizeOffsetY = defectSizeOffsetY / 1000;
+
     const seeds = (baseLayout && baseLayout.length > 0) ? baseLayout : baseDies;
 
     if (!seeds || seeds.length === 0) {
         return [];
     }
+    const clampDefectSize = (val: number) => Math.max(0, val);
 
     const defectiveGrids = new Set<string>();
+    console.log('substrate:', { offsetX, offsetY });
+    seeds.forEach(baseDie => {
+        const gridLeft = baseDie.x * GRID_WIDTH + offsetX;
+        const gridRight = gridLeft + GRID_WIDTH;
+        const gridTop = -baseDie.y * GRID_HEIGHT + offsetY;
+        const gridBottom = gridTop + GRID_HEIGHT;
 
-    defects.forEach(defect => {
+        const hasOverlap = defects.some(defect => {
+            let adjW = clampDefectSize(defect.w + defectSizeOffsetX) / 300;
+            adjW = adjW * 1000;
+            let adjH = clampDefectSize(defect.h + defectSizeOffsetY) / 300;
+            adjH = adjH * 1000;
+            const defectLeft = defect.x - adjW / 2;
+            const defectRight = defect.x + adjW / 2;
+            const defectTop = defect.y - adjH / 2;
+            const defectBottom = defect.y + adjH / 2;
 
-        const adjustedDefectX = defect.x - offsetX;
-        const adjustedDefectY = defect.y - offsetY;
+            return !(
+                gridRight < defectLeft ||
+                gridLeft > defectRight ||
+                gridBottom < defectTop ||
+                gridTop > defectBottom
+            );
+        });
 
-        const defectLeft = adjustedDefectX - (defect.w + defectSizeOffsetX) / 2;
-        const defectRight = adjustedDefectX + (defect.w + defectSizeOffsetX) / 2;
-        const defectBottom = adjustedDefectY - (defect.h + defectSizeOffsetY) / 2;
-        const defectTop = adjustedDefectY + (defect.h + defectSizeOffsetY) / 2;
-
-        const startGridX = Math.floor(defectLeft / GRID_WIDTH);
-        const endGridX = Math.ceil(defectRight / GRID_WIDTH);
-        const startGridY = Math.floor(defectBottom / GRID_HEIGHT);
-        const endGridY = Math.ceil(defectTop / GRID_HEIGHT);
-
-        for (let gridX = startGridX; gridX <= endGridX; gridX++) {
-            for (let gridY = startGridY; gridY <= endGridY; gridY++) {
-                const gridLeft = gridX * GRID_WIDTH;
-                const gridRight = (gridX + 1) * GRID_WIDTH;
-                const gridBottom = gridY * GRID_HEIGHT;
-                const gridTop = (gridY + 1) * GRID_HEIGHT;
-
-                const isOverlap = !(
-                    defectRight < gridLeft ||
-                    defectLeft > gridRight ||
-                    defectTop < gridBottom ||
-                    defectBottom > gridTop
-                );
-
-                if (isOverlap) {
-                    defectiveGrids.add(`${gridX},${gridY}`);
-                }
-            }
+        if (hasOverlap) {
+            defectiveGrids.add(`${baseDie.x},${baseDie.y}`);
         }
     });
 
     const substrateDies: AsciiDie[] = seeds.map(baseDie => {
-        const gridKey = `${baseDie.x},${-baseDie.y}`;
+        const gridKey = `${baseDie.x},${baseDie.y}`;
         const isDefective = defectiveGrids.has(gridKey);
 
         const shouldPreserveOriginalBin =
             (isSpecialBin(baseDie.bin) && ['S', '*'].includes(baseDie.bin.special)) ||
             (isNumberBin(baseDie.bin) && baseDie.bin.number === 257);
+
         const targetBin = isDefective && !shouldPreserveOriginalBin ? { special: 'D' } : baseDie.bin;
+
         return {
             ...baseDie,
             bin: targetBin
