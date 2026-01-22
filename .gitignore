@@ -22,3 +22,24 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Yarn v2+ (Berry) specific
+.yarn/*
+!.yarn/cache
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Optional: if you don't use the zero-installs approach
+# Uncomment the following line to ignore the cache
+# .yarn/cache
+
+# Optimization file (safely ignored)
+.yarn/install-state.gz
+
+# Editor/OS files
+.DS_Store
+.idea
+.vscode

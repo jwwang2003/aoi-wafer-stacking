@@ -1,6 +1,6 @@
 [package]
 name = "aoi-wafer-stacking"
-version = "1.0.1"
+version = "1.0.2"
 description = "一个智能叠图软件"
 authors = ["JUN WEI WANG", "YI TING"]
 edition = "2021"
@@ -15,19 +15,19 @@ name = "wafer_overlay_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
+tauri = { version = "2.5.3", features = [] }
+tauri-plugin-opener = "2.2.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2.0.12"
 zip = "4.1.0"
 calamine = "0.26.0"
-tauri-plugin-dialog = "2"
-tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2.3.2"
+tauri-plugin-sql = { version = "2.3.0", features = ["sqlite"] }
+tauri-plugin-fs = "2.4.1"
 fs2 = "0.4.3"
 once_cell = "1.21.3"
 chrono = "0.4.41"
