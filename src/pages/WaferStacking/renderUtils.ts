@@ -4,6 +4,7 @@ import { AsciiDie, WaferMapDie } from '@/types/ipc';
 import { BinValue } from '@/types/ipc';
 import { isNumberBin, isSpecialBin } from '@/types/ipc';
 import { PASS_VALUES } from './priority';
+import { computeDieRect, GridOffset, GridSize } from './substrateMapping';
 
 const LETTER_TO_NUMBER_MAP: Record<string, number> = {
     'A': 10,
@@ -186,7 +187,7 @@ export async function renderAsJpg(
     defects: Array<{ x: number; y: number; w: number; h: number; class: string }>,
     gridWidth: number = 4.134,
     gridHeight: number = 3.74,
-    gridOffset: { x: number; y: number } = { x: 0, y: 0 },
+    gridOffset: GridOffset = { x: 0, y: 0 },
     header?: Record<string, string>
 ): Promise<Uint8Array> {
     const mainSize = 1000;
@@ -224,6 +225,7 @@ export async function renderAsJpg(
         controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
         controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
 
+        const gridSize: GridSize = { width: gridWidth, height: gridHeight };
         const dieMap = new Map<string, AsciiDie | WaferMapDie>();
         dies.forEach(die => dieMap.set(`${die.x}|${die.y}`, die));
 
@@ -242,8 +244,7 @@ export async function renderAsJpg(
             const die = dieMap.get(`${xCoord}|${yCoord}`);
             if (!die) return;
 
-            const gridLeft = xCoord * gridWidth + gridOffset.x;
-            const gridTop = -yCoord * gridHeight + gridOffset.y;
+            const { left: gridLeft, top: gridTop } = computeDieRect({ x: xCoord, y: yCoord }, gridSize, gridOffset);
             const gridColor = 'bin' in die ? getColorByBin(die.bin) : 0x8cefa1;
 
             const material = new THREE.MeshBasicMaterial({ color: gridColor, side: THREE.DoubleSide });
@@ -264,8 +265,7 @@ export async function renderAsJpg(
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
             mapCoordinates.forEach(([xCoord, yCoord]) => {
-                const x = xCoord * gridWidth + gridOffset.x;
-                const y = -yCoord * gridHeight + gridOffset.y;
+                const { left: x, top: y } = computeDieRect({ x: xCoord, y: yCoord }, gridSize, gridOffset);
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x + gridWidth);
                 minY = Math.min(minY, y);
@@ -330,7 +330,7 @@ export async function renderSubstrateAsJpg(
     _defects: Array<{ x: number; y: number; w: number; h: number; class: string }>,
     gridWidth: number = 4.134,
     gridHeight: number = 3.74,
-    gridOffset: { x: number; y: number } = { x: 0, y: 0 },
+    gridOffset: GridOffset = { x: 0, y: 0 },
     header?: Record<string, string>
 ): Promise<Uint8Array> {
     const mainSize = 1000;
@@ -368,6 +368,7 @@ export async function renderSubstrateAsJpg(
         controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.PAN };
 
         const baseGridColor = 0x8cefa1;
+        const gridSize: GridSize = { width: gridWidth, height: gridHeight };
         const dieMap = new Map<string, AsciiDie | WaferMapDie>();
         dies.forEach(die => dieMap.set(`${die.x}|${die.y}`, die));
         const mapCoordinates = Array.from(dieMap.keys()).map(key =>
@@ -381,8 +382,7 @@ export async function renderSubstrateAsJpg(
         const fillMaterial = new THREE.MeshBasicMaterial({ color: baseGridColor, side: THREE.DoubleSide });
 
         mapCoordinates.forEach(([xCoord, yCoord]) => {
-            const gridLeft = xCoord * gridWidth + gridOffset.x;
-            const gridTop = -yCoord * gridHeight + gridOffset.y;
+            const { left: gridLeft, top: gridTop } = computeDieRect({ x: xCoord, y: yCoord }, gridSize, gridOffset);
 
             const mesh = new THREE.Mesh(sharedPlane, fillMaterial);
             mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
@@ -398,8 +398,7 @@ export async function renderSubstrateAsJpg(
         const fitCameraToData = () => {
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             mapCoordinates.forEach(([xCoord, yCoord]) => {
-                const x = xCoord * gridWidth + gridOffset.x;
-                const y = -yCoord * gridHeight + gridOffset.y;
+                const { left: x, top: y } = computeDieRect({ x: xCoord, y: yCoord }, gridSize, gridOffset);
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x + gridWidth);
                 minY = Math.min(minY, y);

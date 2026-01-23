@@ -477,8 +477,8 @@ export default function WaferStacking() {
                         dies = generateGridWithSubstrateDefects(
                             originalDiesList[0] || [],
                             filteredSubstrateDefects,
-                            currentSubstrateOffset.x,
-                            currentSubstrateOffset.y,
+                            { width: currentDieSize.x, height: currentDieSize.y },
+                            currentSubstrateOffset,
                             currentDefectSizeOffset.x,
                             currentDefectSizeOffset.y,
                             layoutDies

@@ -7,6 +7,7 @@ import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
+import { computeDieRect, GridOffset, GridSize } from '@/pages/WaferStacking/substrateMapping';
 
 import { colorMap } from './Constants';
 
@@ -17,7 +18,7 @@ interface SubstrateRendererProps {
     style?: React.CSSProperties;
     selectedSheetId: string | null;
     sheetsData: SubstrateDefectXlsResult;
-    gridOffset?: { x: number; y: number };
+    gridOffset?: GridOffset;
     dies: AsciiDie[] | WaferMapDie[] | null;
     defectSizeOffset?: { x: number; y: number };
 }
@@ -56,7 +57,9 @@ export default function SubstrateRenderer({
     const [hoverCoord, setHoverCoord] = useState<{ x: number; y: number } | null>(null);
     const [pointerVersion, setPointerVersion] = useState(0);
     const { x: offsetX, y: offsetY } = gridOffset;
+    // defectSizeOffset is specified in micrometers in the UI; convert with the raw defect data
     const { x: offsetX_defect, y: offsetY_defect } = defectSizeOffset;
+    const EPS = 1e-6; // keep overlap rules consistent with algorithm path
     const shouldResetViewRef = useRef(false);
     const raycasterRef = useRef<THREE.Raycaster | null>(null);
     const pointerRef = useRef<THREE.Vector2 | null>(null);
@@ -187,13 +190,11 @@ export default function SubstrateRenderer({
         const dataH = maxY - minY;
         const margin = 1.0;
 
-        // Incorporate current zoom so effective view (frustum/zoom) fits content
-        const currentZoom = camera.zoom || zoom || 1;
-        const baseScale = Math.min(
+        // Frustum is fit to data bounds; zoom slider uses camera.zoom directly
+        const scale = Math.min(
             side / (dataW * margin || 1),
             side / (dataH * margin || 1)
         ) || 1;
-        const scale = baseScale / currentZoom;
 
         camera.left = -side / 2 / scale;
         camera.right = side / 2 / scale;
@@ -386,23 +387,22 @@ export default function SubstrateRenderer({
         const { minCoordX, minCoordY } = extents;
 
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
-            const gridLeft = xCoord * gridWidth + offsetX;
-            const gridRight = gridLeft + gridWidth;
-            const gridTop = -yCoord * gridHeight + offsetY;
-            const gridBottom = gridTop + gridHeight;
+            const { left: gridLeft, right: gridRight, top: gridTop, bottom: gridBottom } =
+                computeDieRect({ x: xCoord, y: yCoord }, { width: gridWidth, height: gridHeight }, gridOffset as GridOffset);
             const hasOverlap = activeDefects && activeDefects.length
                 ? activeDefects.some(defect => {
-                    const adjW = clampDefectSize(defect.w + offsetX_defect) / 300;
-                    const adjH = clampDefectSize(defect.h + offsetY_defect) / 300;
-                    const defectLeft = defect.x - adjW / 2;
-                    const defectRight = defect.x + adjW / 2;
-                    const defectTop = defect.y - adjH / 2;
-                    const defectBottom = defect.y + adjH / 2;
+                    // XLS defect dimensions are in μm; convert to mm to match grid units
+                    const adjW = clampDefectSize(defect.w + offsetX_defect) / 1000;
+                    const adjH = clampDefectSize(defect.h + offsetY_defect) / 1000;
+                    const defectLeft = defect.x;
+                    const defectRight = defect.x + adjW;
+                    const defectTop = defect.y;
+                    const defectBottom = defect.y + adjH;
                     return !(
-                        gridRight < defectLeft ||
-                        gridLeft > defectRight ||
-                        gridBottom < defectTop ||
-                        gridTop > defectBottom
+                        gridRight <= defectLeft + EPS ||
+                        gridLeft >= defectRight - EPS ||
+                        gridBottom <= defectTop + EPS ||
+                        gridTop >= defectBottom - EPS
                     );
                 })
                 : false;
@@ -547,8 +547,9 @@ export default function SubstrateRenderer({
         if (activeDefects && activeDefects.length) {
             const nodes: THREE.Object3D[] = [];
             activeDefects.forEach((item) => {
-                const adjW = clampDefectSize(item.w + offsetX_defect) / 300;
-                const adjH = clampDefectSize(item.h + offsetY_defect) / 300;
+                // XLS defect dimensions are in μm; convert to mm for rendering
+                const adjW = clampDefectSize(item.w + offsetX_defect) / 1000;
+                const adjH = clampDefectSize(item.h + offsetY_defect) / 1000;
                 const hasColor = colorMap.has(item.class);
                 const sizeX = Math.max(adjW, gridWidth * 0.5);
                 const sizeY = Math.max(adjH, gridHeight * 0.5);
@@ -678,7 +679,7 @@ export default function SubstrateRenderer({
             setPointerVersion((v) => v + 1);
             const meshes = gridMeshCoordsRef.current.map((m) => m.mesh);
             const intersects = raycaster.intersectObjects(meshes, false);
-            
+
             const fallbackCoord = coordFromWorld(world.x, world.y);
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object as THREE.Mesh;
@@ -821,7 +822,7 @@ export default function SubstrateRenderer({
                     leftSection={<IconRefresh size={14} />}
                     onClick={refreshRenderer}
                 >
-                    刷新渲染器
+                    刷新渲染
                 </Button>
 
                 <Group gap="xs">
