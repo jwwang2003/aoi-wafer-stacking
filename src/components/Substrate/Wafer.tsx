@@ -7,7 +7,7 @@ import { Box, Slider, Paper, Group, Text, Button, Card } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
-import { computeDieRect, GridOffset, GridSize } from '@/pages/WaferStacking/substrateMapping';
+import { computeDieRect, GridOffset, normalizeDefect, rectsOverlap } from '@/utils/substrateMapping';
 
 import { colorMap } from './Constants';
 
@@ -387,23 +387,21 @@ export default function SubstrateRenderer({
         const { minCoordX, minCoordY } = extents;
 
         for (const [xCoord, yCoord] of mapCoordinatesRef.current) {
-            const { left: gridLeft, right: gridRight, top: gridTop, bottom: gridBottom } =
-                computeDieRect({ x: xCoord, y: yCoord }, { width: gridWidth, height: gridHeight }, gridOffset as GridOffset);
+            const gridRect = computeDieRect(
+                { x: xCoord, y: yCoord },
+                { width: gridWidth, height: gridHeight },
+                gridOffset as GridOffset
+            );
             const hasOverlap = activeDefects && activeDefects.length
                 ? activeDefects.some(defect => {
-                    // XLS defect dimensions are in μm; convert to mm to match grid units
-                    const adjW = clampDefectSize(defect.w + offsetX_defect) / 1000;
-                    const adjH = clampDefectSize(defect.h + offsetY_defect) / 1000;
-                    const defectLeft = defect.x;
-                    const defectRight = defect.x + adjW;
-                    const defectTop = defect.y;
-                    const defectBottom = defect.y + adjH;
-                    return !(
-                        gridRight <= defectLeft + EPS ||
-                        gridLeft >= defectRight - EPS ||
-                        gridBottom <= defectTop + EPS ||
-                        gridTop >= defectBottom - EPS
-                    );
+                    const norm = normalizeDefect(defect, { x: offsetX_defect, y: offsetY_defect });
+                    const defectRect = {
+                        left: norm.x,
+                        right: norm.x + norm.w,
+                        top: norm.y,
+                        bottom: norm.y + norm.h,
+                    };
+                    return rectsOverlap(gridRect, defectRect, EPS);
                 })
                 : false;
 
@@ -413,7 +411,7 @@ export default function SubstrateRenderer({
 
             const geometry = new THREE.PlaneGeometry(gridWidth, gridHeight);
             const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.set(gridLeft + gridWidth / 2, gridTop + gridHeight / 2, -0.1);
+            mesh.position.set(gridRect.left + gridWidth / 2, gridRect.top + gridHeight / 2, -0.1);
             mesh.userData.coord = { x: xCoord, y: yCoord };
             sceneRef.current!.add(mesh);
             gridObjs.push(mesh);
@@ -547,15 +545,15 @@ export default function SubstrateRenderer({
         if (activeDefects && activeDefects.length) {
             const nodes: THREE.Object3D[] = [];
             activeDefects.forEach((item) => {
-                // XLS defect dimensions are in μm; convert to mm for rendering
-                const adjW = clampDefectSize(item.w + offsetX_defect) / 1000;
-                const adjH = clampDefectSize(item.h + offsetY_defect) / 1000;
+                const norm = normalizeDefect(item, { x: offsetX_defect, y: offsetY_defect });
+                const adjW = norm.w;
+                const adjH = norm.h;
                 const hasColor = colorMap.has(item.class);
                 const sizeX = Math.max(adjW, gridWidth * 0.5);
                 const sizeY = Math.max(adjH, gridHeight * 0.5);
                 if (!hasColor) {
                     const sprite = makeQuestionMarkSprite(sizeX, sizeY);
-                    sprite.position.set(item.x + sizeX / 2, item.y + sizeY / 2, 0.2);
+                    sprite.position.set(norm.x + sizeX / 2, norm.y + sizeY / 2, 0.2);
                     sceneRef.current!.add(sprite);
                     nodes.push(sprite);
                 } else {
@@ -569,7 +567,7 @@ export default function SubstrateRenderer({
                         opacity: 1,
                     });
                     const mesh = new THREE.Mesh(geometry, material);
-                    mesh.position.set(item.x + adjW / 2, item.y + adjH / 2, 0);
+                    mesh.position.set(norm.x + adjW / 2, norm.y + adjH / 2, 0);
                     sceneRef.current!.add(mesh);
                     nodes.push(mesh);
                 }

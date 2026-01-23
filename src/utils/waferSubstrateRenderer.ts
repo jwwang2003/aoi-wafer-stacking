@@ -11,7 +11,7 @@ import {
     isNumberBin,
     BinValue,
 } from '@/types/ipc';
-import { PRIORITY_RULES, LayerMeta, PASS_VALUES } from './priority';
+import { PRIORITY_RULES, LayerMeta, PASS_VALUES } from '@/pages/WaferStacking/priority';
 
 export const getLayerPriority = (meta: LayerMeta): number => {
     const matchedRule = PRIORITY_RULES.find((rule) => rule.when(meta));

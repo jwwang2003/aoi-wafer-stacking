@@ -42,7 +42,7 @@ import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsRe
 
 import { LayerMeta } from './priority';
 import { exportWaferFiles } from './outputHandler';
-import { generateGridWithSubstrateDefects } from './substrateMapping'
+import { generateGridWithSubstrateDefects } from '@/utils/substrateMapping'
 
 import {
     getLayerPriority,
@@ -56,7 +56,7 @@ import {
     extractWaferHeader,
     extractMapDataHeader,
     extractBinMapHeader,
-} from './waferAlgorithm';
+} from '@/utils/waferSubstrateRenderer';
 import { countBinValues, formatDateTime } from './renderUtils';
 
 export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';

@@ -6,7 +6,7 @@ export default function AboutPage() {
   return (
     <Box p="md" style={{ maxWidth: 720, marginInline: 'auto' }}>
       <Title order={2} mb="md">
-        {"About AOI Wafer Overlay (AOI优化与叠图)"}
+        {'About AOI Wafer Overlay (AOI优化与叠图)'}
       </Title>
 
       <Text mb="xs" c="dimmed">

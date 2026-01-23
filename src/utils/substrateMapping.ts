@@ -2,6 +2,7 @@ import { AsciiDie, isNumberBin, isSpecialBin } from '@/types/ipc';
 
 export type GridSize = { width: number; height: number };
 export type GridOffset = { x: number; y: number };
+export type DefectRect = { x: number; y: number; w: number; h: number };
 
 export const computeDieRect = (
     die: { x: number; y: number },
@@ -15,9 +16,33 @@ export const computeDieRect = (
     return { left, right, top, bottom };
 };
 
+// Normalize defect sizes: incoming defect dims are in micrometers; convert to millimeters
+export const normalizeDefect = (
+    defect: DefectRect,
+    sizeOffsetUm: { x: number; y: number } = { x: 0, y: 0 }
+): DefectRect => {
+    const clamp = (v: number) => Math.max(0, v);
+    const wMm = clamp(defect.w + sizeOffsetUm.x) / 1000;
+    const hMm = clamp(defect.h + sizeOffsetUm.y) / 1000;
+    return { x: defect.x, y: defect.y, w: wMm, h: hMm };
+};
+
+export const rectsOverlap = (
+    gridRect: { left: number; right: number; top: number; bottom: number },
+    defectRect: { left: number; right: number; top: number; bottom: number },
+    eps: number = 1e-6
+) => {
+    return !(
+        gridRect.right <= defectRect.left + eps ||
+        gridRect.left >= defectRect.right - eps ||
+        gridRect.bottom <= defectRect.top + eps ||
+        gridRect.top >= defectRect.bottom - eps
+    );
+};
+
 export const generateGridWithSubstrateDefects = (
     baseDies: AsciiDie[] | undefined,
-    defects: Array<{ x: number; y: number; w: number; h: number }>,
+    defects: DefectRect[],
     gridSize: GridSize,
     gridOffset: GridOffset = { x: 0, y: 0 },
     defectSizeOffsetX: number = 0,
@@ -29,7 +54,6 @@ export const generateGridWithSubstrateDefects = (
     if (!seeds || seeds.length === 0) {
         return [];
     }
-    const clampDefectSize = (val: number) => Math.max(0, val);
     const EPS = 1e-6; // avoid marking dies when rectangles only touch edges
 
     const defectiveGrids = new Set<string>();
@@ -37,24 +61,17 @@ export const generateGridWithSubstrateDefects = (
     seeds.forEach(baseDie => {
         const { left: gridLeft, right: gridRight, top: gridTop, bottom: gridBottom } =
             computeDieRect(baseDie, gridSize, gridOffset);
+        const gridRect = { left: gridLeft, right: gridRight, top: gridTop, bottom: gridBottom };
 
         const hasOverlap = defects.some(defect => {
-            // Assume defect dimensions are already in the same unit as gridSize (e.g., mm)
-            const adjW = clampDefectSize(defect.w + defectSizeOffsetX);
-            const adjH = clampDefectSize(defect.h + defectSizeOffsetY);
-            // Defect coordinates are bottom-left anchored
-            const defectLeft = defect.x;
-            const defectRight = defect.x + adjW;
-            const defectTop = defect.y;
-            const defectBottom = defect.y + adjH;
-
-            // Use half-open style with epsilon so "touching edge" is not counted as overlap
-            return !(
-                gridRight <= defectLeft + EPS ||
-                gridLeft >= defectRight - EPS ||
-                gridBottom <= defectTop + EPS ||
-                gridTop >= defectBottom - EPS
-            );
+            const norm = normalizeDefect(defect, { x: defectSizeOffsetX, y: defectSizeOffsetY });
+            const defectRect = {
+                left: norm.x,
+                right: norm.x + norm.w,
+                top: norm.y,
+                bottom: norm.y + norm.h,
+            };
+            return rectsOverlap(gridRect, defectRect, EPS);
         });
 
         if (hasOverlap) {

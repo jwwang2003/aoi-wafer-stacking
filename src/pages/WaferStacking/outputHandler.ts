@@ -14,7 +14,7 @@ import {
     convertToBinMapData,
     convertToHexMapData,
     calculateStatsFromDies,
-} from './waferAlgorithm';
+} from '@/utils/waferSubstrateRenderer';
 
 export interface WaferOutputConfig {
     baseFileName: string;

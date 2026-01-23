@@ -4,7 +4,7 @@ import { AsciiDie, WaferMapDie } from '@/types/ipc';
 import { BinValue } from '@/types/ipc';
 import { isNumberBin, isSpecialBin } from '@/types/ipc';
 import { PASS_VALUES } from './priority';
-import { computeDieRect, GridOffset, GridSize } from './substrateMapping';
+import { computeDieRect, GridOffset, GridSize } from '@/utils/substrateMapping';
 
 const LETTER_TO_NUMBER_MAP: Record<string, number> = {
     'A': 10,
