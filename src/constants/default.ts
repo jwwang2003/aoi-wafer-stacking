@@ -2,7 +2,6 @@ import { PreferencesState } from '@/types/preferences';
 import { DataSourceConfigState, FolderGroupsState } from '@/types/dataSource';
 import { ConfigStepperState } from '@/types/stepper';
 import { RawWaferMetadataCollection } from '@/types/wafer';
-import { ConsoleLogState } from '@/types/log';
 
 export const now = () => new Date().toISOString();
 
@@ -52,7 +51,3 @@ export const initialDataSourceState: FolderGroupsState = {
 };
 
 export const initialWaferMetadataState: RawWaferMetadataCollection = [];
-
-export const initialLogState: ConsoleLogState = {
-    logs: [],
-};

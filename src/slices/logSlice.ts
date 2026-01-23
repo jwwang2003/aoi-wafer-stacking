@@ -1,20 +1,18 @@
-import { Log } from '@/types/log';
-import { initialLogState as initialState } from '@/constants/default';
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
 
+interface ConsoleLogState {
+    // Placeholder slice retained only to avoid breaking imports; no logging persisted anymore.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    logs: any[];
+}
+
+const initialState: ConsoleLogState = { logs: [] };
 
 const consoleLogSlice = createSlice({
     name: 'consoleLog',
     initialState,
-    reducers: {
-        addLog(state, action: PayloadAction<Log>) {
-            state.logs.push(action.payload);
-        },
-        clearLogs(state) {
-            state.logs = [];
-        },
-    },
+    reducers: {},
 });
 
-export const { addLog, clearLogs } = consoleLogSlice.actions;
+export const { } = consoleLogSlice.actions;
 export default consoleLogSlice.reducer;

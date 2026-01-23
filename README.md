@@ -29,8 +29,8 @@ Wafer Overlay by Sichain is a desktop app for intelligent wafer stacking and AOI
 ### Creating icons
 
 ```
-yarn tauri icon --help
-yarn tauri icon public/logo3.png
+pnpm tauri icon --help
+pnpm tauri icon public/logo3.png
 ```
 
 ### Building
@@ -43,7 +43,7 @@ yarn tauri icon public/logo3.png
 
 #### MacOS
 ```
-yarn tauri build --bundles dmg
+pnpm tauri build --bundles dmg
 ```
 
 ### 文件夹与文件正则表达式
@@ -103,7 +103,7 @@ The database file is located in the `%APPDATA` folder, named `data.db`.
   RUSTFLAGS="-C link-args=-Wl,-rpath,@executable_path/../Resources/libtorch/lib" \
   cargo tauri build --target aarch64-apple-darwin
   ```
-  (You can swap `cargo tauri build` with `yarn tauri build`; add `LIBTORCH_BYPASS_VERSION_CHECK=1` if needed.)
+  (You can swap `cargo tauri build` with `pnpm tauri build`; add `LIBTORCH_BYPASS_VERSION_CHECK=1` if needed.)
 - Verify the binary can see the libs:
   ```
   otool -l target/release/bundle/macos/AOI\ Wafer\ Stacking.app/Contents/MacOS/aoi-wafer-stacking | rg LC_RPATH
@@ -112,7 +112,7 @@ The database file is located in the `%APPDATA` folder, named `data.db`.
 - If codesign complains, run from `src-tauri`: `codesign --force --deep --sign - target/release/bundle/macos/AOI\ Wafer\ Stacking.app`
 
 ### macOS dev using a Python-installed torch
-In a shell before running `yarn tauri dev`:
+In a shell before running `pnpm tauri dev`:
 ```
 export LIBTORCH_BYPASS_VERSION_CHECK=1
 export LIBTORCH_USE_PYTORCH=1
@@ -125,7 +125,7 @@ echo "Using torch lib dir: $torch_lib"
 ls "$torch_lib/libtorch_cpu.dylib"  # should exist
 export LIBTORCH="$torch_lib"
 export DYLD_LIBRARY_PATH="$torch_lib:${DYLD_LIBRARY_PATH}"
-yarn tauri dev
+pnpm tauri dev
 ```
 
 ### Building libtorch from source
@@ -170,5 +170,5 @@ ln -snf ../3rdparty/pytorch/build/install ../src-tauri/libtorch
 ### Dev without libtorch:
 
 ```
-yarn tauri dev -- -- --no-default-features
+pnpm tauri dev -- --no-default-features
 ```

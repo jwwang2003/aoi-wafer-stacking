@@ -6,7 +6,6 @@ import dataSourceStateReducer from './slices/dataSourceStateSlice';
 import waferMetadataReducer from './slices/waferMetadataSlice';
 import waferLayoutReducer from './slices/waferLayoutSlice';
 import stackingJobReducer from './slices/job';
-import loggingReducer from './slices/logSlice';
 import authReducer from './slices/authSlice';
 
 import { validationPersistenceMiddleware } from './slices/middleware';
@@ -20,7 +19,6 @@ const store = configureStore({
         waferMetadata: waferMetadataReducer,
         waferLayouts: waferLayoutReducer,
         stackingJob: stackingJobReducer,
-        log: loggingReducer,
     },
     middleware: (gDM) => gDM({
         serializableCheck: false

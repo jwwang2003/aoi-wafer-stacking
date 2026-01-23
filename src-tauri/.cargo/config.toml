@@ -1,5 +1,5 @@
 [env]
 # Point torch-sys to a vendored libtorch build if present.
 # Adjust the path if your build output differs.
-LIBTORCH = { value = "../3rdparty/pytorch/build", relative = true }
+LIBTORCH = { value = "../3rdparty/pytorch/build/install", relative = true }
 LIBTORCH_BYPASS_VERSION_CHECK = "1"

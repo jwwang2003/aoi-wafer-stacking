@@ -19,7 +19,6 @@ import { IS_PROD, IS_DEV } from '@/env';
 import { setSqlDebugLogging } from '@/db';
 import { warmIndexCaches } from '@/utils/fs';
 import { isAdmin, isPrivileged } from '@/utils/auth';
-import { initConsoleInterceptor } from '@/utils/log';   // debugging...
 
 // REDUX
 import { initPreferences } from '@/slices/preferencesSlice';
@@ -117,7 +116,6 @@ export default function App() {
                 // Log environment once at first React init
                 // Vite flags: import.meta.env.MODE and import.meta.env.PROD
                 console.info(`[Env] MODE=${import.meta.env.MODE} | PROD=${String(import.meta.env.PROD)} | IS_PROD=${String(IS_PROD)} | IS_DEV=${String(IS_DEV)}`);
-                await initConsoleInterceptor();
 
                 console.info('%cInitializing...', 'color:#2563eb');
                 console.time('initialize');

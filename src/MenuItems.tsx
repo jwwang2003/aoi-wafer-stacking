@@ -5,7 +5,6 @@ import {
     IconDatabase,
     IconHelpCircle,
     IconInfoCircle,
-    IconMessage2,
     IconStack3,
     IconUserShield,
 } from '@tabler/icons-react';
@@ -15,14 +14,13 @@ import {
     Config as ConfigPage,
     WaferStacking as WaferStackingPage,
     Database as DatabasePage,
-    Log as LogPage,
     About as AboutPage,
     ComingSoon,
     Admin as AdminPage,
     Aoi as AoiPage,
 } from '@/pages';
 
-export type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'log' | 'help' | 'about' | 'admin';
+export type Mode = 'home' | 'config' | 'aoi' | 'wafer' | 'db' | 'help' | 'about' | 'admin';
 
 export interface MenuItem {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,13 +66,6 @@ const menuItems: MenuItem[] = [
         value: 'wafer',
         path: '/wafer',
         component: WaferStackingPage,
-    },
-    {
-        icon: IconMessage2,
-        label: '日志',
-        value: 'log',
-        path: '/log',
-        component: LogPage,
     },
     {
         icon: IconHelpCircle,

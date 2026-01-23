@@ -5,7 +5,6 @@ const Welcome = lazy(() => import('./Welcome'));
 const Config = lazy(() => import('./Config'));
 const WaferStacking = lazy(() => import('./WaferStacking'));
 const Database = lazy(() => import('./Database'));
-const Log = lazy(() => import('./Log'));
 const About = lazy(() => import('./About'));
 const ComingSoon = lazy(() => import('./ComingSoon'));
 const Admin = lazy(() => import('./Admin'));
@@ -16,7 +15,6 @@ export {
     Config,
     WaferStacking,
     Database,
-    Log,
     About,
     ComingSoon,
     Admin,

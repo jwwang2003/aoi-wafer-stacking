@@ -1,16 +1,4 @@
-// src/services/consoleInterceptor.ts
-import { Hook } from 'console-feed';
-import store from '@/store';
-import { addLog } from '@/slices/logSlice';
-import { Log } from '@/types/log';
-
-let alreadyHooked = false;
-
+// Logging interceptor placeholder retained to avoid breaking imports; no-op implementation.
 export function initConsoleInterceptor() {
-    if (alreadyHooked) return;
-    alreadyHooked = true;
-
-    Hook(window.console, (log) => {
-        store.dispatch(addLog({ ...log as Log, date: new Date().toISOString() }));
-    }, false);
+    return;
 }
