@@ -20,7 +20,7 @@ import { getOemOffset } from '@/db/offsets';
 import { getProductSize } from '@/db/productSize';
 import { upsertWaferStackStats } from '@/db/waferStackStats';
 import { exportWaferStatsReport } from '@/utils/exportWaferReport';
-import { colorMap } from '@/components/Substrate/constants';
+import { colorMap } from '@/components/Substrate/Constants';
 
 // TYPES
 import { ExcelType } from '@/types/wafer';
