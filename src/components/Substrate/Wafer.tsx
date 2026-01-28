@@ -9,7 +9,7 @@ import { IconRefresh } from '@tabler/icons-react';
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
 import { computeDieRect, GridOffset, normalizeDefect, rectsOverlap } from '@/utils/substrateMapping';
 
-import { colorMap } from './Constants';
+import { colorMap } from './constants';
 
 interface SubstrateRendererProps {
     gridWidth?: number;
@@ -64,6 +64,7 @@ export default function SubstrateRenderer({
     const raycasterRef = useRef<THREE.Raycaster | null>(null);
     const pointerRef = useRef<THREE.Vector2 | null>(null);
     const pointerWorldRef = useRef<{ x: number; y: number } | null>(null);
+    const hasDoneInitialFitRef = useRef(false);
 
     // Shared helpers
     // Remove a tracked set of objects from the scene without touching refs.
@@ -80,6 +81,7 @@ export default function SubstrateRenderer({
     const refreshRenderer = useCallback(() => {
         setError('正在重载渲染器…');
         shouldResetViewRef.current = true;
+        hasDoneInitialFitRef.current = false;
         setZoom(1);
         setThreeReady(false);
         setReloadToken((token) => token + 1);
@@ -575,8 +577,12 @@ export default function SubstrateRenderer({
             defectObjectsRef.current = nodes;
         }
 
-        fitCameraToData();
+        if (!hasDoneInitialFitRef.current) {
+            fitCameraToData();
+            hasDoneInitialFitRef.current = true;
+        }
         if (shouldResetViewRef.current) {
+            fitCameraToData();
             centerCameraToData();
             shouldResetViewRef.current = false;
         }

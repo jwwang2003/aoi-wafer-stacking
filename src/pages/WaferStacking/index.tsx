@@ -20,7 +20,7 @@ import { getOemOffset } from '@/db/offsets';
 import { getProductSize } from '@/db/productSize';
 import { upsertWaferStackStats } from '@/db/waferStackStats';
 import { exportWaferStatsReport } from '@/utils/exportWaferReport';
-import { colorMap } from '@/components/Substrate/Constants';
+import { colorMap } from '@/components/Substrate/constants';
 
 // TYPES
 import { ExcelType } from '@/types/wafer';
@@ -445,12 +445,13 @@ export default function WaferStacking() {
                         allSubstrateDefects = [];
                         const plDefects = content['PL defect list'] || [];
                         const surfaceDefects = content['Surface defect list'] || [];
+                        // Keep dimensions in micrometers; normalization to mm happens in generateGridWithSubstrateDefects.
                         allSubstrateDefects = [
                             ...plDefects.map(defect => ({
                                 x: defect.x,
                                 y: defect.y,
-                                w: defect.w / 1000,
-                                h: defect.h / 1000,
+                                w: defect.w,
+                                h: defect.h,
                                 class: defect.class,
                                 area: defect.area,
                                 contrast: defect.contrast
@@ -458,8 +459,8 @@ export default function WaferStacking() {
                             ...surfaceDefects.map(defect => ({
                                 x: defect.x,
                                 y: defect.y,
-                                w: defect.w / 1000,
-                                h: defect.h / 1000,
+                                w: defect.w,
+                                h: defect.h,
                                 class: defect.class,
                                 area: defect.area,
                                 contrast: defect.contrast
