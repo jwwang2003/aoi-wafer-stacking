@@ -4,6 +4,16 @@ import { upsertManyWaferMaps, upsertManyWaferMapsWithStats } from '@/db/wafermap
 import { ExcelMetadata, ExcelType, WaferFileMetadata } from '@/types/wafer';
 import { ProductDefectIngestStats, SubstrateDefectIngestStats, WaferMapIngestStats } from '@/types/ingest';
 import { getDb } from '@/db';
+import {
+    invokeParseProductMappingXls,
+    invokeParseProductXls,
+} from '@/api/tauri/wafer';
+import {
+    maintainOemMapping,
+    upsertManyProductDefectMaps,
+    upsertManyProductDefectMapsWithStats,
+    upsertSubstrateDefect,
+} from '@/db/spreadSheet';
 
 type FolderStep = {
     name: RegExp;
@@ -115,23 +125,8 @@ export async function scanPattern<T extends Record<string, string>>(
     return { data: items, totDir, numRead, numCached, totMatch, totAdded, elapsed };
 }
 
-/** Helper: dynamic import of spreadsheet-related functions (only when needed). */
-async function getSpreadsheetApis() {
-    const waferApi = await import('@/api/tauri/wafer');
-    const sheetDb = await import('@/db/spreadSheet');
-    return {
-        invokeParseProductMappingXls: waferApi.invokeParseProductMappingXls,
-        invokeParseProductXls: waferApi.invokeParseProductXls,
-        maintainOemMapping: sheetDb.maintainOemMapping,
-        upsertManyProductDefectMaps: sheetDb.upsertManyProductDefectMaps,
-        upsertManyProductDefectMapsWithStats: sheetDb.upsertManyProductDefectMapsWithStats,
-        upsertSubstrateDefect: sheetDb.upsertSubstrateDefect,
-    };
-}
-
 /**
  * Process a batch of parsed Excel files (non‑synchronously) and persist their contents,
- * with **dynamic imports** for spreadsheet parsers/DB writes to keep initial bundle light.
  */
 export async function processNSyncExcelData(data: ExcelMetadata[]): Promise<number> {
     const name = 'Proc. N. Sync. Excel Data';
@@ -146,15 +141,6 @@ export async function processNSyncExcelData(data: ExcelMetadata[]): Promise<numb
     data.sort((a, b) => (typeOrder[a.type] ?? 99) - (typeOrder[b.type] ?? 99));
 
     console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
-
-    // Lazy-load once here (still deferred until this function is called).
-    const {
-        invokeParseProductMappingXls,
-        invokeParseProductXls,
-        maintainOemMapping,
-        upsertManyProductDefectMaps,
-        upsertSubstrateDefect,
-    } = await getSpreadsheetApis();
 
     for (const d of data) {
         console.groupCollapsed(`%c[${d.type}]`, 'color: lightgreen;');
@@ -265,14 +251,6 @@ export async function processNSyncExcelDataWithStats(data: ExcelMetadata[]): Pro
 
     console.groupCollapsed(`%c[${name}]`, 'color: lightblue;');
 
-    const {
-        invokeParseProductMappingXls,
-        invokeParseProductXls,
-        maintainOemMapping,
-        upsertManyProductDefectMapsWithStats,
-        upsertSubstrateDefect,
-    } = await getSpreadsheetApis();
-
     // Product defect maps aggregation
     const productInputs: Array<{ oem_product_id: string; lot_id: string; wafer_id: string; sub_id: string; file_path: string } > = [];
     // Substrate defects aggregation (DefectList)
@@ -284,23 +262,26 @@ export async function processNSyncExcelDataWithStats(data: ExcelMetadata[]): Pro
             case ExcelType.Mapping: {
                 // Still perform mapping maintenance; we won't compute insert vs update for mapping for now
                 const xls = await invokeParseProductMappingXls(d.filePath);
-                const pairs = Object.values(xls).flat().filter(r => r.oemId && r.productId).map(r => ({
-                    oem_product_id: r.oemId,
-                    product_id: r.productId,
-                }));
+                const pairs = Object.values(xls as Record<string, Array<{ oemId?: string; productId?: string }>>)
+                    .flat()
+                    .filter((r): r is { oemId: string; productId: string } => Boolean(r.oemId && r.productId))
+                    .map(r => ({
+                        oem_product_id: r.oemId,
+                        product_id: r.productId,
+                    }));
                 await maintainOemMapping(pairs);
                 break;
             }
             case ExcelType.Product: {
                 const xls = await invokeParseProductXls(d.filePath);
-                const results = Object.values(xls).flat();
+                const results = Object.values(xls as Record<string, Array<{ productId?: string; batchId?: string; waferId?: string; subId?: string }>>).flat();
                 for (const r of results) {
                     if (!r.productId) continue;
                     productInputs.push({
                         oem_product_id: r.productId,   // productId in XLS == OEM product id
-                        lot_id: r.batchId,
-                        wafer_id: r.waferId,
-                        sub_id: r.subId,
+                        lot_id: r.batchId ?? '',
+                        wafer_id: r.waferId ?? '',
+                        sub_id: r.subId ?? '',
                         file_path: d.filePath,
                     });
                 }
