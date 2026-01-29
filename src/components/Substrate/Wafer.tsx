@@ -91,9 +91,8 @@ export default function SubstrateRenderer({
     const sizeRendererToSquare = () => {
         const el = squareRef.current;
         const renderer = rendererRef.current;
-        const camera = cameraRef.current;
         const labelRenderer = labelRendererRef.current;
-        if (!el || !renderer || !camera) return;
+        if (!el || !renderer) return;
 
         const rect = el.getBoundingClientRect();
         const side = Math.max(1, Math.floor(rect.width)); // height equals width due to aspect-ratio
@@ -108,13 +107,6 @@ export default function SubstrateRenderer({
         canvas.style.top = '0';
         canvas.style.width = '100%';
         canvas.style.height = '100%';
-
-        // Square ortho frustum
-        camera.left = -side / 2;
-        camera.right = side / 2;
-        camera.top = side / 2;
-        camera.bottom = -side / 2;
-        camera.updateProjectionMatrix();
 
         if (labelRenderer) {
             labelRenderer.setSize(side, side);
@@ -179,10 +171,10 @@ export default function SubstrateRenderer({
         const camera = cameraRef.current;
         const controls = controlsRef.current;
         const bounds = getBounds();
-        if (!el || !camera || !controls || !bounds) return;
+        if (!el || !camera || !controls || !bounds) return false;
 
         const side = el.getBoundingClientRect().width; // square
-        if (side <= 0) return;
+        if (side <= 0) return false;
 
         const { minX, maxX, minY, maxY } = bounds;
 
@@ -208,6 +200,7 @@ export default function SubstrateRenderer({
 
         controls.target.set(centerX, centerY, 0);
         controls.update();
+        return true;
     };
 
     // Init: dynamically import three.js and OrbitControls, then construct scene.
@@ -578,16 +571,50 @@ export default function SubstrateRenderer({
         }
 
         if (!hasDoneInitialFitRef.current) {
-            fitCameraToData();
-            hasDoneInitialFitRef.current = true;
+            const ok = fitCameraToData();
+            if (ok) hasDoneInitialFitRef.current = true;
         }
         if (shouldResetViewRef.current) {
-            fitCameraToData();
-            centerCameraToData();
-            shouldResetViewRef.current = false;
+            const ok = fitCameraToData();
+            if (ok) {
+                centerCameraToData();
+                shouldResetViewRef.current = false;
+            }
         }
         setError(null);
     }, [activeDefects, clampDefectSize, clearSceneObjects, createGridFromCoordinates, dies, gridHeight, gridWidth, mapCoordinates, offsetX, offsetX_defect, offsetY, offsetY_defect, threeReady]);
+
+    // Keep renderer sized to container; ensure initial fit occurs once the square has a real size.
+    useEffect(() => {
+        if (!threeReady) return;
+        const el = squareRef.current;
+        if (!el) return;
+
+        let rafId: number | null = null;
+        const handle = () => {
+            sizeRendererToSquare();
+            // When zoom is at 1×, keep the view fitted to the data on resize.
+            const wantFit = zoom === 1 || !hasDoneInitialFitRef.current;
+            if (wantFit) {
+                const ok = fitCameraToData();
+                if (ok) hasDoneInitialFitRef.current = true;
+            }
+        };
+
+        const observer = new ResizeObserver(() => {
+            if (rafId) cancelAnimationFrame(rafId);
+            rafId = requestAnimationFrame(handle);
+        });
+        observer.observe(el);
+
+        // Try once immediately in case the element is already laid out.
+        handle();
+
+        return () => {
+            observer.disconnect();
+            if (rafId) cancelAnimationFrame(rafId);
+        };
+    }, [fitCameraToData, sizeRendererToSquare, threeReady, zoom]);
 
     const centerCameraToData = () => {
         const camera = cameraRef.current;
