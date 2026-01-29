@@ -9,7 +9,7 @@ import { IconRefresh } from '@tabler/icons-react';
 import { AsciiDie, WaferMapDie, SubstrateDefectXlsResult, SubstrateDefectRecord } from '@/types/ipc';
 import { computeDieRect, GridOffset, normalizeDefect, rectsOverlap } from '@/utils/substrateMapping';
 
-import { colorMap } from './Constants';
+import { colorMap } from './constants';
 
 interface SubstrateRendererProps {
     gridWidth?: number;

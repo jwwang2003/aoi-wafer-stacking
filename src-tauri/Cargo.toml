@@ -1,6 +1,6 @@
 [package]
 name = "aoi-wafer-stacking"
-version = "1.0.4"
+version = "1.0.5"
 description = "一个智能叠图软件"
 authors = ["JUN WEI WANG", "YI TING"]
 edition = "2021"
