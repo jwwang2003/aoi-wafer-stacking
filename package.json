@@ -2,7 +2,7 @@
   "name": "aoi-wafer-stacking",
   "description": "清纯AOI优化与叠图",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "scripts": {
     "dev": "cross-env ANALYZE=true vite --mode development",
     "dev:prod": "cross-env ANALYZE=true vite --mode production",

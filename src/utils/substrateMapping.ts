@@ -22,9 +22,20 @@ export const normalizeDefect = (
     sizeOffsetUm: { x: number; y: number } = { x: 0, y: 0 }
 ): DefectRect => {
     const clamp = (v: number) => Math.max(0, v);
-    const wMm = clamp(defect.w + sizeOffsetUm.x) / 1000;
-    const hMm = clamp(defect.h + sizeOffsetUm.y) / 1000;
-    return { x: defect.x, y: defect.y, w: wMm, h: hMm };
+    // Size offsets should grow/shrink the rectangle evenly on both sides of each axis.
+    // We translate the top-left corner so the center stays fixed, then expand width/height by 2x the offset.
+    const offsetMmX = sizeOffsetUm.x / 1000;
+    const offsetMmY = sizeOffsetUm.y / 1000;
+
+    const wMm = clamp(defect.w + 2 * sizeOffsetUm.x) / 1000;
+    const hMm = clamp(defect.h + 2 * sizeOffsetUm.y) / 1000;
+
+    return {
+        x: defect.x - offsetMmX,
+        y: defect.y - offsetMmY,
+        w: wMm,
+        h: hMm
+    };
 };
 
 export const rectsOverlap = (
