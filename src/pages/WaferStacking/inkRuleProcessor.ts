@@ -4,11 +4,13 @@ import { PASS_VALUES } from './priority';
 export interface InkRuleConfig {
     goodValues?: Set<string>;
     inkMarker?: string;
+    failThreshold?: number;
 }
 
 const DEFAULT_CONFIG: Required<InkRuleConfig> = {
     goodValues: PASS_VALUES,
-    inkMarker: 'z'
+    inkMarker: 'z',
+    failThreshold: 2
 };
 
 export function processInkRules(
@@ -18,8 +20,7 @@ export function processInkRules(
     processedDies: AsciiDie[];
     filteredDies: AsciiDie[];
 } {
-    const { goodValues, inkMarker } = { ...DEFAULT_CONFIG, ...config };
-
+    const { goodValues, inkMarker, failThreshold } = { ...DEFAULT_CONFIG, ...config };
     const isGoodDie = (die: AsciiDie | undefined): boolean => {
         if (!die) return true;
         const binValue = isNumberBin(die.bin)
@@ -45,37 +46,48 @@ export function processInkRules(
     const failDieMap = new Map<string, AsciiDie>();
     failDies.forEach(die => failDieMap.set(`${die.x},${die.y}`, die));
 
-    const inkMarkedDies = new Map<string, AsciiDie>();
+    const goodDieFailCountMap = new Map<string, number>();
 
-    const checkDirs = [
-        [[2, 0], [1, 0]],    // 水平
-        [[0, 2], [0, 1]],    // 垂直
-        [[2, 2], [1, 1]],    // 主对角线
-        [[-2, 2], [-1, 1]],  // 副对角线
+    const neighborDirs = [
+        [-1, -1],
+        [-1, 0],
+        [-1, 1],
+        [0, -1],
+        [0, 1],
+        [1, -1],
+        [1, 0],
+        [1, 1]
     ];
 
     failDies.forEach(failDie => {
         const fx = failDie.x;
         const fy = failDie.y;
 
-        checkDirs.forEach(([[dx2, dy2], [dx1, dy1]]) => {
-            const otherFailX = fx + dx2;
-            const otherFailY = fy + dy2;
+        neighborDirs.forEach(([dx, dy]) => {
+            const neighborX = fx + dx;
+            const neighborY = fy + dy;
+            const neighborKey = `${neighborX},${neighborY}`;
+            const neighborDie = dieMap.get(neighborKey);
+            if (isGoodDie(neighborDie) && neighborDie) {
+                goodDieFailCountMap.set(
+                    neighborKey,
+                    (goodDieFailCountMap.get(neighborKey) || 0) + 1
+                );
+            }
+        });
+    });
 
-            const otherFailKey = `${otherFailX},${otherFailY}`;
-            if (!failDieMap.has(otherFailKey)) return;
-
-            const goodKey = `${fx + dx1},${fy + dy1}`;
-            const goodDie = dieMap.get(goodKey);
-            if (!goodDie || !isGoodDie(goodDie)) return;
-
-            if (!inkMarkedDies.has(goodKey)) {
-                inkMarkedDies.set(goodKey, {
-                    ...goodDie,
+    const inkMarkedDies = new Map<string, AsciiDie>();
+    goodDieFailCountMap.forEach((count, key) => {
+        if (count >= failThreshold) {
+            const targetDie = dieMap.get(key);
+            if (targetDie) {
+                inkMarkedDies.set(key, {
+                    ...targetDie,
                     bin: { special: inkMarker }
                 });
             }
-        });
+        }
     });
 
     const processedDies = dies.map(die => {
