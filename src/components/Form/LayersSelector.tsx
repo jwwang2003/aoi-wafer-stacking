@@ -16,7 +16,7 @@ export type LayerChoice = {
 function stageLabel(stage: string | DataSourceType, subStage?: string | null) {
     switch (stage as DataSourceType) {
         case DataSourceType.FabCp:
-            return 'FB';
+            return 'FAB CP';
         case DataSourceType.Wlbi:
             return 'WLBI';
         case DataSourceType.Aoi:
