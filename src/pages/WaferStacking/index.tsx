@@ -77,6 +77,7 @@ const ALL_BINS = [
     'PL_White',
     'PL_BPD',
     'PL_SF',
+    // 'SF',
     'PL_BSF'
 ];
 export type OutputOption = {
@@ -116,6 +117,7 @@ const OUTPUT_OPTIONS2 = [
     { id: 'PL_White', label: 'PL_White' },
     { id: 'PL_BPD', label: 'PL_BPD' },
     { id: 'PL_SF', label: 'PL_SF' },
+    // { id: 'SF', label: 'SF' },
     { id: 'PL_BSF', label: 'PL_BSF' },
 ] as const satisfies readonly OutputOption2[];
 
@@ -130,6 +132,8 @@ function stageLabel(
             return 'CP' + subStage;
         case DataSourceType.Aoi:
             return 'AOI';
+        case DataSourceType.FabCp:
+            return 'FAB CP';
         default:
             return String(stage ?? 'Unknown');
     }
@@ -214,6 +218,14 @@ export default function WaferStacking() {
         waferSubstrate: jobSubstrate
     } = currentJob;
 
+    const getAllOemIdsFromQueue = (): string[] => {
+        const oemIds = new Set<string>();
+        if (jobOemId) oemIds.add(jobOemId);
+        queue.forEach(job => {
+            if (job.oemProductId) oemIds.add(job.oemProductId);
+        });
+        return Array.from(oemIds);
+    };
     useEffect(() => {
         if (!jobOemId) return;
 
@@ -410,12 +422,6 @@ export default function WaferStacking() {
                                 dies = content.map.dies;
                                 if (cpType === '1') cp1Header = { ...header };
                             }
-                        } else if (cpType === '3') {
-                            content = await invokeParseWafer(filePath);
-                            if (content && content.map.dies) {
-                                header = extractWaferHeader(content);
-                                dies = content.map.dies;
-                            }
                         }
                     } else if (stage === DataSourceType.Wlbi) {
                         content = await parseWaferMap(filePath);
@@ -433,6 +439,12 @@ export default function WaferStacking() {
                         content = await parseWaferMapEx(filePath);
                         if (content && content.map.dies) {
                             header = extractMapDataHeader(content);
+                            dies = content.map.dies;
+                        }
+                    } else if (stage === DataSourceType.FabCp) {
+                        content = await invokeParseWafer(filePath);
+                        if (content && content.map.dies) {
+                            header = extractWaferHeader(content);
                             dies = content.map.dies;
                         }
                     }
@@ -644,7 +656,13 @@ export default function WaferStacking() {
         } finally {
             setProcessing(false);
         }
-        await exportWaferStatsReport(jobOemId, outputDir);
+        try {
+            const oemIds = getAllOemIdsFromQueue();
+            await exportWaferStatsReport(oemIds, outputDir);
+        } catch (e) {
+            console.warn('导出统计报告失败:', e);
+            errorToast({ title: '导出失败', message: '统计报告生成失败：' + String(e) });
+        }
     };
 
     const handleBatchProcess = async () => {
@@ -693,9 +711,14 @@ export default function WaferStacking() {
                 message: `全部 ${jobsToProcess.length} 个任务处理成功`
             });
         }
-        await exportWaferStatsReport(jobOemId, outputDir);
+        try {
+            const oemIds = getAllOemIdsFromQueue();
+            await exportWaferStatsReport(oemIds, outputDir);
+        } catch (e) {
+            console.warn('导出统计报告失败:', e);
+            errorToast({ title: '导出失败', message: '统计报告生成失败：' + String(e) });
+        }
     };
-
     return (
         <Container fluid p="md">
             <Stack gap="md">

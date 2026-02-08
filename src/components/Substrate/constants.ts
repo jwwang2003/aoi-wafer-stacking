@@ -13,5 +13,6 @@ export const colorMap = new Map<string, number>([
     ['PL_White', 0xff007f],
     ['PL_BPD', 0x00adff],
     ['PL_SF', 0x5555ff],
+    // ['SF', 0x5555ff],
     ['PL_BSF', 0xff80ff],
 ]);

@@ -1,5 +1,5 @@
 import { invokeReadFileStatBatch } from '@/api/tauri/fs';
-
+import { getDb } from '@/db/index';
 import { DataSourceRegexState, DataSourceType, FolderGroupsState } from '@/types/dataSource';
 import type { DirResult } from '@/types/ipc';
 import { ExcelMetadata, ExcelType, DirCollection, RawWaferMetadataCollection, WaferFileMetadata } from '@/types/wafer';
@@ -82,14 +82,15 @@ export async function readAllWaferData(folders: DirCollection): Promise<RawWafer
         const cpProber = await readCpProberMetadata(folders.cpProber);
         const wlbi = await readWlbiMetadata(folders.wlbi);
         const aoi = await readAoiMetadata(folders.aoi);
+        const fabCp = await readFabCpMetadata(folders.fabCp);
 
-        const totDir = substrate.totDir + cpProber.totDir + wlbi.totDir + aoi.totDir;
-        const numRead = substrate.numRead + cpProber.numRead + wlbi.numRead + aoi.numRead;
-        const numCached = substrate.numCached + cpProber.numCached + wlbi.numCached + aoi.numCached;
-        const totMatch = substrate.totMatch + cpProber.totMatch + wlbi.totMatch + aoi.totMatch;
-        const totAdded = substrate.totAdded + cpProber.totAdded + wlbi.totAdded + aoi.totAdded;
+        const totDir = substrate.totDir + cpProber.totDir + wlbi.totDir + aoi.totDir + fabCp.totDir;
+        const numRead = substrate.numRead + cpProber.numRead + wlbi.numRead + aoi.numRead + fabCp.numRead;
+        const numCached = substrate.numCached + cpProber.numCached + wlbi.numCached + aoi.numCached + fabCp.numCached;
+        const totMatch = substrate.totMatch + cpProber.totMatch + wlbi.totMatch + aoi.totMatch + fabCp.totMatch;
+        const totAdded = substrate.totAdded + cpProber.totAdded + wlbi.totAdded + aoi.totAdded + fabCp.totAdded;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const elapsed = (substrate as any).elapsed + (cpProber as any).elapsed + (wlbi as any).elapsed + (aoi as any).elapsed;
+        const elapsed = (substrate as any).elapsed + (cpProber as any).elapsed + (wlbi as any).elapsed + (aoi as any).elapsed + (fabCp as any).elapsed;
 
         dirScanResultToast(
             { totDirs: totDir, numRead, numCached, totMatch, totAdded },
@@ -102,6 +103,7 @@ export async function readAllWaferData(folders: DirCollection): Promise<RawWafer
             ...cpProber.data,
             ...wlbi.data,
             ...aoi.data,
+            ...fabCp.data,
         ];
     } catch (err) {
         console.error(err);
@@ -409,6 +411,80 @@ export async function readWlbiMetadata(
 }
 
 /**
+ * FAB CP 数据读取
+ */
+export async function readFabCpMetadata(
+    folders: DirResult[]
+): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
+    const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
+    //test/data1/FAB CP/BinMap/B003990/P0097B_B003990_02.txt
+    const binMapFolder = /^BinMap$/;
+    const batchFolder = /^([A-Za-z0-9]+)$/;
+    const mapFile = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)\.txt$/;
+    //                 oemModel   batch        waferId
+
+    type Ctx = { batch: string };
+
+    const scanResult = await scanPattern<Ctx>(
+        roots,
+        {
+            steps: [
+                { name: binMapFolder },
+                { name: batchFolder }
+            ],
+            files: { name: mapFile, onFile: () => { } }
+        },
+        (level, _name, g) => {
+            if (level === 0) {
+                return {};
+            }
+            if (level === 1) {
+                const [batch] = g;
+                return { batch };
+            }
+            return {};
+        }
+    );
+
+    const {
+        data: items
+    } = scanResult;
+
+    const result: WaferFileMetadata[] = [];
+    for (const { ctx, filePath, lastModified } of items) {
+        const m = mapFile.exec(filePath.split('/').pop()!);
+        if (!m) continue;
+        const [, oemModel, batchFromFile, waferId] = m;
+
+        if (batchFromFile !== ctx.batch) {
+            continue;
+        }
+        const db = await getDb();
+
+        const mapping = await db.select<Array<{ product_id: string }>>(
+            'SELECT product_id FROM oem_product_map WHERE oem_product_id = ? LIMIT 1',
+            [oemModel]
+        );
+        const productModel = mapping.length > 0 ? mapping[0].product_id : oemModel;
+
+        result.push({
+            stage: DataSourceType.FabCp,
+            productModel: productModel,
+            batch: ctx.batch,
+            waferId,
+            filePath,
+            lastModified,
+        });
+    }
+
+    await flushIndexQueues();
+    return {
+        ...scanResult,
+        data: result
+    };
+}
+
+/**
  * - `AOI-XX`
  *      - `产品型号_批次号`
  *          - `片号`
@@ -420,7 +496,7 @@ export async function readAoiMetadata(
     folders: DirResult[]
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
-
+    //test/data1/AOI-01/S1M040120B_B003990/S1M040120B_B003990_02_20250721095040.txt
     // Folder: 产品型号_批次号
     const processFolder = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)$/;
     //                            productModel   batch
