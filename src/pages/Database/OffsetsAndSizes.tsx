@@ -22,12 +22,13 @@ import {
 import { IconDownload, IconEdit, IconPlus, IconRefresh, IconTrash, IconUpload } from '@tabler/icons-react';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
-import { getAllOemOffsets, upsertOemOffset, deleteOemOffset, deleteManyOemOffsets, getOemOffset } from '@/db/offsets';
+import { getAllOemOffsets, upsertOemOffset, deleteOemOffset, deleteManyOemOffsets, getOemOffset, getOemProductMap } from '@/db/offsets';
 import { getAllProductSizes, upsertProductSize, deleteProductSize, deleteManyProductSizes, getProductSize } from '@/db/productSize';
 import { infoToast, errorToast } from '@/components/UI/Toaster';
 
 type CombinedRow = {
     oem_product_id: string;
+    product_id: string;
     die_x: number | null;
     die_y: number | null;
     x_offset: number | null;
@@ -161,10 +162,16 @@ function escapeCsvField(value: string) {
 }
 
 async function fetchOffsetsAndSizes(): Promise<CombinedRow[]> {
-    const [offsetRows, sizeRows] = await Promise.all([
+    const [offsetRows, sizeRows, productMapRows] = await Promise.all([
         getAllOemOffsets(MAX_FETCH, 0),
         getAllProductSizes(MAX_FETCH, 0),
+        getOemProductMap(),
     ]);
+
+    const productMap = new Map<string, string>();
+    productMapRows.forEach(item => {
+        productMap.set(item.oem_product_id, item.product_id);
+    });
 
     const map = new Map<string, CombinedRow>();
 
@@ -173,6 +180,7 @@ async function fetchOffsetsAndSizes(): Promise<CombinedRow[]> {
         const hasDefectSizeOffset = !isBothZero(defect_offset_x, defect_offset_y);
         map.set(oem_product_id, {
             oem_product_id,
+            product_id: productMap.get(oem_product_id) ?? '',
             x_offset,
             y_offset,
             die_x: null,
@@ -194,6 +202,7 @@ async function fetchOffsetsAndSizes(): Promise<CombinedRow[]> {
         } else {
             map.set(oem_product_id, {
                 oem_product_id,
+                product_id: productMap.get(oem_product_id) ?? '',
                 x_offset: null,
                 y_offset: null,
                 die_x,
@@ -474,6 +483,7 @@ export default function OffsetsAndSizes() {
 
             setSearchResult({
                 oem_product_id: trimmed,
+                product_id: '',
                 die_x: sizeRow?.die_x ?? null,
                 die_y: sizeRow?.die_y ?? null,
                 x_offset: offsetRow?.x_offset ?? null,
@@ -1100,7 +1110,7 @@ export default function OffsetsAndSizes() {
                                             </Table.Td>
                                             <Table.Td>
                                                 <Stack gap={2} justify="center">
-                                                    <Text fw={600}>{row.oem_product_id}</Text>
+                                                    <Text fw={600}>{row.oem_product_id + ' ' + row.product_id}</Text>
                                                     <Group gap={6}>
                                                         <Badge color={row.hasOffset ? 'teal' : 'orange'} variant="light" size="xs">
                                                             {row.hasOffset ? '位置偏移' : '无位置偏移'}
