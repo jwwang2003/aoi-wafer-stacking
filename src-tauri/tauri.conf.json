@@ -16,7 +16,7 @@
   },
 
   "build": {
-    "beforeDevCommand": "yarn dev",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:8001",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
