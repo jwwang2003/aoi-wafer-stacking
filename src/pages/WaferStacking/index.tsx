@@ -272,17 +272,21 @@ export default function WaferStacking() {
     }, [jobOemId]);
 
     useEffect(() => {
-        let alive = true;
-        (async () => {
-            try {
-                if (outputDir) return;
+        const saved = localStorage.getItem('wafer_output_dir');
+        if (saved) {
+            setOutputDir(saved);
+        } else {
+            (async () => {
                 const desktop = await desktopDir();
-                if (alive && desktop) setOutputDir(desktop);
-            } catch {/* 忽略错误 */ }
-        })();
-        return () => {
-            alive = false;
-        };
+                setOutputDir(desktop);
+            })();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (outputDir) {
+            localStorage.setItem('wafer_output_dir', outputDir);
+        }
     }, [outputDir]);
 
     const processSingleJob = async (jobItem: JobItem, exportAsciiData: boolean = false) => {
