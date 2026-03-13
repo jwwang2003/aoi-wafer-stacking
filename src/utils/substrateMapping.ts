@@ -98,7 +98,7 @@ export const generateGridWithSubstrateDefects = (
             (isSpecialBin(baseDie.bin) && ['S', '*'].includes(baseDie.bin.special)) ||
             (isNumberBin(baseDie.bin) && baseDie.bin.number === 257);
 
-        const targetBin = isDefective && !shouldPreserveOriginalBin ? { special: 'D' } : baseDie.bin;
+        const targetBin = isDefective && !shouldPreserveOriginalBin ? { special: 'E' } : baseDie.bin;
 
         return {
             ...baseDie,
