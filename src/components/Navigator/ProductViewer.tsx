@@ -256,7 +256,6 @@ export default function ProductBatchNavigator({
         if (subsState.loading) return; // 等待加载完成
         if (!subsState.data?.length) return; // 无可用子编号
         void loadWaferMaps(subsState.data[0].sub_id);
-         
     }, [selectedWaferId, selectedSubId, subsState.loading, subsState.data]);
 
     // 5) 叠图面板（点击子编号后加载）
@@ -570,6 +569,9 @@ export default function ProductBatchNavigator({
                     showParameters
                     productId={jobProductId}
                     oemProductId={jobOemId}
+                    batchId={jobBatchId}
+                    waferId={jobWaferId}
+                    subId={jobSubId}
                     waferSubstrate={jobSubstrate}
                     waferMaps={jobWaferMaps}
                 />}

@@ -21,6 +21,11 @@ interface SubstrateRendererProps {
     gridOffset?: GridOffset;
     dies: AsciiDie[] | WaferMapDie[] | null;
     defectSizeOffset?: { x: number; y: number };
+    productId?: string | null;
+    oemProductId?: string | null;
+    batchId?: string | null;
+    waferId?: number | null;
+    subId?: string | null;
 }
 
 export default function SubstrateRenderer({
@@ -34,6 +39,11 @@ export default function SubstrateRenderer({
     gridOffset = { x: 0, y: 0 },
     dies,
     defectSizeOffset = { x: 0, y: 0 },
+    productId,
+    oemProductId,
+    batchId,
+    waferId,
+    subId,
 }: SubstrateRendererProps) {
     // This is the square box (aspect ratio 1:1)
     const squareRef = useRef<HTMLDivElement>(null);
@@ -856,10 +866,22 @@ export default function SubstrateRenderer({
                     刷新渲染
                 </Button>
 
-                <Group gap="xs">
-                    <Text size="sm" c="dimmed">坐标:</Text>
+                <Group justify="space-between" gap="xs">
+                    <Group>
+                        <Text size="sm" c="dimmed">坐标:</Text>
+                        <Text size="sm" fw={600}>
+                            {hoverCoord ? `(${hoverCoord.x}, ${hoverCoord.y})` : '—'}
+                        </Text>
+                    </Group>
                     <Text size="sm" fw={600}>
-                        {hoverCoord ? `(${hoverCoord.x}, ${hoverCoord.y})` : '—'}
+                        {productId
+                            ? `${oemProductId || '—'} (${productId})`
+                            : (oemProductId || '—')}
+                        {' / '}
+                        {batchId || '—'}
+                        {' / '}
+                        {waferId ?? '—'}
+                        {subId ? ` / ${subId}` : ''}
                     </Text>
                 </Group>
             </Paper>

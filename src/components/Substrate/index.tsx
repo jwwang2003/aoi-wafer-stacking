@@ -19,6 +19,9 @@ import { useAppSelector } from '@/hooks';
 type SubstratePaneProps = {
     productId: string;
     oemProductId: string;
+    batchId?: string | null;
+    waferId?: number | null;
+    subId?: string | null;
     waferSubstrate: SubstrateDefectRow | null;
     waferMaps: WaferMapRow[];
     showParameters?: boolean;
@@ -27,6 +30,9 @@ type SubstratePaneProps = {
 export default function SubstratePane({
     productId,
     oemProductId,
+    batchId,
+    waferId,
+    subId,
     waferSubstrate,
     waferMaps,
     showParameters = false,
@@ -170,37 +176,42 @@ export default function SubstratePane({
                             onChange={(v) => setSelectedSheetKey(v ?? '__ALL__')}
                             allowDeselect={false}
                             searchable
-                        nothingFoundMessage="无表"
-                    />
-                </Box>
+                            nothingFoundMessage="无表"
+                        />
+                    </Box>
                 )}
-            {!hasLayout && (
-                <Alert icon={<IconAlertCircle size={16} />} color="yellow" mb="sm">
-                    未找到基板映射 Excel（die layout）。请导入 Excel 映射后再查看。
-                </Alert>
-            )}
-            {sheetsData && missingProductLayout && (
-                <Alert icon={<IconAlertCircle size={16} />} color="red" mb="sm">
-                    当前机种缺少专用晶圆映射（layoutMap[productId]）。请提供该机种的 Excel 映射。
-                </Alert>
-            )}
-            {sheetsData && !hasResolvedDies && (
-                <Alert icon={<IconAlertCircle size={16} />} color="red" mb="sm">
-                    当前机种缺少晶圆映射数据，无法渲染衬底。请检查并导入 Excel 基板映射。
-                </Alert>
-            )}
-            {sheetsData && hasResolvedDies && (
-                <SubstrateRenderer
-                    gridWidth={dieX}
-                    gridHeight={dieY}
-                    dies={resolvedDies}
-                    selectedSheetId={selectedSheetId}
-                    sheetsData={sheetsData}
-                    gridOffset={{ x: xOffset, y: yOffset }}
-                    defectSizeOffset={{ x: defectSizeOffsetX, y: defectSizeOffsetY }}
-                    style={{ height: '100%', width: '100%' }}
-                />
-            )}
+                {!hasLayout && (
+                    <Alert icon={<IconAlertCircle size={16} />} color="yellow" mb="sm">
+                        未找到基板映射 Excel（die layout）。请导入 Excel 映射后再查看。
+                    </Alert>
+                )}
+                {sheetsData && missingProductLayout && (
+                    <Alert icon={<IconAlertCircle size={16} />} color="red" mb="sm">
+                        当前机种缺少专用晶圆映射（layoutMap[productId]）。请提供该机种的 Excel 映射。
+                    </Alert>
+                )}
+                {sheetsData && !hasResolvedDies && (
+                    <Alert icon={<IconAlertCircle size={16} />} color="red" mb="sm">
+                        当前机种缺少晶圆映射数据，无法渲染衬底。请检查并导入 Excel 基板映射。
+                    </Alert>
+                )}
+                {sheetsData && hasResolvedDies && (
+                    <SubstrateRenderer
+                        gridWidth={dieX}
+                        gridHeight={dieY}
+                        dies={resolvedDies}
+                        selectedSheetId={selectedSheetId}
+                        sheetsData={sheetsData}
+                        productId={productId}
+                        oemProductId={oemProductId}
+                        batchId={batchId}
+                        waferId={waferId}
+                        subId={subId}
+                        gridOffset={{ x: xOffset, y: yOffset }}
+                        defectSizeOffset={{ x: defectSizeOffsetX, y: defectSizeOffsetY }}
+                        style={{ height: '100%', width: '100%' }}
+                    />
+                )}
             </Box>
         </Flex>
     );
