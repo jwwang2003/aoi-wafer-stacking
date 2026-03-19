@@ -26,6 +26,7 @@ interface SubstrateRendererProps {
     batchId?: string | null;
     waferId?: number | null;
     subId?: string | null;
+    autoRefresh: boolean;
 }
 
 export default function SubstrateRenderer({
@@ -44,6 +45,7 @@ export default function SubstrateRenderer({
     batchId,
     waferId,
     subId,
+    autoRefresh,
 }: SubstrateRendererProps) {
     // This is the square box (aspect ratio 1:1)
     const squareRef = useRef<HTMLDivElement>(null);
@@ -51,6 +53,7 @@ export default function SubstrateRenderer({
     const [error, setError] = useState<string | null>(null);
     const [zoom, setZoom] = useState(1);
     const [reloadToken, setReloadToken] = useState(0);
+    const [manualRefresh, setManualRefresh] = useState(false);
 
     const threeRef = useRef<typeof import('three') | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -95,6 +98,7 @@ export default function SubstrateRenderer({
         setZoom(1);
         setThreeReady(false);
         setReloadToken((token) => token + 1);
+        setManualRefresh(true);
     }, []);
 
     // Fit to current square size
@@ -507,7 +511,9 @@ export default function SubstrateRenderer({
 
     // Rebuild scene on data changes (dies, sheet selection, offsets, etc.)
     useEffect(() => {
-        if (!threeReady || !sceneRef.current || !threeRef.current) return;
+        const canRefresh = (autoRefresh || manualRefresh);
+        if (!canRefresh || !threeReady || !sceneRef.current || !threeRef.current) return;
+
         const THREE = threeRef.current;
         clearSceneObjects(defectObjectsRef.current);
         clearSceneObjects(gridObjectsRef.current);
@@ -592,7 +598,8 @@ export default function SubstrateRenderer({
             }
         }
         setError(null);
-    }, [activeDefects, clampDefectSize, clearSceneObjects, createGridFromCoordinates, dies, gridHeight, gridWidth, mapCoordinates, offsetX, offsetX_defect, offsetY, offsetY_defect, threeReady]);
+        setManualRefresh(false);
+    }, [threeReady, reloadToken, manualRefresh, autoRefresh, activeDefects, dies, mapCoordinates, gridHeight, gridWidth, offsetX, offsetX_defect, offsetY, offsetY_defect, createGridFromCoordinates, clearSceneObjects,]);
 
     // Keep renderer sized to container; ensure initial fit occurs once the square has a real size.
     useEffect(() => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Flex, Text, Select } from '@mantine/core';
+import { Box, Flex, Text, Select, Checkbox } from '@mantine/core';
 import { useMantineTheme, Alert } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconAlertCircle } from '@tabler/icons-react';
@@ -53,6 +53,9 @@ export default function SubstratePane({
     // Sheet selection via dropdown ("__ALL__" = All)
     const [selectedSheetKey, setSelectedSheetKey] = useState<string>('__ALL__');
     const layoutMap = useAppSelector(s => s.waferLayouts.data);
+    const [autoRefresh, setAutoRefresh] = useState(() => {
+        return localStorage.getItem('substrate-auto-refresh') === 'true';
+    });
 
     // Fetch substrate XLS → sheetsData
     useEffect(() => {
@@ -74,6 +77,10 @@ export default function SubstratePane({
             cancelled = true;
         };
     }, [waferSubstrate]);
+
+    useEffect(() => {
+        localStorage.setItem('substrate-auto-refresh', autoRefresh.toString());
+    }, [autoRefresh]);
 
     // Fetch wafer map (first waferMaps entry) → dieData
     useEffect(() => {
@@ -195,6 +202,12 @@ export default function SubstratePane({
                         当前机种缺少晶圆映射数据，无法渲染衬底。请检查并导入 Excel 基板映射。
                     </Alert>
                 )}
+
+                <Checkbox
+                    label="自动刷新"
+                    checked={autoRefresh}
+                    onChange={(e) => setAutoRefresh(e.currentTarget.checked)}
+                />
                 {sheetsData && hasResolvedDies && (
                     <SubstrateRenderer
                         gridWidth={dieX}
@@ -209,6 +222,7 @@ export default function SubstratePane({
                         subId={subId}
                         gridOffset={{ x: xOffset, y: yOffset }}
                         defectSizeOffset={{ x: defectSizeOffsetX, y: defectSizeOffsetY }}
+                        autoRefresh={autoRefresh}
                         style={{ height: '100%', width: '100%' }}
                     />
                 )}
