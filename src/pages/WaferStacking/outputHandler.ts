@@ -5,6 +5,8 @@ import {
     exportWaferMapData,
     exportWaferBin,
     exportWaferJpg,
+    exportWaferSilan,
+    exportFab,
 } from '@/api/tauri/wafer';
 import { AsciiDie } from '@/types/ipc';
 import { renderAsJpg, renderSubstrateAsJpg } from './renderUtils';
@@ -14,6 +16,8 @@ import {
     convertToBinMapData,
     convertToHexMapData,
     calculateStatsFromDies,
+    convertToSilanMapData,
+    convertToFabWafer,
 } from '@/utils/waferSubstrateRenderer';
 
 export interface WaferOutputConfig {
@@ -22,7 +26,7 @@ export interface WaferOutputConfig {
     mergedDies: AsciiDie[];
     stats: ReturnType<typeof calculateStatsFromDies>;
     useHeader: Record<string, string>;
-    selectedOutputs: ('mapEx' | 'bin' | 'HEX' | 'image')[];
+    selectedOutputs: ('mapEx' | 'bin' | 'HEX' | 'image' | 'fab' | 'SILAN')[];
     imageRenderer: 'bin' | 'substrate';
     allSubstrateDefects: Array<{ x: number; y: number; w: number; h: number; class: string }>;
     currentDieSize: { x: number; y: number };
@@ -68,6 +72,18 @@ export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
             ? await renderSubstrateAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader)
             : await renderAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader);
         await exportWaferJpg(imageData, imagePath);
+    }
+
+    if (selectedOutputs.includes('SILAN')) {
+        const silanData = convertToSilanMapData(mergedDies, stats, useHeader);
+        const silanPath = await join(outputRootDir, `${baseFileName}_SILAN.txt`);
+        await exportWaferSilan(silanData, silanPath);
+    }
+
+    if (selectedOutputs.includes('fab')) {
+        const fabData = convertToFabWafer(mergedDies, stats, useHeader);
+        const fabPath = await join(outputRootDir, `${baseFileName}_FAB.txt`);
+        await exportFab(fabData, fabPath);
     }
 };
 

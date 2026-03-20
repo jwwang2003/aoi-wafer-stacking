@@ -7,7 +7,8 @@ import type {
     SubstrateDefectXlsResult,
     DieLayoutMap,
 
-    Wafer
+    Wafer,
+    SilanMapData
 } from '@/types/ipc';
 
 import { invokeSafe } from './index';
@@ -88,4 +89,20 @@ export async function printWaferHex(wafer_hex: HexMapData): Promise<void> {
 //jpg
 export async function exportWaferJpg(imageData: Uint8Array, outputPath: string): Promise<void> {
     await invokeSafe('rust_export_wafer_jpg', { imageData, outputPath });
+}
+
+export async function exportWaferSilan(silan: SilanMapData, outputPath: string): Promise<void> {
+    await invokeSafe('rust_export_wafer_silan', { silan, outputPath });
+}
+
+export async function printWaferSilan(silan: SilanMapData): Promise<void> {
+    await invokeSafe('rust_print_wafer_silan', { silan });
+}
+
+export async function exportFab(fab: Wafer, outputPath: string): Promise<void> {
+    await invokeSafe('rust_export_wafer_fab', { fab, outputPath });
+}
+
+export async function printFab(fab: Wafer): Promise<void> {
+    await invokeSafe('rust_print_wafer_fab', { fab });
 }

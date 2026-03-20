@@ -84,6 +84,11 @@ fn run_once() -> Result<(), tauri::Error> {
             commands::rust_export_wafer_hex,
             commands::rust_print_wafer_hex,
             commands::rust_export_wafer_jpg,
+            commands::rust_export_wafer_silan,
+            commands::rust_print_wafer_silan,
+            commands::rust_export_wafer_fab,
+            commands::rust_print_wafer_fab,
+
             // AOI inference
             commands::rust_aoi_inference_status,
             commands::rust_aoi_run_inference

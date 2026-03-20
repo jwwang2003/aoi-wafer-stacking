@@ -59,7 +59,7 @@ import {
 } from '@/utils/waferSubstrateRenderer';
 import { countBinValues, formatDateTime } from './renderUtils';
 
-export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image';
+export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image' | 'fab' | 'SILAN';
 export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
 
 const ALL_BINS = [
@@ -100,6 +100,8 @@ const OUTPUT_OPTIONS = [
     { id: 'bin', label: 'BinMap' },
     { id: 'HEX', label: 'HexMap' },
     { id: 'image', label: 'Image' },
+    { id: 'fab', label: 'fab' },
+    { id: 'SILAN', label: 'SILAN' },
 ] as const satisfies readonly OutputOption[];
 
 const OUTPUT_OPTIONS2 = [
@@ -181,6 +183,8 @@ export default function WaferStacking() {
         'HEX',
         'bin',
         'image',
+        'fab',
+        'SILAN'
     ]);
 
     const [selectedOutputs2, setSelectedOutputs2] = useState<BinId[]>([

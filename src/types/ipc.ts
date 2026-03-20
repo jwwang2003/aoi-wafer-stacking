@@ -172,7 +172,41 @@ export interface BinMapData {
     map: WaferMapDie[];     // numeric die list
     bins: BinCountEntry[];  // sorted vector (not a map)
 }
+export interface SilanMapData {
+    header: SilanHeader;
+    sum: SilanSum;
+    binSummary: SilanBinSummary[];
+    map: AsciiMap;
+}
 
+export interface SilanHeader {
+    waferMapData: string;
+    testerName: string;
+    deviceName: string;
+    waferSize: number;
+    indexX: number;
+    indexY: number;
+    lotId: string;
+    waferId: string;
+    mapBinLength: number;
+    direction: string;
+}
+
+export interface SilanSum {
+    sample: number;
+    passNum: number;
+    failNum: number;
+    passPercent: number;
+    xMin: number;
+    yMin: number;
+    xMax: number;
+    yMax: number;
+}
+
+export interface SilanBinSummary {
+    binNo: string;
+    count: number;
+}
 // Type guards (handy)
 
 export const isNumberBin = (b: BinValue): b is { number: number } =>
