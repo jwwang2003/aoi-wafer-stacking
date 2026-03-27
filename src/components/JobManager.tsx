@@ -37,8 +37,8 @@ export default function JobManager({ disableAddFromCurrent = false }: { disableA
 
     const hasJobs = queue.length > 0;
 
-    const getLabel = (j: typeof queue[number]) =>
-        j.name?.trim() || `${j.productId || '—'} / ${j.batchId || '—'} / ${j.waferId ?? '—'}${j.subId ? ` / ${j.subId}` : ''}`;
+    // const getLabel = (j: typeof queue[number]) =>
+    //     j.name?.trim() || `${j.productId || '—'} / ${j.batchId || '—'} / ${j.waferId ?? '—'}${j.subId ? ` / ${j.subId}` : ''}`;
 
     const handleAddCurrent = () => {
         dispatch(queueAddFromCurrent(undefined));
@@ -104,7 +104,7 @@ export default function JobManager({ disableAddFromCurrent = false }: { disableA
                                             <Badge size="xs" variant="light" color={j.status === 'active' ? 'blue' : j.status === 'done' ? 'teal' : j.status === 'error' ? 'red' : 'gray'}>
                                                 {j.status.toUpperCase()}
                                             </Badge>
-                                            <Text fw={600} size="sm" lineClamp={1} style={{ maxWidth: 200 }}>{getLabel(j)}</Text>
+                                            {/* <Text fw={600} size="sm" lineClamp={1} style={{ maxWidth: 200 }}>{getLabel(j)}</Text> */}
                                         </Group>
                                         <Group gap={6}>
                                             {!isEditing && <Tooltip label="设为激活" withArrow><ActionIcon size="sm" variant="subtle" onClick={() => handleActivate(j.id)}><IconPlayerPlay size={16} /></ActionIcon></Tooltip>}
