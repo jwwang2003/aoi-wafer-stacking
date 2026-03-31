@@ -39,6 +39,11 @@ export async function getOemOffsets(
     );
 }
 
+export async function getOemProductMap() {
+    const db = await getDb();
+    return db.select('SELECT oem_product_id, product_id FROM oem_product_map');
+}
+
 export async function getAllOemOffsets(
     limit = 500,
     offset = 0

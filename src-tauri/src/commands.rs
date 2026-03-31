@@ -109,7 +109,7 @@ use crate::parser::{
 use crate::inference;
 
 use crate::wafer::ds::{
-    BinMapData, DefectRecord, HexMapData, MapData, ProductMappingRecord, ProductRecord, Wafer,
+    BinMapData, DefectRecord, HexMapData, MapData, ProductMappingRecord, ProductRecord, Wafer, SilanMapData
 };
 
 #[tauri::command]
@@ -225,6 +225,26 @@ pub fn rust_print_wafer_hex(wafer_hex: HexMapData) -> Result<(), String> {
 #[tauri::command]
 pub fn rust_export_wafer_jpg(image_data: Vec<u8>, output_path: String) -> Result<(), String> {
    export_bytes("image data", &output_path, image_data)
+}
+
+#[tauri::command]
+pub fn rust_export_wafer_silan(silan: SilanMapData, output_path: String) -> Result<(), String> {
+    export_bytes("SILAN map", &output_path, silan.to_string())
+}
+
+#[tauri::command]
+pub fn rust_print_wafer_silan(silan: SilanMapData) -> Result<(), String> {
+    print_value(silan.to_string())
+}
+
+#[tauri::command]
+pub fn rust_export_wafer_fab(fab: Wafer, output_path: String) -> Result<(), String> {
+    export_bytes("FAB map", &output_path, fab.to_string())
+}   
+
+#[tauri::command]
+pub fn rust_print_wafer_fab(fab: Wafer) -> Result<(), String> {
+    print_value(fab.to_string())    
 }
 
 // =============================================================================

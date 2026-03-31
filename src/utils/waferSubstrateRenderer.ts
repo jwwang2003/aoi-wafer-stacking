@@ -10,6 +10,7 @@ import {
     isSpecialBin,
     isNumberBin,
     BinValue,
+    SilanMapData,
 } from '@/types/ipc';
 import { PRIORITY_RULES, LayerMeta, PASS_VALUES } from '@/pages/WaferStacking/priority';
 
@@ -218,7 +219,7 @@ export const extractBinMapHeader = (binData: BinMapData): Record<string, string>
  */
 export const extractWaferHeader = (wafer: Wafer): Record<string, string> => ({
     Operator: wafer.operator,
-    'Device Name': wafer.device,
+    'Device_fab': wafer.device,
     'Lot No.': wafer.lotId,
     'Wafer ID': wafer.waferId,
     'Measurement Time': wafer.measTime,
@@ -400,3 +401,154 @@ export const convertToHexMapData = (
         }
     };
 };
+
+export const convertToFabWafer = (
+    dies: AsciiDie[],
+    stats: Statistics,
+    header: Record<string, string>
+): Wafer => {
+    const xs = dies.map(d => d.x);
+    const ys = dies.map(d => d.y);
+    const minX = xs.length ? Math.min(...xs) : 0;
+    const maxX = xs.length ? Math.max(...xs) : 0;
+    const minY = ys.length ? Math.min(...ys) : 0;
+    const maxY = ys.length ? Math.max(...ys) : 0;
+    const cols = maxX - minX + 1;
+    const rows = maxY - minY + 1;
+
+    const rawMap = Array.from({ length: rows }, () => Array(cols).fill('.'));
+    dies.forEach(d => {
+        const r = d.y - minY;
+        const c = d.x - minX;
+        if (r >= 0 && r < rows && c >= 0 && c < cols) {
+            rawMap[r][c] = isNumberBin(d.bin) ? d.bin.number.toString() : d.bin.special;
+        }
+    });
+
+    return {
+        operator: header['Operator'] || '',
+        device: header['Device_fab'] || '',
+        lotId: header['Lot No.'] || '',
+        waferId: header['Lot No.'] && header['Wafer ID']
+            ? `${header['Lot No.']}-${header['Wafer ID']}`
+            : header['Wafer ID'] || '',
+        measTime: header['Measurement Time'] || new Date().toISOString(),
+        grossDie: stats.totalTested,
+        passDie: stats.totalPass,
+        failDie: stats.totalFail,
+        totalYield: stats.yieldPercentage,
+        notch: header['Notch'] || header['Flat/Notch'] || 'UNKNOWN',
+        map: { raw: rawMap.map(r => r.join('')), dies }
+    };
+};
+
+export const convertToSilanMapData = (
+    dies: AsciiDie[],
+    stats: Statistics,
+    header: Record<string, string>
+): SilanMapData => {
+    const xs = dies.map(d => d.x);
+    const ys = dies.map(d => d.y);
+    const minX = xs.length ? Math.min(...xs) : 0;
+    const maxX = xs.length ? Math.max(...xs) : 0;
+    const minY = ys.length ? Math.min(...ys) : 0;
+    const maxY = ys.length ? Math.max(...ys) : 0;
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const nn = String(now.getMinutes()).padStart(2, '0');
+    const timestamp = `${yyyy}/${mm}/${dd}_${hh}:${nn}`;
+
+    const binCount = new Map<string, number>();
+    dies.forEach(d => {
+        let key = '1';
+        if (isNumberBin(d.bin)) {
+            key = d.bin.number.toString();
+        } else {
+            key = '2';
+        }
+        binCount.set(key, (binCount.get(key) || 0) + 1);
+    });
+
+    const binSummary = Array.from(binCount.entries())
+        .sort((a, b) => (parseInt(a[0]) || 0) - (parseInt(b[0]) || 0))
+        .map(([binNo, count]) => ({ binNo, count }));
+
+    const mapLines = buildSilanMapLines(dies, minX, maxX, minY, maxY);
+
+    return {
+        header: {
+            waferMapData: timestamp,
+            testerName: header['Tester Name'] || '',
+            deviceName: header['Device Name'] || '',
+            waferSize: header?.['Wafer Size'] ? parseFloat(header['Wafer Size']) : 0,
+            indexX: header?.['Dice SizeX'] ? parseFloat(header['Dice SizeX']) : 0,
+            indexY: header?.['Dice SizeY'] ? parseFloat(header['Dice SizeY']) : 0,
+            lotId: header['Lot No.'] || '',
+            waferId: header['Lot No.'] && header['Wafer ID']
+                ? `${header['Lot No.']}-${header['Wafer ID']}`
+                : header['Wafer ID'] || '',
+            mapBinLength: 1,//什么意思
+            direction: header?.['Flat/Notch'] || 'Unknown',
+        },
+        sum: {
+            sample: stats.totalTested,
+            passNum: stats.totalPass,
+            failNum: stats.totalFail,
+            passPercent: stats.yieldPercentage || 0,
+            xMin: minX,
+            yMin: minY,
+            xMax: maxX,
+            yMax: maxY,
+        },
+        binSummary: binSummary,
+        map: {
+            raw: mapLines,
+            dies: dies,
+        },
+    };
+};
+
+function buildSilanMapLines(
+    dies: AsciiDie[],
+    minX: number,
+    maxX: number,
+    minY: number,
+    maxY: number
+): string[] {
+    const lines: string[] = [];
+    const dieMap = new Map<string, AsciiDie>();
+    dies.forEach(d => dieMap.set(`${d.x},${d.y}`, d));
+
+    const xLabels: string[] = [];
+    for (let x = minX; x <= maxX; x++) {
+        if (x % 5 === 0 || x === minX || x === maxX) {
+            xLabels.push(x.toString().padStart(4));
+        }
+    }
+    lines.push('            ' + xLabels.join(''));
+    lines.push('        ----+----+----+----+----+---');
+
+    for (let y = minY; y <= maxY; y++) {
+        const yLabel = String(y).padStart(4);
+        const sep = (y === minY || y === maxY || y % 5 === 0) ? '+' : '|';
+        let row = '';
+        for (let x = minX; x <= maxX; x++) {
+            const d = dieMap.get(`${x},${y}`);
+            if (!d) {
+                row += ' ';
+                continue;
+            }
+            if (isNumberBin(d.bin)) {
+                row += d.bin.number === 1 ? '1' : 'X';
+            } else {
+                row += 'X';
+            }
+        }
+        lines.push(`        ${yLabel}  ${sep} ${row}`);
+    }
+    return lines;
+}

@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Card, Group, Stack, Table, Text, ScrollArea, Loader, Title, Badge,
-    TextInput, ActionIcon, Tooltip, Alert, SimpleGrid
+    TextInput, ActionIcon, Tooltip, Alert, SimpleGrid,
+    Checkbox,
+    Button
 } from '@mantine/core';
-import { IconRefresh, IconSearch, IconX, IconAlertCircle } from '@tabler/icons-react';
-
+import { IconRefresh, IconSearch, IconX, IconAlertCircle, IconPlus } from '@tabler/icons-react';
+import { infoToast, errorToast } from '@/components/UI/Toaster';
 import { useDispatch } from 'react-redux';
 import { useAppSelector } from '@/hooks';
 import { AppDispatch } from '@/store';
-import { clearJob, setJob } from '@/slices/job';
+import { clearJob, setJob, queueAddJob } from '@/slices/job';
 import type { OemProductMapRow, WaferMapRow } from '@/db/types';
 
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import SubstratePane from '@/components/Substrate';
-
 import { ExcelType } from '@/types/wafer';
 import { DataSourceType } from '@/types/dataSource';
 import { toWaferFileMetadata } from '@/types/helpers';
@@ -167,6 +168,9 @@ export default function ProductBatchNavigator({
     const [productFilter, setProductFilter] = useState('');
     const [lotFilter, setLotFilter] = useState('');
     const [waferFilter, setWaferFilter] = useState('');
+    const [selectAllWafers, setSelectAllWafers] = useState(false);
+    const [selectAllBatches, setSelectAllBatches] = useState(false);
+    const [isAddingAllBatches, setIsAddingAllBatches] = useState(false);
 
     const resetAfterProduct = () => {
         setSelectedLotId(null);
@@ -187,6 +191,164 @@ export default function ProductBatchNavigator({
         [],
         [],
     );
+
+    const handleAddAllBatchesToQueue = async () => {
+        if (!selectedOemId || !selectedProductId) {
+            errorToast({ title: '操作失败', message: '请先选择产品' });
+            return;
+        }
+        if (batchesState.data.length === 0) {
+            errorToast({ title: '操作失败', message: '当前产品无批次数据' });
+            return;
+        }
+        setIsAddingAllBatches(true);
+
+        let totalWafers = 0;
+        let addedCount = 0;
+        let errorCount = 0;
+        let skippedCount = 0;
+
+        try {
+            const allBatches = batchesState.data;
+            for (const batch of allBatches) {
+                const wafers = await getWafersByProductAndBatch(
+                    selectedOemId,
+                    batch.lot_id
+                );
+                totalWafers += wafers.length;
+            }
+            if (totalWafers === 0) {
+                errorToast({ title: '未找到数据', message: '请确认产品与批次关联正确' });
+                setIsAddingAllBatches(false);
+                setSelectAllBatches(false);
+                return;
+            }
+
+            for (const batch of allBatches) {
+                console.log('处理批次:', batch.lot_id);
+
+                try {
+                    const wafers = await getWafersByProductAndBatch(
+                        selectedOemId,
+                        batch.lot_id
+                    );
+
+                    if (!wafers.length) continue;
+
+                    for (const wafer of wafers) {
+                        const waferNum = Number(wafer.wafer_id);
+                        if (!Number.isFinite(waferNum)) {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        try {
+                            const subs = await getSubIdsByProductLotWafer(
+                                selectedOemId,
+                                batch.lot_id,
+                                wafer.wafer_id
+                            );
+
+                            if (!subs.length) {
+                                skippedCount++;
+                                continue;
+                            }
+
+                            const subId = subs[0].sub_id;
+
+                            const { getSubstrateDefectBySubId } = await import('@/db/spreadSheet');
+                            const substrate = await getSubstrateDefectBySubId(subId);
+                            const maps = await getWaferMapsByTriple(
+                                selectedProductId,
+                                batch.lot_id,
+                                waferNum
+                            );
+
+                            dispatch(queueAddJob({
+                                oemProductId: selectedOemId,
+                                productId: selectedProductId,
+                                batchId: batch.lot_id,
+                                waferId: waferNum,
+                                subId: subId,
+                                waferSubstrate: substrate,
+                                waferMaps: maps,
+                                includeSubstrateSelected: !!substrate,
+                                selectedLayerKeys: [],
+                                name: `${selectedProductId}/${batch.lot_id}/Wafer${wafer.wafer_id}`,
+                                note: `全选批次批量添加`
+                            }));
+                            addedCount++;
+                        } catch (er) {
+                            errorCount++;
+                        }
+                    }
+                } catch (er) {
+                    errorCount++;
+                }
+            }
+            infoToast({
+                title: '批量添加完成',
+                message: `成功：${addedCount} 个 | 失败：${errorCount} 个 | 跳过：${skippedCount} 个`
+            });
+
+        } catch (err) {
+            console.error('批量添加失败', err);
+            errorToast({ title: '批量添加失败', message: String(err) });
+        } finally {
+            setIsAddingAllBatches(false);
+            setSelectAllBatches(false);
+        }
+    };
+    const handleAddAllWafersToQueue = async () => {
+        if (!selectedLotId || !selectedProductId || !selectedOemId) {
+            console.warn('缺少必要参数');
+            return;
+        }
+        const wafersToAdd = filteredWafers;
+
+        let addedCount = 0;
+        let errorCount = 0;
+
+        for (const wafer of wafersToAdd) {
+            const waferNum = Number(wafer.wafer_id);
+            if (!Number.isFinite(waferNum)) continue;
+
+            try {
+                const subs = await getSubIdsByProductLotWafer(selectedOemId, selectedLotId, wafer.wafer_id);
+                if (!subs.length) continue;
+
+                const subId = subs[0].sub_id;
+
+                const { getSubstrateDefectBySubId } = await import('@/db/spreadSheet');
+                const substrate = await getSubstrateDefectBySubId(subId);
+                const maps = await getWaferMapsByTriple(selectedProductId, selectedLotId, waferNum);
+
+                dispatch(queueAddJob({
+                    oemProductId: selectedOemId,
+                    productId: selectedProductId,
+                    batchId: selectedLotId,
+                    waferId: waferNum,
+                    subId: subId,
+                    waferSubstrate: substrate,
+                    waferMaps: maps,
+                    includeSubstrateSelected: !!substrate,
+                    selectedLayerKeys: [],
+                    name: `${selectedProductId}/${selectedLotId}/${wafer.wafer_id}`,
+                    note: `从批次 ${selectedLotId} 批量添加`
+                }));
+                addedCount++;
+
+            } catch (error) {
+                console.error(`添加晶圆 ${wafer.wafer_id} 失败:`, error);
+                errorCount++;
+            }
+        }
+        infoToast({
+            title: `批次 ${selectedLotId} 添加完成`,
+            message: `成功：${addedCount} 个晶圆 | 失败：${errorCount} 个`
+        });
+        setSelectAllWafers(false);
+    };
 
     // 初始 productId → 自动选中 OEM
     useEffect(() => {
@@ -256,7 +418,6 @@ export default function ProductBatchNavigator({
         if (subsState.loading) return; // 等待加载完成
         if (!subsState.data?.length) return; // 无可用子编号
         void loadWaferMaps(subsState.data[0].sub_id);
-         
     }, [selectedWaferId, selectedSubId, subsState.loading, subsState.data]);
 
     // 5) 叠图面板（点击子编号后加载）
@@ -444,6 +605,28 @@ export default function ProductBatchNavigator({
                     </ScrollArea.Autosize>
                     <Group justify="space-between" mt="xs">
                         <Text size="xs" c="dimmed">{selectedProductId ? `共 ${filteredBatches.length} 个批次` : '—'}</Text>
+                        {selectedProductId && batchesState.data.length > 0 && (
+                            <Checkbox
+                                size="xs"
+                                label={`全选所有批次 (${batchesState.data.length}个)`}
+                                checked={selectAllBatches}
+                                onChange={(e) => setSelectAllBatches(e.currentTarget.checked)}
+                                disabled={isAddingAllBatches}
+                                style={{ cursor: 'pointer' }}
+                            />
+                        )}
+                        {selectAllBatches && (
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="blue"
+                                onClick={handleAddAllBatchesToQueue}
+                                loading={isAddingAllBatches}
+                                leftSection={<IconPlus size={14} />}
+                            >
+                                加入队列 ({batchesState.data.length}个批次)
+                            </Button>
+                        )}
                     </Group>
                 </Card>
 
@@ -501,10 +684,33 @@ export default function ProductBatchNavigator({
                         </Table>
                     </ScrollArea.Autosize>
                     <Group justify="space-between" mt="xs">
-                        <Text size="xs" c="dimmed">{selectedLotId ? `共 ${filteredWafers.length} 片晶圆` : '—'}</Text>
+                        <Text size="xs" c="dimmed">
+                            {selectedLotId ? `共 ${filteredWafers.length} 片晶圆` : '—'}
+                        </Text>
+                        {/* 全选勾选框 */}
+                        {selectedLotId && filteredWafers.length > 0 && (
+                            <Checkbox
+                                size="xs"
+                                label="全选本批次"
+                                checked={selectAllWafers}
+                                onChange={(e) => setSelectAllWafers(e.currentTarget.checked)}
+                                style={{ cursor: 'pointer' }}
+                            />
+                        )}
+                        {/* 添加全部到队列按钮 */}
+                        {selectAllWafers && (
+                            <Button
+                                size="xs"
+                                variant="light"
+                                color="blue"
+                                onClick={handleAddAllWafersToQueue}
+                                leftSection={<IconPlus size={14} />}
+                            >
+                                加入队列 ({filteredWafers.length}片)
+                            </Button>
+                        )}
                     </Group>
                 </Card>
-
                 {/* 已移除子编号列：选择晶圆后自动选择第一个子编号并加载叠图 */}
             </Group>
 
@@ -570,6 +776,9 @@ export default function ProductBatchNavigator({
                     showParameters
                     productId={jobProductId}
                     oemProductId={jobOemId}
+                    batchId={jobBatchId}
+                    waferId={jobWaferId}
+                    subId={jobSubId}
                     waferSubstrate={jobSubstrate}
                     waferMaps={jobWaferMaps}
                 />}

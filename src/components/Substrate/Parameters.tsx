@@ -70,8 +70,8 @@ export default function Parameters({
     minDie = 0,
     maxDie = 50,
     // Defect size offset
-    minDefectSizeOffset = -1000,
-    maxDefectSizeOffset = 1000,
+    minDefectSizeOffset = -10,
+    maxDefectSizeOffset = 10,
     stepDefectSizeOffset = 0.001,
     stepDie = 0.001,
 }: ParametersProps) {

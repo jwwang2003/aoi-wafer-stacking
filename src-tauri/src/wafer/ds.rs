@@ -964,3 +964,91 @@ impl HexMapData {
         })
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SilanMapData {
+    pub header: SilanHeader,
+    pub sum: SilanSum,
+    pub bin_summary: Vec<SilanBinSummary>,
+    pub map: AsciiMap,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SilanHeader {
+    pub wafer_map_data: String,
+    pub tester_name: String,
+    pub device_name: String,
+    pub wafer_size: f64,
+    pub index_x: f64,
+    pub index_y: f64,
+    pub lot_id: String,
+    pub wafer_id: String,
+    pub map_bin_length: i32,
+    pub direction: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SilanSum {
+    pub sample: u32,
+    pub pass_num: u32,
+    pub fail_num: u32,
+    pub pass_percent: f64,
+    pub x_min: i32,
+    pub y_min: i32,
+    pub x_max: i32,
+    pub y_max: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SilanBinSummary {
+    pub bin_no: String,
+    pub count: u32,
+}
+
+impl SilanMapData {
+    pub fn to_string(&self) -> String {
+        let mut out = String::new();
+        let h = &self.header;
+        let s = &self.sum;
+
+        writeln!(out, "[SILAN HEADER]").unwrap();
+        writeln!(out, "WAFER MAP DATA            : {}", h.wafer_map_data).unwrap();
+        writeln!(out, "").unwrap();
+        writeln!(out, "Tester Name               : {}", h.tester_name).unwrap();
+        writeln!(out, "Device Name               : {}", h.device_name).unwrap();
+        writeln!(out, "Wafer Size                : {:.0}", h.wafer_size).unwrap();
+        writeln!(out, "Index_X                   : {:.0}", h.index_x).unwrap();
+        writeln!(out, "Index_Y                   : {:.0}", h.index_y).unwrap();
+        writeln!(out, "Lot Id                    : {}", h.lot_id).unwrap();
+        writeln!(out, "wafer Id                  : {}", h.wafer_id).unwrap();
+        writeln!(out, "MAP BIN LENGTH            : {}", h.map_bin_length).unwrap();
+        writeln!(out, "Direction                 : {}", h.direction).unwrap();
+        writeln!(out, "").unwrap();
+
+        writeln!(out, "[SUM]").unwrap();
+        writeln!(out, "Sample        	Pass num      	Fail num      	Pass %        	Xmin          	Ymin          	Xmax          	Ymax").unwrap();
+        writeln!(out,
+            "{:<16}\t{:<16}\t{:<16}\t{:<16}\t{:<16}\t{:<16}\t{:<16}\t{:<16}",
+            s.sample, s.pass_num, s.fail_num, format!("{:.2}", s.pass_percent),
+            s.x_min, s.y_min, s.x_max, s.y_max
+        ).unwrap();
+        writeln!(out, "").unwrap();
+
+        writeln!(out, "[Summary of Failed_Software_Bin]").unwrap();
+        writeln!(out, "Software Bin Name(BinNo)                Count").unwrap();
+        for bin in &self.bin_summary {
+            writeln!(out, "!{:<30}{}", bin.bin_no, bin.count).unwrap();
+        }
+        writeln!(out, "").unwrap();
+
+        writeln!(out, "[MAPPING]").unwrap();
+        for line in &self.map.raw {
+            writeln!(out, "{}", line).unwrap();
+        }
+        out
+    }
+}
