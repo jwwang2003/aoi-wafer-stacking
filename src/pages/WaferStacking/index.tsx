@@ -61,6 +61,7 @@ import { countBinValues, formatDateTime } from './renderUtils';
 
 export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image' | 'fab' | 'SILAN';
 export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
+export type BinNumber = 'BIN 1' | 'BIN 2' | 'BIN 3' | 'BIN 4' | 'BIN 5' | 'BIN 6' | 'BIN 7' | 'BIN 8' | 'BIN 9' | 'BIN 10' | 'BIN 11' | 'BIN 12' | 'BIN 13' | 'BIN 14' | 'BIN 15' | 'BIN 16' | 'BIN 17' | 'BIN 18' | 'BIN 19' | 'BIN 20';
 
 const ALL_BINS = [
     'Unclassified',
@@ -88,6 +89,12 @@ export type OutputOption = {
 
 export type OutputOption2 = {
     id: BinId;
+    label: string;
+    disabled?: boolean;
+};
+
+export type OutputOption3 = {
+    id: BinNumber;
     label: string;
     disabled?: boolean;
 };
@@ -122,6 +129,29 @@ const OUTPUT_OPTIONS2 = [
     // { id: 'SF', label: 'SF' },
     { id: 'PL_BSF', label: 'PL_BSF' },
 ] as const satisfies readonly OutputOption2[];
+
+const OUTPUT_OPTIONS3 = [
+    { id: 'BIN 1', label: 'BIN 1' },
+    { id: 'BIN 2', label: 'BIN 2' },
+    { id: 'BIN 3', label: 'BIN 3' },
+    { id: 'BIN 4', label: 'BIN 4' },
+    { id: 'BIN 5', label: 'BIN 5' },
+    { id: 'BIN 6', label: 'BIN 6' },
+    { id: 'BIN 7', label: 'BIN 7' },
+    { id: 'BIN 8', label: 'BIN 8' },
+    { id: 'BIN 9', label: 'BIN 9' },
+    { id: 'BIN 10', label: 'BIN 10' },
+    { id: 'BIN 11', label: 'BIN 11' },
+    { id: 'BIN 12', label: 'BIN 12' },
+    { id: 'BIN 13', label: 'BIN 13' },
+    { id: 'BIN 14', label: 'BIN 14' },
+    { id: 'BIN 15', label: 'BIN 15' },
+    { id: 'BIN 16', label: 'BIN 16' },
+    { id: 'BIN 17', label: 'BIN 17' },
+    { id: 'BIN 18', label: 'BIN 18' },
+    { id: 'BIN 19', label: 'BIN 19' },
+    { id: 'BIN 20', label: 'BIN 20' },
+] as const satisfies readonly OutputOption3[];
 
 function stageLabel(
     stage: string | DataSourceType,
@@ -204,6 +234,17 @@ export default function WaferStacking() {
         'PL_SF',
         'PL_BSF'
     ]);
+
+    const [selectedPassBins, setSelectedPassBins] = useState<BinNumber[]>(() => {
+        const saved = localStorage.getItem('selected_pass_bins');
+        if (saved) {
+            return JSON.parse(saved) as BinNumber[];
+        }
+        return ['BIN 1', 'BIN 16', 'BIN 17', 'BIN 18', 'BIN 19'];
+    });
+    useEffect(() => {
+        localStorage.setItem('selected_pass_bins', JSON.stringify(selectedPassBins));
+    }, [selectedPassBins]);
 
     const [outputDir, setOutputDir] = useState<string>('');
 
@@ -612,6 +653,7 @@ export default function WaferStacking() {
                 currentDieSize,
                 currentSubstrateOffset,
                 exportAsciiData,
+                selectedPassBins,
             });
 
             dispatch(queueUpdateJob({
@@ -781,6 +823,23 @@ export default function WaferStacking() {
                                         key={opt.id}
                                         value={opt.id}
                                         label={renderBinLabel(opt)}
+                                    />
+                                ))}
+                            </SimpleGrid>
+                        </Checkbox.Group>
+
+                        <Checkbox.Group
+                            label="选择边缘去除的有效值(PASS BIN)"
+                            value={selectedPassBins}
+                            onChange={(vals) => setSelectedPassBins(vals as BinNumber[])}
+                            style={{ flex: 1 }}
+                        >
+                            <SimpleGrid cols={3} spacing="sm" mt="xs">
+                                {OUTPUT_OPTIONS3.map((opt) => (
+                                    <Checkbox
+                                        key={opt.id}
+                                        value={opt.id}
+                                        label={opt.label}
                                     />
                                 ))}
                             </SimpleGrid>
