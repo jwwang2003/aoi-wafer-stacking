@@ -1,5 +1,4 @@
 import { AsciiDie, isNumberBin } from '@/types/ipc';
-import { PASS_VALUES } from './priority';
 
 export interface InkRuleConfig {
     goodValues?: Set<string>;
@@ -8,10 +7,36 @@ export interface InkRuleConfig {
 }
 
 const DEFAULT_CONFIG: Required<InkRuleConfig> = {
-    goodValues: PASS_VALUES,
+    goodValues: new Set<string>(),
     inkMarker: 'z',
     failThreshold: 2
 };
+
+const NUM_TO_LETTER: Record<string, string> = {};
+const LETTER_TO_NUM: Record<string, number> = {};
+
+for (let n = 10; n <= 35; n++) {
+    const c = String.fromCharCode(65 + (n - 10));
+    NUM_TO_LETTER[String(n)] = c;
+    LETTER_TO_NUM[c] = n;
+}
+
+function getBinAllKeys(bin: AsciiDie['bin']): string[] {
+    const keys = new Set<string>();
+
+    if (isNumberBin(bin)) {
+        const numStr = bin.number.toString();
+        keys.add(numStr);
+        const letter = NUM_TO_LETTER[numStr];
+        if (letter) keys.add(letter);
+    } else {
+        const special = bin.special || '';
+        keys.add(special);
+        const num = LETTER_TO_NUM[special];
+        if (num != null) keys.add(num.toString());
+    }
+    return Array.from(keys);
+}
 
 export function processInkRules(
     dies: AsciiDie[],
@@ -23,20 +48,20 @@ export function processInkRules(
     const { goodValues, inkMarker, failThreshold } = { ...DEFAULT_CONFIG, ...config };
     const isGoodDie = (die: AsciiDie | undefined): boolean => {
         if (!die) return true;
-        const binValue = isNumberBin(die.bin)
-            ? die.bin.number.toString()
-            : die.bin.special;
-        return goodValues.has(binValue);
+        const allKeys = getBinAllKeys(die.bin);
+        return allKeys.some(key => goodValues.has(key));
     };
 
     const isFailDie = (die: AsciiDie | undefined): boolean => {
         if (!die) return false;
-        const binValue = isNumberBin(die.bin)
-            ? die.bin.number.toString()
-            : die.bin.special;
+        const allKeys = getBinAllKeys(die.bin);
+        const isGood = allKeys.some(key => goodValues.has(key));
+
         const ignoreFailChars = new Set(['S', '*']);
-        if (ignoreFailChars.has(binValue)) return false;
-        return !goodValues.has(binValue);
+        const hasIgnore = allKeys.some(key => ignoreFailChars.has(key));
+
+        if (hasIgnore) return false;
+        return !isGood;
     };
 
     const dieMap = new Map<string, AsciiDie>();
@@ -49,14 +74,9 @@ export function processInkRules(
     const goodDieFailCountMap = new Map<string, number>();
 
     const neighborDirs = [
-        [-1, -1],
-        [-1, 0],
-        [-1, 1],
-        [0, -1],
-        [0, 1],
-        [1, -1],
-        [1, 0],
-        [1, 1]
+        [-1, -1], [-1, 0], [-1, 1],
+        [0, -1], [0, 1],
+        [1, -1], [1, 0], [1, 1]
     ];
 
     failDies.forEach(failDie => {

@@ -19,6 +19,7 @@ import {
     convertToSilanMapData,
     convertToFabWafer,
 } from '@/utils/waferSubstrateRenderer';
+import { BinNumber } from '.';
 
 export interface WaferOutputConfig {
     baseFileName: string;
@@ -32,6 +33,7 @@ export interface WaferOutputConfig {
     currentDieSize: { x: number; y: number };
     currentSubstrateOffset: { x: number; y: number };
     exportAsciiData: boolean;
+    selectedPassBins: BinNumber[];
 }
 
 export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
@@ -104,7 +106,10 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     const mapExSubDir = await join(outputRootDir, 'Ink');
     await mkdir(mapExSubDir, { recursive: true });
 
-    const { processedDies } = processInkRules(mergedDies);
+    const goodValues = new Set(
+        config.selectedPassBins.map(bin => bin.replace('BIN ', ''))
+    );
+    const { processedDies } = processInkRules(mergedDies, { goodValues });
     const inkStats = calculateStatsFromDies(processedDies);
     console.log('Ink Stats:', inkStats);
     if (selectedOutputs.includes('mapEx')) {
