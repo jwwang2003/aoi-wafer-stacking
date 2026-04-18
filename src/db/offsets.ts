@@ -1,5 +1,5 @@
 import { getDb, vacuum } from '@/db';
-import type { OemProductOffset, OemProductOffsetMap } from './types';
+import type { OemProductOffset, OemProductOffsetMap, OemProductMapRow } from './types';
 
 // Adjust this if you actually created the table with a different name:
 const TABLE = 'product_offsets';
@@ -39,9 +39,9 @@ export async function getOemOffsets(
     );
 }
 
-export async function getOemProductMap() {
+export async function getOemProductMap(): Promise<OemProductMapRow[]> {
     const db = await getDb();
-    return db.select('SELECT oem_product_id, product_id FROM oem_product_map');
+    return db.select<OemProductMapRow[]>('SELECT oem_product_id, product_id FROM oem_product_map');
 }
 
 export async function getAllOemOffsets(
