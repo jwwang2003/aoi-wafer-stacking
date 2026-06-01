@@ -58,7 +58,7 @@ import {
     extractBinMapHeader,
 } from '@/utils/waferSubstrateRenderer';
 import { countBinValues, formatDateTime } from './renderUtils';
-import { DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
+import { createPassValueSet, DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
 
 interface BinValue {
     id: string;
@@ -608,7 +608,8 @@ export default function WaferStacking() {
                 throw new Error('处理后地图为空');
             }
 
-            const stats = calculateStatsFromDies(mergedDies);
+            const passValues = createPassValueSet(goodBins);
+            const stats = calculateStatsFromDies(mergedDies, passValues);
 
             const binCounts = countBinValues(mergedDies);
             const binCountsObj = Object.fromEntries(binCounts);

@@ -82,6 +82,23 @@ export const getGoodBinIds = (): string[] => {
     return BIN_VALUES_CONFIG.filter(bin => bin.isGoodBin).map(bin => bin.id);
 };
 
+export const binIdToPassValues = (binId: string): string[] => {
+    const normalized = binId.trim();
+    const match = normalized.match(/^BIN\s+(\d+)$/i);
+    if (!match) return [normalized];
+
+    const num = Number(match[1]);
+    if (!Number.isFinite(num)) return [normalized];
+
+    const values = new Set<string>([String(num)]);
+    values.add(numberToBinLetter(num));
+    return Array.from(values);
+};
+
+export const createPassValueSet = (binIds: string[]): Set<string> => {
+    return new Set(binIds.flatMap(binIdToPassValues));
+};
+
 export const getAllBinIds = (): string[] => {
     return BIN_VALUES_CONFIG.map(bin => bin.id);
 };
