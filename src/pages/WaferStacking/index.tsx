@@ -58,6 +58,7 @@ import {
     extractBinMapHeader,
 } from '@/utils/waferSubstrateRenderer';
 import { countBinValues, formatDateTime } from './renderUtils';
+import { DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
 
 interface BinValue {
     id: string;
@@ -138,6 +139,8 @@ const OUTPUT_OPTIONS2 = [
     { id: 'PL_BSF', label: 'PL_BSF' },
 ] as const satisfies readonly OutputOption2[];
 
+const EDGE_REMOVAL_STORAGE_KEY = 'wafer_edge_removal_enabled';
+
 function stageLabel(
     stage: string | DataSourceType,
     subStage: string = ''
@@ -174,7 +177,9 @@ export default function WaferStacking() {
     const [batchProcessing, setBatchProcessing] = useState(false);
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
     const [batchErrors, setBatchErrors] = useState<Array<{ id: string; message: string }>>([]);
-    const [exportAsciiDieData, setExportAsciiDieData] = useState(false);
+    const [exportAsciiDieData, setExportAsciiDieData] = useState(() => {
+        return localStorage.getItem(EDGE_REMOVAL_STORAGE_KEY) === 'true';
+    });
     const [goodBins, setGoodBins] = useState<string[]>([]);
 
     const renderBinLabel = (opt: OutputOption2) => {
@@ -311,27 +316,38 @@ export default function WaferStacking() {
     }, [outputDir]);
 
     useEffect(() => {
+        localStorage.setItem(EDGE_REMOVAL_STORAGE_KEY, String(exportAsciiDieData));
+    }, [exportAsciiDieData]);
+
+    useEffect(() => {
+        const goodBinIdsFromConfig = (config: BinConfigFile) => config.binValues
+            .filter((bin: BinValue) => bin.isGoodBin)
+            .map((bin: BinValue) => bin.id);
+
         const loadGoodBins = () => {
             const saved = localStorage.getItem('bin_config');
             if (saved) {
                 try {
                     const config = JSON.parse(saved) as BinConfigFile;
-                    const goodBinIds = config.binValues
-                        .filter((bin: BinValue) => bin.isGoodBin)
-                        .map((bin: BinValue) => bin.id);
-                    setGoodBins(goodBinIds);
+                    setGoodBins(goodBinIdsFromConfig(config));
                 } catch (e) {
                     console.error('加载 good bins 失败', e);
+                    setGoodBins(goodBinIdsFromConfig({
+                        binMappingRule: { startNumber: 10, startLetter: 'A' },
+                        binValues: DEFAULT_BIN_VALUES_CONFIG
+                    }));
                 }
+            } else {
+                setGoodBins(goodBinIdsFromConfig({
+                    binMappingRule: { startNumber: 10, startLetter: 'A' },
+                    binValues: DEFAULT_BIN_VALUES_CONFIG
+                }));
             }
         };
         loadGoodBins();
         const handleConfigChange = (event: CustomEvent) => {
             const config = event.detail as BinConfigFile;
-            const goodBinIds = config.binValues
-                .filter((bin: BinValue) => bin.isGoodBin)
-                .map((bin: BinValue) => bin.id);
-            setGoodBins(goodBinIds);
+            setGoodBins(goodBinIdsFromConfig(config));
         };
         window.addEventListener('binConfigChanged', handleConfigChange as EventListener);
         return () => window.removeEventListener('binConfigChanged', handleConfigChange as EventListener);

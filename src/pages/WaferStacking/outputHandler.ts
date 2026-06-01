@@ -19,7 +19,6 @@ import {
     convertToSilanMapData,
     convertToFabWafer,
 } from '@/utils/waferSubstrateRenderer';
-import { BinNumber } from '.';
 
 export interface WaferOutputConfig {
     baseFileName: string;
@@ -33,8 +32,23 @@ export interface WaferOutputConfig {
     currentDieSize: { x: number; y: number };
     currentSubstrateOffset: { x: number; y: number };
     exportAsciiData: boolean;
-    selectedPassBins: BinNumber[];
+    selectedPassBins: string[];
 }
+
+const binIdToInkGoodValues = (binId: string): string[] => {
+    const normalized = binId.trim();
+    const match = normalized.match(/^BIN\s+(\d+)$/i);
+    if (!match) return [normalized];
+
+    const numberValue = Number(match[1]);
+    if (!Number.isFinite(numberValue)) return [normalized];
+
+    const values = new Set<string>([String(numberValue)]);
+    if (numberValue >= 10 && numberValue <= 35) {
+        values.add(String.fromCharCode(65 + numberValue - 10));
+    }
+    return Array.from(values);
+};
 
 export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
     const {
@@ -106,9 +120,7 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     const mapExSubDir = await join(outputRootDir, 'Ink');
     await mkdir(mapExSubDir, { recursive: true });
 
-    const goodValues = new Set(
-        config.selectedPassBins.map(bin => bin.replace('BIN ', ''))
-    );
+    const goodValues = new Set(config.selectedPassBins.flatMap(binIdToInkGoodValues));
     const { processedDies } = processInkRules(mergedDies, { goodValues });
     const inkStats = calculateStatsFromDies(processedDies);
     console.log('Ink Stats:', inkStats);
