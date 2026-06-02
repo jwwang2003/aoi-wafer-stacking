@@ -19,7 +19,7 @@ import {
     convertToSilanMapData,
     convertToFabWafer,
 } from '@/utils/waferSubstrateRenderer';
-import { BinNumber } from '.';
+import { createPassValueSet } from '@/pages/Config/binConfig';
 
 export interface WaferOutputConfig {
     baseFileName: string;
@@ -33,7 +33,7 @@ export interface WaferOutputConfig {
     currentDieSize: { x: number; y: number };
     currentSubstrateOffset: { x: number; y: number };
     exportAsciiData: boolean;
-    selectedPassBins: BinNumber[];
+    selectedPassBins: string[];
 }
 
 export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
@@ -49,6 +49,7 @@ export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
         currentDieSize,
         currentSubstrateOffset,
     } = config;
+    const passValues = createPassValueSet(config.selectedPassBins);
 
     if (selectedOutputs.includes('mapEx')) {
         const mapExData = convertToMapData(mergedDies, stats, useHeader);
@@ -71,8 +72,8 @@ export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
     if (selectedOutputs.includes('image')) {
         const imagePath = await join(outputRootDir, `${baseFileName}_overlayed.jpg`);
         const imageData = imageRenderer === 'substrate'
-            ? await renderSubstrateAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader)
-            : await renderAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader);
+            ? await renderSubstrateAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, passValues)
+            : await renderAsJpg(mergedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, passValues);
         await exportWaferJpg(imageData, imagePath);
     }
 
@@ -106,11 +107,9 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     const mapExSubDir = await join(outputRootDir, 'Ink');
     await mkdir(mapExSubDir, { recursive: true });
 
-    const goodValues = new Set(
-        config.selectedPassBins.map(bin => bin.replace('BIN ', ''))
-    );
+    const goodValues = createPassValueSet(config.selectedPassBins);
     const { processedDies } = processInkRules(mergedDies, { goodValues });
-    const inkStats = calculateStatsFromDies(processedDies);
+    const inkStats = calculateStatsFromDies(processedDies, goodValues);
     console.log('Ink Stats:', inkStats);
     if (selectedOutputs.includes('mapEx')) {
         const mapExData = convertToMapData(processedDies, inkStats, useHeader);
@@ -133,8 +132,8 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     if (selectedOutputs.includes('image')) {
         const imagePath = await join(mapExSubDir, `${baseFileName}_overlayed.jpg`);
         const imageData = imageRenderer === 'substrate'
-            ? await renderSubstrateAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader)
-            : await renderAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader);
+            ? await renderSubstrateAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, goodValues)
+            : await renderAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, goodValues);
         await exportWaferJpg(imageData, imagePath);
     }
 };

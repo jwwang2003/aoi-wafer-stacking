@@ -172,7 +172,10 @@ export const applyOffsetToDies = (
     }));
 };
 
-export const calculateStatsFromDies = (dies: AsciiDie[]): Statistics => {
+export const calculateStatsFromDies = (
+    dies: AsciiDie[],
+    passValues: Set<string> = PASS_VALUES
+): Statistics => {
     let totalTested = 0;
     let totalPass = 0;
 
@@ -186,7 +189,7 @@ export const calculateStatsFromDies = (dies: AsciiDie[]): Statistics => {
             ? die.bin.number.toString()
             : die.bin.special;
 
-        if (PASS_VALUES.has(binValue)) {
+        if (passValues.has(binValue)) {
             totalPass++;
         }
     });
