@@ -1,5 +1,4 @@
-import { join, desktopDir } from '@tauri-apps/api/path';
-import { mkdir } from '@tauri-apps/plugin-fs';
+import { desktopDir } from '@tauri-apps/api/path';
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/hooks';
 import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
@@ -17,8 +16,6 @@ import {
 } from '@/db/binSelection';
 // DB
 import { getOemOffset } from '@/db/offsets';
-import { getProductSize } from '@/db/productSize';
-import { upsertWaferStackStats } from '@/db/waferStackStats';
 import { exportWaferStatsReport } from '@/utils/exportWaferReport';
 import { colorMap } from '@/components/Substrate/constants';
 
@@ -29,38 +26,12 @@ import { toWaferFileMetadata } from '@/types/helpers';
 
 import { JobItem, JobStatus, queueUpdateJob, queueSetActive, queueResetAllStatus, queueClearCompleted, queueClearAll } from '@/slices/job';
 
-// WAFER
-import {
-    invokeParseWafer,
-    parseWaferMapEx,
-    parseWaferMap,
-    invokeParseSubstrateDefectXls,
-    invokeParseDieLayoutXls,
-} from '@/api/tauri/wafer';
-// IPC types for Tauri API calls
-import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult, DieLayoutMap } from '@/types/ipc';
-
-import { LayerMeta } from './priority';
-import {
-    alignStackingLayers,
-    createSubstrateStackingLayer,
-    mergeStackingLayers,
-    sortStackingLayersByPriority,
-    type ParsedStackingLayer,
-} from './stackingLayers';
-import { buildSelectedLayerKeySet, waferMapLayerKey } from './layerSelection';
-import { exportWaferFiles } from './outputHandler';
-
-import {
-    getLayerPriority,
-    calculateStatsFromDies,
-    extractWaferHeader,
-    extractMapDataHeader,
-    extractBinMapHeader,
-} from '@/utils/waferSubstrateRenderer';
-import { countBinValues, formatDateTime } from './renderUtils';
-import { createPassValueSet, DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
+import { DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
 import { buildBatchCompletionSummary, type BatchProcessingError } from './batchResults';
+import {
+    processWaferStackingJob,
+    type WaferStackingOutputId,
+} from './jobProcessor';
 
 interface BinValue {
     id: string;
@@ -77,17 +48,7 @@ interface BinConfigFile {
     binValues: BinValue[];
 }
 
-type SubstrateDefect = {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    class: string;
-    area?: number;
-    contrast?: number;
-};
-
-export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image' | 'fab' | 'SILAN';
+export type OutputId = WaferStackingOutputId;
 export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
 
 const ALL_BINS = [
@@ -152,24 +113,6 @@ const OUTPUT_OPTIONS2 = [
 ] as const satisfies readonly OutputOption2[];
 
 const EDGE_REMOVAL_STORAGE_KEY = 'wafer_edge_removal_enabled';
-
-function stageLabel(
-    stage: string | DataSourceType,
-    subStage: string = ''
-): string {
-    switch (stage as DataSourceType) {
-        case DataSourceType.Wlbi:
-            return 'WLBI';
-        case DataSourceType.CpProber:
-            return 'CP' + subStage;
-        case DataSourceType.Aoi:
-            return 'AOI';
-        case DataSourceType.FabCp:
-            return 'FAB CP';
-        default:
-            return String(stage ?? 'Unknown');
-    }
-}
 
 const asDefectClass = (binId: BinId): string => binId as string;
 
@@ -372,299 +315,16 @@ export default function WaferStacking() {
         }));
 
         try {
-            const {
-                oemProductId,
-                productId,
-                batchId,
-                waferId,
-                subId,
-                waferSubstrate,
-                waferMaps,
-            } = jobItem;
-
-            let currentSubstrateOffset = { x: 0, y: 0 };
-            let currentDefectSizeOffset = { x: 0, y: 0 };
-            // Default to 1mm x 1mm when no DB record exists
-            let currentDieSize = { x: 1, y: 1 };
-            if (oemProductId) {
-                try {
-                    const offset = await getOemOffset(oemProductId);
-                    const sizeData = await getProductSize(oemProductId);
-                    if (offset) {
-                        currentSubstrateOffset = { x: offset.x_offset, y: offset.y_offset };
-                        currentDefectSizeOffset = { x: offset.defect_offset_x, y: offset.defect_offset_y };
-                    }
-                    if (sizeData) {
-                        currentDieSize = { x: sizeData.die_x, y: sizeData.die_y };
-                    }
-
-                } catch (e) {
-                    throw new Error(`加载偏移量/尺寸失败: ${String(e)}`);
-                }
-            }
-
-            // Build selection using stage|substage keys to match job.selectedLayerKeys.
-            const selectedKeys = buildSelectedLayerKeySet(waferMaps, jobItem.selectedLayerKeys);
-
-            const selectedLayerInfo = [
-                ...((waferSubstrate && (jobItem.includeSubstrateSelected ?? !!waferSubstrate)) ? [{
-                    layerType: 'substrate' as const,
-                    filePath: waferSubstrate.file_path,
-                    stage: DataSourceType.Substrate,
-                }] : []),
-                ...waferMaps.filter((wm) => selectedKeys.has(waferMapLayerKey(wm))).map((wm) => ({
-                    layerType: 'map' as const,
-                    filePath: wm.file_path,
-                    stage: wm.stage as DataSourceType,
-                    subStage: wm.sub_stage || '',
-                })),
-            ];
-
-            if (selectedLayerInfo.length === 0) {
-                throw new Error('未选择有效图层或图层无文件路径');
-            }
-
-            const sortedLayers = selectedLayerInfo.sort((a, b) => {
-                const getPriority = (layer: typeof a) => {
-                    const layerMeta: LayerMeta = ({
-                        stage: layer.stage as DataSourceType,
-                        subStage: layer.layerType === 'map' ? layer.subStage : undefined,
-                    });
-                    return getLayerPriority(layerMeta);
-                };
-                const aPriority = getPriority(a);
-                const bPriority = getPriority(b);
-                return bPriority - aPriority;
-            });
-
-            const baseTargetDir = outputDir || finalOutputDir;
-            const headers: Record<string, string>[] = [];
-            const parsedLayers: ParsedStackingLayer[] = [];
-            let cp1Header: Record<string, string> = {};
-            const tempCombinedHeaders: Record<string, string> = {};
-            let allSubstrateDefects: SubstrateDefect[] = [];
-            let deferredSubstrateDefects: SubstrateDefect[] | null = null;
-            let dieLayoutMap: DieLayoutMap | null = null;
-            let layoutDies: AsciiDie[] | undefined;
-
-            if (dieLayoutPath) {
-                try {
-                    dieLayoutMap = await invokeParseDieLayoutXls(dieLayoutPath);
-                    const keys = Object.keys(dieLayoutMap || {});
-                    layoutDies =
-                        dieLayoutMap[jobProductId || '']?.dies ||
-                        dieLayoutMap[jobOemId || '']?.dies ||
-                        (keys.length > 0 ? dieLayoutMap[keys[0]]?.dies : undefined);
-                } catch (err) {
-                    console.warn('[wafer stacking] Failed to load die layout map; falling back to map files', err);
-                }
-            }
-
-            if (layoutDies && layoutDies.length > 0) {
-                parsedLayers.push({
-                    name: 'DieLayout',
-                    priority: 100,
-                    header: {},
-                    dies: layoutDies,
-                });
-                headers.push({ 'LayerType': 'DieLayout', 'Priority': 'Highest' });
-            }
-
-            for (const layer of sortedLayers) {
-                const { filePath, layerType, stage } = layer;
-                if (!filePath) continue;
-
-                let content: SubstrateDefectXlsResult | BinMapData | MapData | Wafer | null = null;
-                let header: Record<string, string> = {};
-                let dies: AsciiDie[] = [];
-                let layerName = 'Unknown';
-
-                if (layerType === 'map' && stage) {
-                    layerName =
-                        stage === DataSourceType.CpProber
-                            ? `CP${layer.subStage || ''}`
-                            : stageLabel(stage);
-                    if (stage === DataSourceType.CpProber) {
-                        const cpType = layer.subStage || '1';
-                        if (['1', '2'].includes(cpType)) {
-                            content = await parseWaferMapEx(filePath);
-                            if (content && content.map.dies) {
-                                header = extractMapDataHeader(content);
-                                dies = content.map.dies;
-                                if (cpType === '1') cp1Header = { ...header };
-                            }
-                        }
-                    } else if (stage === DataSourceType.Wlbi) {
-                        content = await parseWaferMap(filePath);
-                        if (content && content.map) {
-                            header = extractBinMapHeader(content);
-                            const wlbiDies = content.map.map((die) => {
-                                if (isNumberBin(die.bin) && die.bin.number === 257) {
-                                    return { ...die, bin: { special: '*' } };
-                                }
-                                return die;
-                            });
-                            dies = wlbiDies;
-                        }
-                    } else if (stage === DataSourceType.Aoi) {
-                        content = await parseWaferMapEx(filePath);
-                        if (content && content.map.dies) {
-                            header = extractMapDataHeader(content);
-                            dies = content.map.dies;
-                        }
-                    } else if (stage === DataSourceType.FabCp) {
-                        content = await invokeParseWafer(filePath);
-                        if (content && content.map.dies) {
-                            header = extractWaferHeader(content);
-                            dies = content.map.dies;
-                        }
-                    }
-                }
-
-                if (layerType === 'substrate') {
-                    layerName = 'Substrate';
-                    content = await invokeParseSubstrateDefectXls(filePath);
-                    if (content) {
-                        allSubstrateDefects = [];
-                        const plDefects = content['PL defect list'] || [];
-                        const surfaceDefects = content['Surface defect list'] || [];
-                        // Keep dimensions in micrometers; normalization to mm happens in generateGridWithSubstrateDefects.
-                        allSubstrateDefects = [
-                            ...plDefects.map(defect => ({
-                                x: defect.x,
-                                y: defect.y,
-                                w: defect.w,
-                                h: defect.h,
-                                class: defect.class,
-                                area: defect.area,
-                                contrast: defect.contrast
-                            })),
-                            ...surfaceDefects.map(defect => ({
-                                x: defect.x,
-                                y: defect.y,
-                                w: defect.w,
-                                h: defect.h,
-                                class: defect.class,
-                                area: defect.area,
-                                contrast: defect.contrast
-                            }))
-                        ];
-
-
-                        const selectedClasses = selectedOutputs2.map(asDefectClass);
-                        const filteredSubstrateDefects = selectedClasses.length > 0
-                            ? allSubstrateDefects.filter(defect => selectedClasses.includes(defect.class))
-                            : allSubstrateDefects;
-
-                        console.log('筛选后参与叠图的缺陷数:', filteredSubstrateDefects.length);
-
-                        deferredSubstrateDefects = filteredSubstrateDefects;
-                    }
-                    continue;
-                }
-
-                if (!content || dies.length === 0) continue;
-
-                Object.entries(header).forEach(([key, value]) => {
-                    if (!(key in tempCombinedHeaders)) tempCombinedHeaders[key] = value;
-                });
-                const layerMeta: LayerMeta = {
-                    stage: stage as DataSourceType,
-                    subStage: layer.layerType === 'map' ? layer.subStage : undefined,
-                };
-                parsedLayers.push({
-                    name: layerName,
-                    priority: getLayerPriority(layerMeta),
-                    header,
-                    dies,
-                });
-                headers.push(header);
-            }
-
-            if (deferredSubstrateDefects) {
-                const substrateLayer = createSubstrateStackingLayer({
-                    baseLayer: parsedLayers[0],
-                    filteredSubstrateDefects: deferredSubstrateDefects,
-                    dieSize: { width: currentDieSize.x, height: currentDieSize.y },
-                    substrateOffset: currentSubstrateOffset,
-                    defectSizeOffset: currentDefectSizeOffset,
-                    layoutDies,
-                });
-
-                if (substrateLayer) {
-                    parsedLayers.push(substrateLayer);
-                    headers.push(substrateLayer.header);
-                }
-            }
-
-            if (parsedLayers.length === 0) {
-                throw new Error('没有有效的地图数据可供处理');
-            }
-
-            const orderedLayers = sortStackingLayersByPriority(parsedLayers);
-            const alignedLayers = alignStackingLayers(orderedLayers);
-            const mergedDies = mergeStackingLayers(alignedLayers);
-            if (mergedDies.length === 0) {
-                throw new Error('处理后地图为空');
-            }
-
-            const passValues = createPassValueSet(goodBins);
-            const stats = calculateStatsFromDies(mergedDies, passValues);
-
-            const binCounts = countBinValues(mergedDies);
-            const binCountsObj = Object.fromEntries(binCounts);
-            const binCountsStr = JSON.stringify(binCountsObj);
-            const startTime = formatDateTime(new Date());
-            const stopTime = formatDateTime(new Date());
-            formatDateTime(new Date());
-            const statsToSave = {
-                oem_product_id: oemProductId!,
-                batch_id: batchId,
-                wafer_id: waferId!.toString(),
-                total_tested: stats.totalTested,
-                total_pass: stats.totalPass,
-                total_fail: stats.totalFail,
-                yield_percentage: stats.yieldPercentage,
-                bin_counts: binCountsStr,
-                start_time: startTime,
-                stop_time: stopTime
-            };
-
-            try {
-                await upsertWaferStackStats(statsToSave);
-                console.log(`晶圆 ${waferId} 统计数据已入库`);
-            } catch (dbError) {
-                console.warn(`晶圆 ${waferId} 统计数据入库失败:`, dbError);
-            }
-
-            const baseFileName = `${oemProductId}_${productId}_${batchId}_${waferId}_${subId}`;
-            const useHeader = {
-                ...tempCombinedHeaders,
-                ...(cp1Header || headers[0] || {}),
-            };
-            const outputRootDir = await join(baseTargetDir, baseFileName);
-            try {
-                await mkdir(outputRootDir, { recursive: true });
-                if (outputDir) {
-                    setFinalOutputDir(outputRootDir);
-                }
-            } catch (error) {
-                throw new Error(`无法创建输出目录: ${error instanceof Error ? error.message : String(error)}`);
-            }
-
-            await exportWaferFiles({
-                baseFileName,
-                outputRootDir,
-                mergedDies,
-                stats,
-                useHeader,
+            await processWaferStackingJob(jobItem, {
+                outputDir,
+                finalOutputDir,
+                dieLayoutPath,
                 selectedOutputs,
+                selectedDefectClasses: selectedOutputs2.map(asDefectClass),
                 imageRenderer,
-                allSubstrateDefects,
-                currentDieSize,
-                currentSubstrateOffset,
                 exportAsciiData,
-                selectedPassBins: goodBins,
+                goodBins,
+                onFinalOutputDir: setFinalOutputDir,
             });
 
             dispatch(queueUpdateJob({
