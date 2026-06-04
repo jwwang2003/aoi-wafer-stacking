@@ -28,11 +28,14 @@ const convertBinToNumber = (binKey: string): string | null => {
     return mappedNumber !== undefined ? mappedNumber.toString() : null;
 };
 
-function calculateTestStats(binCounts: Map<string, number>): { totalTested: number; totalPass: number; yieldRate: number } {
+function calculateTestStats(
+    binCounts: Map<string, number>,
+    passValues: Set<string> = PASS_VALUES
+): { totalTested: number; totalPass: number; yieldRate: number } {
     let totalTested = 0, totalPass = 0;
     binCounts.forEach((count, binKey) => {
         if (!['S', '*'].includes(binKey)) totalTested += count;
-        if (PASS_VALUES.has(binKey)) totalPass += count;
+        if (passValues.has(binKey)) totalPass += count;
     });
     return {
         totalTested,
@@ -188,7 +191,8 @@ export async function renderAsJpg(
     gridWidth: number = 4.134,
     gridHeight: number = 3.74,
     gridOffset: GridOffset = { x: 0, y: 0 },
-    header?: Record<string, string>
+    header?: Record<string, string>,
+    passValues: Set<string> = PASS_VALUES
 ): Promise<Uint8Array> {
     const mainSize = 1000;
     const container = document.createElement('div');
@@ -302,7 +306,7 @@ export async function renderAsJpg(
 
         const mainCanvas = renderer.domElement;
         const binCounts = countBinValues(dies);
-        const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts);
+        const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts, passValues);
 
         const notchDir = header?.['Flat/Notch'] || header?.['Notch'];
         const infoLines = header ? [
@@ -331,7 +335,8 @@ export async function renderSubstrateAsJpg(
     gridWidth: number = 4.134,
     gridHeight: number = 3.74,
     gridOffset: GridOffset = { x: 0, y: 0 },
-    header?: Record<string, string>
+    header?: Record<string, string>,
+    passValues: Set<string> = PASS_VALUES
 ): Promise<Uint8Array> {
     const mainSize = 1000;
     const container = document.createElement('div');
@@ -431,7 +436,7 @@ export async function renderSubstrateAsJpg(
 
         const mainCanvas = renderer.domElement;
         const binCounts = countBinValues(dies);
-        const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts);
+        const { totalTested, totalPass, yieldRate } = calculateTestStats(binCounts, passValues);
 
         const notchDir = header?.['Flat/Notch'] || header?.['Notch'];
         const infoLines = header ? [
