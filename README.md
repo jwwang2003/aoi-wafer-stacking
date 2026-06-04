@@ -1,154 +1,282 @@
-# Wafer Overlay (智能叠图)
+# AOI Wafer Stacking (清纯AOI优化与叠图)
 
-Wafer Overlay by Sichain is a desktop app for intelligent wafer stacking and AOI. It renders accurate wafer maps, stacks multi-stage data, and can run TorchScript AOI (segmentation first, optional YOLO detection).
+AOI Wafer Stacking is a Sichain desktop app for wafer map viewing, multi-stage wafer stacking, substrate defect overlay, export generation, and optional TorchScript AOI inference.
 
-**Development stack**
-- [Tauri](https://v2.tauri.app/start/): Tauri + React + Typescript
-- [Mantine](https://mantine.dev/): GUI library for React
-- [ThreeJS](https://threejs.org/): JS-based 3D library for accurate drawing of wafers
-- Rust Backend
+Current release: `v1.0.10`
 
-**IDE setup:**
+## Stack
 
-[VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- Tauri 2 + Rust backend
+- React 19 + TypeScript + Redux Toolkit
+- Mantine UI
+- Three.js wafer/substrate rendering
+- Vitest unit tests
+- Optional LibTorch/TorchScript AOI backend
 
-## Project structure
+## Features
 
-### Branches
+- Configure and scan wafer data source folders for Substrate, FAB CP, CP-prober, WLBI, and AOI files.
+- Ingest wafer metadata into the local SQLite database.
+- Select wafer stacking layers and defect/bin classes per job.
+- Process single jobs or queued batch jobs.
+- Export stacked wafer outputs as WaferMapEx, BinMap, HexMap, image, FAB, and SILAN formats.
+- Store wafer stacking statistics and export stats reports.
+- Run AOI TorchScript inference when built with LibTorch resources.
 
-### Folder structure
+## Project Structure
 
-## Screenshots & demo
+```text
+src/
+  api/                 Tauri command wrappers
+  components/          Shared React UI components
+  db/                  SQLite access helpers
+  pages/               App pages and page-local modules
+    WaferStacking/
+      index.tsx        Wafer stacking UI and queue/status wiring
+      jobProcessor.ts  Job orchestration service
+      outputHandler.ts Output export orchestration
+      stackingLayers.ts Layer alignment/merge helpers
+  slices/              Redux slices
+  types/               Shared TypeScript types
+  utils/               Parsing, rendering, filesystem, and report helpers
+src-tauri/
+  src/                 Rust backend
+  Cargo.toml           Tauri/Rust manifest
+  tauri*.conf.json     Platform/build configuration
+test/
+  reference_files/     Compact wafer-stacking fixture set
+  data1/, data2/       Larger realistic sample data folders
+```
 
-## Pre-compiled binaries
+## Branches
+
+- `main`: release-ready branch.
+- `dev-algo`: development branch kept in sync with `main` after release integration.
+- `codex/*`: short-lived working branches.
+
+## Setup
+
+Install dependencies from the lockfile:
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+Run the web frontend only:
+
+```bash
+pnpm dev
+```
+
+Run the Tauri app in development mode with default features:
+
+```bash
+pnpm run tauri -- dev
+```
+
+Run without LibTorch/AOI inference:
+
+```bash
+pnpm run tauri -- dev -- --no-default-features
+```
+
+## Verification
+
+Use these before merging or preparing a release:
+
+```bash
+pnpm run test:unit
+pnpm run eslint
+pnpm run build
+cd src-tauri
+cargo test --no-default-features
+```
+
+The current `v1.0.10` release prep passed:
+
+- `tsc --noEmit`
+- `vitest run` / `pnpm run test:unit`: 34 tests
+- `eslint ./src`
+- `cargo test --no-default-features`: 13 tests
+- `pnpm run build`
 
 ## Building
 
-## Developer notes
+Build the frontend:
 
-### Creating icons
-
-```
-pnpm tauri icon --help
-pnpm tauri icon public/logo3.png
+```bash
+pnpm run build
 ```
 
-### Building
+Build the Tauri app with default features. This requires a valid LibTorch install because `src-tauri/Cargo.toml` enables `libtorch` by default.
 
-#### Windows
-
+```bash
+pnpm run tauri -- build
 ```
 
+Here `build` is the Tauri subcommand. Do not write `--build`; Tauri will treat that as an unknown top-level option.
+
+Build the Tauri app without LibTorch/AOI inference:
+
+```bash
+pnpm run tauri -- build --no-bundle -- --no-default-features
 ```
 
-#### MacOS
+The first `--` separates `pnpm run` from the script arguments. The second `--` separates Tauri options from Cargo runner arguments.
+
+On Windows, MSI bundling uses WiX:
+
+```bash
+pnpm run tauri -- build --bundles msi
 ```
-pnpm tauri build --bundles dmg
+
+For a no-LibTorch MSI build, pass the Cargo feature flag after the second separator:
+
+```bash
+pnpm run tauri -- build --bundles msi -- --no-default-features
 ```
 
-### 文件夹与文件正则表达式
+If the app binary builds but MSI packaging fails in WiX `light.exe`, verify the local WiX toolchain and bundle resources. The no-bundle command above can still produce `src-tauri/target/release/aoi-wafer-stacking.exe`.
 
-| 文件夹 | 正则表达式 |
-| -------- | ------------------------------- |
-| 衬底       | `(?<=[/\\])衬底(?=[/\\])`         |
-| FAB CP   | `(?<=[/\\])FAB\s*CP(?=[/\\])`   |
-| CP 1     | `(?<=[/\\])CP\s*1(?=[/\\])`     |
-| WLBI MAP | `(?<=[/\\])WLBI\s*MAP(?=[/\\])` |
-| CP 2     | `(?<=[/\\])CP\s*2(?=[/\\])`     |
-| AOI      | `(?<=[/\\])AOI(?=[/\\])`        |
+On macOS, build a DMG bundle:
 
-## Database \(数据库\)
-
-The database file is located in the `%APPDATA` folder, named `data.db`.
-
-![](./assets/images/appdata_ss.png)
-
-### Admin password via env
-
-- Set a default admin password by creating a `.env` file at the project root:
-  - Copy `.env.example` to `.env`
-  - Set `VITE_ADMIN_DEFAULT_PASSWORD=your-secret`
-- On first run, if the database still has the seed password (`admin`), the app updates it to the env value during initialization.
-- The “default password” check in the UI uses this env value as the baseline.
-
-
-
-## References (libraries, dependencies, papers, etc.)
-
-- https://www.sichainsemi.com/
-- https://v2.tauri.app/start/
-- https://react-redux.js.org/
-- https://threejs.org/
-- https://github.com/0xtaruhi/ufde-next/
-- https://github.com/tabler/tabler-icons/
-
-## Authors
-
-- JUN WEI WANG | [jwwang2003](https://github.com/jwwang2003/)
-- YI TING | [ee731](https://github.com/ee731)
-
-## PyTorch / libtorch
-
-### macOS ARM Tauri bundle (ship libtorch inside the .app)
-- Download the official `libtorch-macos-arm64` zip from pytorch.org and unpack it into `src-tauri/libtorch/` so you have `src-tauri/libtorch/lib/libtorch.dylib`, `libtorch_cpu.dylib`, etc.
-- `src-tauri/tauri.conf.json` already copies `libtorch/**` into the bundle; the dylibs land in `AOI Wafer Stacking.app/Contents/Resources/libtorch/lib`.
-- If you built libtorch locally at `3rdparty/pytorch/build/install`, either copy or symlink it into place so the bundler sees it:
-  ```
-  ln -snf ../3rdparty/pytorch/build/install src-tauri/libtorch
-  ```
-- Build the macOS ARM bundle with the vendored libs:
-  ```
-  cd src-tauri
-  LIBTORCH=./libtorch \  # or ../3rdparty/pytorch/build/install
-  RUSTFLAGS="-C link-args=-Wl,-rpath,@executable_path/../Resources/libtorch/lib" \
-  cargo tauri build --target aarch64-apple-darwin
-  ```
-  (You can swap `cargo tauri build` with `pnpm tauri build`; add `LIBTORCH_BYPASS_VERSION_CHECK=1` if needed.)
-- Verify the binary can see the libs:
-  ```
-  otool -l target/release/bundle/macos/AOI\ Wafer\ Stacking.app/Contents/MacOS/aoi-wafer-stacking | rg LC_RPATH
-  ls target/release/bundle/macos/AOI\ Wafer\ Stacking.app/Contents/Resources/libtorch/lib
-  ```
-- If codesign complains, run from `src-tauri`: `codesign --force --deep --sign - target/release/bundle/macos/AOI\ Wafer\ Stacking.app`
-
-### macOS dev using a Python-installed torch
-In a shell before running `pnpm tauri dev`:
+```bash
+pnpm run tauri -- build --bundles dmg
 ```
+
+## Release Checklist
+
+1. Keep `main` and `dev-algo` up to date with `origin`.
+2. Bump the app version consistently in:
+   - `package.json`
+   - `src-tauri/Cargo.toml`
+   - `src-tauri/Cargo.lock`
+3. Run the verification commands above.
+4. Merge the release branch into `main`.
+5. Update `dev-algo` from `main`.
+6. Create an annotated tag, for example:
+
+```bash
+git tag -a v1.0.10 -m "Release v1.0.10"
+git push origin main dev-algo v1.0.10
+```
+
+## Data Source Regex Defaults
+
+The folder auto-recognition defaults live in `src/constants/default.ts`.
+
+| Data source | Default regex |
+| --- | --- |
+| Substrate | `Substrate` |
+| FAB CP | `FAB CP` |
+| CP-prober | `CP-prober-[A-Za-z0-9]+` |
+| WLBI | `WLBI-[A-Za-z0-9]+` |
+| AOI | `AOI-[A-Za-z0-9]+` |
+
+Matching is performed against folder names. These defaults can be changed in the app configuration UI.
+
+## Database
+
+The SQLite database is stored in the app data directory as `data.db`.
+
+On Windows this is under `%APPDATA%` for the Tauri app. The exact path depends on the app identifier and runtime environment.
+
+## Admin Password
+
+The seeded admin password is `admin`.
+
+To override the first-run/default admin password during initialization, create a local `.env` file at the project root:
+
+```text
+VITE_ADMIN_DEFAULT_PASSWORD=your-secret
+```
+
+If the database still uses the seed password, the app updates it to the env value during initialization. Do not commit `.env`.
+
+## Icons
+
+Generate Tauri icons from a source image:
+
+```bash
+pnpm run tauri -- icon --help
+pnpm run tauri -- icon public/logo3.png
+```
+
+## PyTorch / LibTorch
+
+AOI inference is behind the `libtorch` Cargo feature, which is enabled by default.
+
+### macOS ARM Tauri Bundle
+
+Download the official `libtorch-macos-arm64` zip from PyTorch and unpack it into `src-tauri/libtorch/` so the directory contains `src-tauri/libtorch/lib/libtorch.dylib`, `libtorch_cpu.dylib`, and related libraries.
+
+If you built LibTorch locally at `3rdparty/pytorch/build/install`, copy or symlink it into place:
+
+```bash
+ln -snf ../3rdparty/pytorch/build/install src-tauri/libtorch
+```
+
+Build with the bundled libraries:
+
+```bash
+cd src-tauri
+LIBTORCH=./libtorch \
+RUSTFLAGS="-C link-args=-Wl,-rpath,@executable_path/../Resources/libtorch/lib" \
+cargo tauri build --target aarch64-apple-darwin
+```
+
+Add `LIBTORCH_BYPASS_VERSION_CHECK=1` if the local LibTorch version check blocks a known-good build.
+
+Verify the bundle can see the libraries:
+
+```bash
+otool -l target/release/bundle/macos/AOI\ Wafer\ Stacking.app/Contents/MacOS/aoi-wafer-stacking | rg LC_RPATH
+ls target/release/bundle/macos/AOI\ Wafer\ Stacking.app/Contents/Resources/libtorch/lib
+```
+
+If codesign complains, run from `src-tauri`:
+
+```bash
+codesign --force --deep --sign - target/release/bundle/macos/AOI\ Wafer\ Stacking.app
+```
+
+### macOS Dev Using Python Torch
+
+```bash
 export LIBTORCH_BYPASS_VERSION_CHECK=1
 export LIBTORCH_USE_PYTORCH=1
 torch_lib=$(python - <<'PY'
-import torch, os
+import os
+import torch
 print(os.path.join(os.path.dirname(torch.__file__), 'lib'))
 PY
 )
-echo "Using torch lib dir: $torch_lib"
-ls "$torch_lib/libtorch_cpu.dylib"  # should exist
 export LIBTORCH="$torch_lib"
 export DYLD_LIBRARY_PATH="$torch_lib:${DYLD_LIBRARY_PATH}"
-pnpm tauri dev
+pnpm run tauri -- dev
 ```
 
-### Building libtorch from source
-Refer to [PyTorch's build-from-source guidelines](https://github.com/pytorch/pytorch?tab=readme-ov-file#installation). Tested on an M1 Pro (2023 MacBook 14").
+### Building LibTorch From Source
 
-```
+Refer to PyTorch's build-from-source guidance for platform-specific prerequisites.
+
+```bash
 git submodule init
 git submodule update --recursive
-```
-
-```
 cd 3rdparty/pytorch
 export BUILD_TEST=0
 export USE_DISTRIBUTED=0
 export USE_CUDA=0
-export USE_MPS=0   # set to 1 if you actually need MPS on macOS
+export USE_MPS=0
 export DEBUG=0
 python tools/build_libtorch.py
 ```
 
-```
-mkdir -p build && cd build
+Manual CMake flow:
 
+```bash
+mkdir -p build
+cd build
 cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PWD/install" \
@@ -158,17 +286,20 @@ cmake .. \
   -DUSE_CUDA=OFF \
   -DUSE_MPS=OFF \
   -DUSE_DISTRIBUTED=OFF
-
 cmake --build . --target install -j"$(sysctl -n hw.ncpu)"
 ```
 
-```
-ln -snf ../3rdparty/pytorch/build/install ../src-tauri/libtorch 
-```
+## References
 
+- https://www.sichainsemi.com/
+- https://v2.tauri.app/start/
+- https://react.dev/
+- https://react-redux.js.org/
+- https://mantine.dev/
+- https://threejs.org/
+- https://github.com/tabler/tabler-icons/
 
-### Dev without libtorch:
+## Authors
 
-```
-pnpm tauri dev -- --no-default-features
-```
+- JUN WEI WANG | [jwwang2003](https://github.com/jwwang2003/)
+- YI TING | [ee731](https://github.com/ee731)
