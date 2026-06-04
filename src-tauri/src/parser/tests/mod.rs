@@ -141,6 +141,13 @@ fn test_parse_wafer_0() {
     match parse_wafer(path) {
         Ok(wafer) => {
             println!("Parsed Wafer: {:#?}", wafer);
+            assert_eq!(wafer.operator, "E023933");
+            assert_eq!(wafer.device, "P0094B");
+            assert_eq!(wafer.lot_id, "B003332");
+            assert_eq!(wafer.wafer_id, "1");
+            assert_eq!(wafer.gross_die, 805);
+            assert_eq!(wafer.pass_die, 777);
+            assert_eq!(wafer.fail_die, 28);
             assert!(!wafer.map.raw.is_empty(), "Wafer map should not be empty");
             assert_eq!(
                 wafer.gross_die,
@@ -159,6 +166,13 @@ fn test_parse_wafer_bin() {
     match parse_wafer_bin(path) {
         Ok(wafer) => {
             println!("Parsed WaferMap: {:#?}", wafer);
+            assert_eq!(wafer.product, "S1M032120B-U");
+            assert_eq!(wafer.wafer_lots, "S1M032120B-B003332-1-0");
+            assert_eq!(wafer.wafer_no, "03");
+            assert_eq!(wafer.wafer_size, 6.0);
+            assert_eq!(wafer.index_x, 4986.0);
+            assert_eq!(wafer.index_y, 3740.0);
+            assert_eq!(wafer.map.first().map(|die| (die.x, die.y)), Some((-3, -18)));
             assert!(!wafer.map.is_empty(), "Wafer map should not be empty");
         }
         Err(e) => panic!("Failed to parse wafer: {}", e),
@@ -172,6 +186,14 @@ fn test_parse_wafer_map_data() {
     match parse_wafer_map_data(path) {
         Ok(wafer) => {
             println!("Parsed Wafer MapEx: {:#?}", wafer);
+            assert_eq!(wafer.device_name, "S1M032120B");
+            assert_eq!(wafer.lot_no, "B003332");
+            assert_eq!(wafer.wafer_id, "01");
+            assert_eq!(wafer.map_columns, 28);
+            assert_eq!(wafer.map_rows, 37);
+            assert_eq!(wafer.total_tested, 805);
+            assert_eq!(wafer.total_pass, 724);
+            assert_eq!(wafer.total_fail, 81);
             assert!(!wafer.map.raw.is_empty(), "Wafer map should not be empty");
         }
         Err(e) => panic!("Failed to parse wafer: {}", e),

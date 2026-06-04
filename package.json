@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "cross-env ANALYZE=true vite --mode development",
     "dev:prod": "cross-env ANALYZE=true vite --mode production",
-    "build": "tsc && cross-env ANALYZE=true vite build",
+    "build": "tsc && vite build",
+    "build:analyze": "tsc && cross-env ANALYZE=true ANALYZE_OPEN=true vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "eslint": "eslint ./src"
+    "eslint": "eslint ./src",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest"
   },
   "dependencies": {
     "@mantine/core": "^8.3.13",
@@ -48,7 +51,8 @@
     "rollup-plugin-visualizer": "^6.0.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.53.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.8"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

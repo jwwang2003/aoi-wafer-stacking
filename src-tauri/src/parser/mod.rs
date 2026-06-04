@@ -3,7 +3,7 @@ mod tests;
 use crate::wafer::ds::{AsciiDie, BinValue, DefectRecordExcel, ProductRecord, ProductRecordExcel};
 
 use super::file::read_txt;
-use super::wafer::ds::{BinMapData, DefectRecord, MapData, ProductMappingRecord, Wafer, SilanMapData};
+use super::wafer::ds::{BinMapData, DefectRecord, MapData, ProductMappingRecord, Wafer};
 use calamine::Data;
 use calamine::{open_workbook_auto, RangeDeserializerBuilder, DataType, Reader};
 use std::io::{Read as IoRead, Seek};

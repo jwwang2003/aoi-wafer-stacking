@@ -68,7 +68,6 @@ export const generateGridWithSubstrateDefects = (
     const EPS = 1e-6; // avoid marking dies when rectangles only touch edges
 
     const defectiveGrids = new Set<string>();
-    console.log('substrate:', gridOffset);
     seeds.forEach(baseDie => {
         const { left: gridLeft, right: gridRight, top: gridTop, bottom: gridBottom } =
             computeDieRect(baseDie, gridSize, gridOffset);

@@ -273,16 +273,15 @@ export default function ProductBatchNavigator({
                                 waferSubstrate: substrate,
                                 waferMaps: maps,
                                 includeSubstrateSelected: !!substrate,
-                                selectedLayerKeys: [],
                                 name: `${selectedProductId}/${batch.lot_id}/Wafer${wafer.wafer_id}`,
                                 note: `全选批次批量添加`
                             }));
                             addedCount++;
-                        } catch (er) {
+                        } catch {
                             errorCount++;
                         }
                     }
-                } catch (er) {
+                } catch {
                     errorCount++;
                 }
             }
@@ -332,7 +331,6 @@ export default function ProductBatchNavigator({
                     waferSubstrate: substrate,
                     waferMaps: maps,
                     includeSubstrateSelected: !!substrate,
-                    selectedLayerKeys: [],
                     name: `${selectedProductId}/${selectedLotId}/${wafer.wafer_id}`,
                     note: `从批次 ${selectedLotId} 批量添加`
                 }));

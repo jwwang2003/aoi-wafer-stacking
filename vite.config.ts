@@ -7,6 +7,8 @@ import { visualizer } from "rollup-plugin-visualizer";
 const host = process.env.TAURI_DEV_HOST;
 // @ts-expect-error process is a nodejs global
 const ANALYZE = process.env.ANALYZE === 'true';
+// @ts-expect-error process is a nodejs global
+const ANALYZE_OPEN = process.env.ANALYZE_OPEN === 'true';
 
 export default defineConfig(async ({ command, mode }) => ({
   plugins: [
@@ -18,7 +20,7 @@ export default defineConfig(async ({ command, mode }) => ({
       gzipSize: true,
       brotliSize: true,
       sourcemap: true,
-      open: true,                      // auto-open after build
+      open: ANALYZE_OPEN,              // auto-open after build
     }),
   ].filter(Boolean),
 

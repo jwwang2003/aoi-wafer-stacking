@@ -41,24 +41,26 @@ import {
 import { MapData, BinMapData, AsciiDie, Wafer, isNumberBin, SubstrateDefectXlsResult, DieLayoutMap } from '@/types/ipc';
 
 import { LayerMeta } from './priority';
+import {
+    alignStackingLayers,
+    createSubstrateStackingLayer,
+    mergeStackingLayers,
+    sortStackingLayersByPriority,
+    type ParsedStackingLayer,
+} from './stackingLayers';
+import { buildSelectedLayerKeySet, waferMapLayerKey } from './layerSelection';
 import { exportWaferFiles } from './outputHandler';
-import { generateGridWithSubstrateDefects } from '@/utils/substrateMapping'
 
 import {
     getLayerPriority,
-    extractAlignmentMarkers,
-    calculateOffset,
-    createDieMapStructure,
-    mergeLayerToDieMap,
-    pruneEmptyRegions,
     calculateStatsFromDies,
-    applyOffsetToDies,
     extractWaferHeader,
     extractMapDataHeader,
     extractBinMapHeader,
 } from '@/utils/waferSubstrateRenderer';
 import { countBinValues, formatDateTime } from './renderUtils';
 import { createPassValueSet, DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
+import { buildBatchCompletionSummary, type BatchProcessingError } from './batchResults';
 
 interface BinValue {
     id: string;
@@ -74,6 +76,16 @@ interface BinConfigFile {
     };
     binValues: BinValue[];
 }
+
+type SubstrateDefect = {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    class: string;
+    area?: number;
+    contrast?: number;
+};
 
 export type OutputId = 'mapEx' | 'bin' | 'HEX' | 'image' | 'fab' | 'SILAN';
 export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
@@ -176,7 +188,7 @@ export default function WaferStacking() {
     const [imageRenderer, setImageRenderer] = useState<'bin' | 'substrate'>('bin');
     const [batchProcessing, setBatchProcessing] = useState(false);
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
-    const [batchErrors, setBatchErrors] = useState<Array<{ id: string; message: string }>>([]);
+    const [batchErrors, setBatchErrors] = useState<BatchProcessingError[]>([]);
     const [exportAsciiDieData, setExportAsciiDieData] = useState(() => {
         return localStorage.getItem(EDGE_REMOVAL_STORAGE_KEY) === 'true';
     });
@@ -391,12 +403,8 @@ export default function WaferStacking() {
                 }
             }
 
-            // Build selection using stage|substage keys to match job.selectedLayerKeys
-            const keyOf = (wm: typeof waferMaps[number]) => `${String(wm.stage ?? '').toLowerCase()}|${wm.sub_stage == null ? '' : String(wm.sub_stage)}`;
-            const candidateKeys = new Set(waferMaps.map(keyOf));
-            const selectedKeys = (jobItem.selectedLayerKeys && jobItem.selectedLayerKeys.length > 0)
-                ? new Set(jobItem.selectedLayerKeys.filter((k) => candidateKeys.has(String(k))))
-                : candidateKeys; // fallback: all candidates
+            // Build selection using stage|substage keys to match job.selectedLayerKeys.
+            const selectedKeys = buildSelectedLayerKeySet(waferMaps, jobItem.selectedLayerKeys);
 
             const selectedLayerInfo = [
                 ...((waferSubstrate && (jobItem.includeSubstrateSelected ?? !!waferSubstrate)) ? [{
@@ -404,7 +412,7 @@ export default function WaferStacking() {
                     filePath: waferSubstrate.file_path,
                     stage: DataSourceType.Substrate,
                 }] : []),
-                ...waferMaps.filter((wm) => selectedKeys.has(keyOf(wm))).map((wm) => ({
+                ...waferMaps.filter((wm) => selectedKeys.has(waferMapLayerKey(wm))).map((wm) => ({
                     layerType: 'map' as const,
                     filePath: wm.file_path,
                     stage: wm.stage as DataSourceType,
@@ -431,11 +439,11 @@ export default function WaferStacking() {
 
             const baseTargetDir = outputDir || finalOutputDir;
             const headers: Record<string, string>[] = [];
-            const originalDiesList: AsciiDie[][] = [];
-            const formatNamesList: string[] = [];
+            const parsedLayers: ParsedStackingLayer[] = [];
             let cp1Header: Record<string, string> = {};
             const tempCombinedHeaders: Record<string, string> = {};
-            let allSubstrateDefects: Array<{ x: number, y: number, w: number, h: number, class: string }> = [];
+            let allSubstrateDefects: SubstrateDefect[] = [];
+            let deferredSubstrateDefects: SubstrateDefect[] | null = null;
             let dieLayoutMap: DieLayoutMap | null = null;
             let layoutDies: AsciiDie[] | undefined;
 
@@ -453,8 +461,12 @@ export default function WaferStacking() {
             }
 
             if (layoutDies && layoutDies.length > 0) {
-                originalDiesList.push(layoutDies);
-                formatNamesList.push('DieLayout');
+                parsedLayers.push({
+                    name: 'DieLayout',
+                    priority: 100,
+                    header: {},
+                    dies: layoutDies,
+                });
                 headers.push({ 'LayerType': 'DieLayout', 'Priority': 'Highest' });
             }
 
@@ -546,16 +558,9 @@ export default function WaferStacking() {
 
                         console.log('筛选后参与叠图的缺陷数:', filteredSubstrateDefects.length);
 
-                        dies = generateGridWithSubstrateDefects(
-                            originalDiesList[0] || [],
-                            filteredSubstrateDefects,
-                            { width: currentDieSize.x, height: currentDieSize.y },
-                            currentSubstrateOffset,
-                            currentDefectSizeOffset.x,
-                            currentDefectSizeOffset.y,
-                            layoutDies
-                        );
+                        deferredSubstrateDefects = filteredSubstrateDefects;
                     }
+                    continue;
                 }
 
                 if (!content || dies.length === 0) continue;
@@ -563,47 +568,42 @@ export default function WaferStacking() {
                 Object.entries(header).forEach(([key, value]) => {
                     if (!(key in tempCombinedHeaders)) tempCombinedHeaders[key] = value;
                 });
-                originalDiesList.push(dies);
-                formatNamesList.push(layerName);
+                const layerMeta: LayerMeta = {
+                    stage: stage as DataSourceType,
+                    subStage: layer.layerType === 'map' ? layer.subStage : undefined,
+                };
+                parsedLayers.push({
+                    name: layerName,
+                    priority: getLayerPriority(layerMeta),
+                    header,
+                    dies,
+                });
                 headers.push(header);
             }
 
-            if (originalDiesList.length === 0) {
+            if (deferredSubstrateDefects) {
+                const substrateLayer = createSubstrateStackingLayer({
+                    baseLayer: parsedLayers[0],
+                    filteredSubstrateDefects: deferredSubstrateDefects,
+                    dieSize: { width: currentDieSize.x, height: currentDieSize.y },
+                    substrateOffset: currentSubstrateOffset,
+                    defectSizeOffset: currentDefectSizeOffset,
+                    layoutDies,
+                });
+
+                if (substrateLayer) {
+                    parsedLayers.push(substrateLayer);
+                    headers.push(substrateLayer.header);
+                }
+            }
+
+            if (parsedLayers.length === 0) {
                 throw new Error('没有有效的地图数据可供处理');
             }
 
-            const alignedDiesList: AsciiDie[][] = [];
-            const baseDies = originalDiesList[0];
-            const baseMarkers = extractAlignmentMarkers(baseDies).sort(
-                (a, b) => a.y - b.y || a.x - b.x
-            );
-            alignedDiesList.push(baseDies);
-
-            for (let i = 1; i < originalDiesList.length; i++) {
-                const currentDies = originalDiesList[i];
-                const currentMarkers = extractAlignmentMarkers(currentDies);
-                const { dx, dy } = calculateOffset(baseMarkers, currentMarkers);
-                alignedDiesList.push(applyOffsetToDies(currentDies, dx, dy));
-            }
-
-            const { dieMap } = createDieMapStructure(alignedDiesList);
-            alignedDiesList.forEach((dies, index) => {
-                let priority: number;
-                if (index === 0 && layoutDies && layoutDies.length > 0) {
-                    priority = 100;
-                } else {
-                    const layer = sortedLayers[index - (layoutDies ? 1 : 0)];
-                    if (!layer?.stage) return;
-                    const layerMeta: LayerMeta = {
-                        stage: layer.stage,
-                        subStage: layer.layerType === 'map' ? layer.subStage : undefined,
-                    };
-                    priority = getLayerPriority(layerMeta);
-                }
-                mergeLayerToDieMap(dieMap, dies, priority);
-            });
-
-            const mergedDies = pruneEmptyRegions(dieMap);
+            const orderedLayers = sortStackingLayersByPriority(parsedLayers);
+            const alignedLayers = alignStackingLayers(orderedLayers);
+            const mergedDies = mergeStackingLayers(alignedLayers);
             if (mergedDies.length === 0) {
                 throw new Error('处理后地图为空');
             }
@@ -738,40 +738,41 @@ export default function WaferStacking() {
         setBatchProcessing(true);
         setBatchProgress({ current: 0, total: jobsToProcess.length });
         setBatchErrors([]);
+        const nextBatchErrors: BatchProcessingError[] = [];
 
         for (let i = 0; i < jobsToProcess.length; i++) {
             const jobItem = jobsToProcess[i];
             try {
                 const result = await processSingleJob(jobItem, exportAsciiDieData);
                 if (!result.success) {
-                    setBatchErrors(prev => [...prev, {
+                    const error = {
                         id: result.jobId,
                         message: result.message || ''
-                    }]);
+                    };
+                    nextBatchErrors.push(error);
+                    setBatchErrors(prev => [...prev, error]);
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : String(error);
-                setBatchErrors(prev => [...prev, {
+                const batchError = {
                     id: jobItem.id,
                     message: errorMsg
-                }]);
+                };
+                nextBatchErrors.push(batchError);
+                setBatchErrors(prev => [...prev, batchError]);
             } finally {
                 setBatchProgress(prev => ({ ...prev, current: i + 1 }));
             }
         }
 
+        setBatchErrors(nextBatchErrors);
         setBatchProcessing(false);
-        if (batchErrors.length > 0) {
-            errorToast({
-                title: '批量处理完成',
-                message: `共 ${jobsToProcess.length} 个任务，成功 ${jobsToProcess.length - batchErrors.length} 个，失败 ${batchErrors.length} 个`
-            });
-        } else {
-            infoToast({
-                title: '批量处理完成',
-                message: `全部 ${jobsToProcess.length} 个任务处理成功`
-            });
-        }
+        const summary = buildBatchCompletionSummary(jobsToProcess.length, nextBatchErrors);
+        const toast = summary.ok ? infoToast : errorToast;
+        toast({
+            title: summary.title,
+            message: summary.message
+        });
         try {
             const oemIds = getAllOemIdsFromQueue();
             await exportWaferStatsReport(oemIds, outputDir);
