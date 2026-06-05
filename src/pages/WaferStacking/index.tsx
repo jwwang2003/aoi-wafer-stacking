@@ -26,27 +26,17 @@ import { toWaferFileMetadata } from '@/types/helpers';
 
 import { JobItem, JobStatus, queueUpdateJob, queueSetActive, queueResetAllStatus, queueClearCompleted, queueClearAll } from '@/slices/job';
 
-import { DEFAULT_BIN_VALUES_CONFIG } from '@/pages/Config/binConfig';
+import {
+    DEFAULT_BIN_VALUES_CONFIG,
+    getGoodBinIdsFromConfig,
+    type BinConfig,
+    type BinConfigFile,
+} from '@/pages/Config/binConfig';
 import { buildBatchCompletionSummary, type BatchProcessingError } from './batchResults';
 import {
     processWaferStackingJob,
     type WaferStackingOutputId,
 } from './jobProcessor';
-
-interface BinValue {
-    id: string;
-    label: string;
-    isGoodBin: boolean;
-    order?: number;
-}
-
-interface BinConfigFile {
-    binMappingRule: {
-        startNumber: number;
-        startLetter: string;
-    };
-    binValues: BinValue[];
-}
 
 export type OutputId = WaferStackingOutputId;
 export type BinId = 'Unclassified' | 'Particle' | 'Pit' | 'Bump' | 'MicroPipe' | 'Line' | 'Carrot' | 'Triangle' | 'Downfall' | 'Scratch' | 'PL_Black' | 'PL_White' | 'PL_BPD' | 'PL_SF' | 'PL_BSF';
@@ -113,6 +103,12 @@ const OUTPUT_OPTIONS2 = [
 ] as const satisfies readonly OutputOption2[];
 
 const EDGE_REMOVAL_STORAGE_KEY = 'wafer_edge_removal_enabled';
+const EDGE_REMOVAL_FAIL_BINS_STORAGE_KEY = 'wafer_edge_removal_fail_bins';
+
+const DEFAULT_BIN_CONFIG: BinConfigFile = {
+    binMappingRule: { startNumber: 10, startLetter: 'A' },
+    binValues: DEFAULT_BIN_VALUES_CONFIG,
+};
 
 const asDefectClass = (binId: BinId): string => binId as string;
 
@@ -132,10 +128,15 @@ export default function WaferStacking() {
     const [batchProcessing, setBatchProcessing] = useState(false);
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
     const [batchErrors, setBatchErrors] = useState<BatchProcessingError[]>([]);
-    const [exportAsciiDieData, setExportAsciiDieData] = useState(() => {
+    const [edgeRemovalEnabled, setEdgeRemovalEnabled] = useState(() => {
         return localStorage.getItem(EDGE_REMOVAL_STORAGE_KEY) === 'true';
     });
     const [goodBins, setGoodBins] = useState<string[]>([]);
+    const [edgeRemovalBinOptions, setEdgeRemovalBinOptions] = useState<BinConfig[]>(() =>
+        DEFAULT_BIN_VALUES_CONFIG
+    );
+    const [edgeRemovalFailBins, setEdgeRemovalFailBins] = useState<string[]>([]);
+    const [edgeRemovalBinsLoaded, setEdgeRemovalBinsLoaded] = useState(false);
 
     const renderBinLabel = (opt: OutputOption2) => {
         const color = colorMap.get(opt.id) ?? 0x999999;
@@ -271,44 +272,65 @@ export default function WaferStacking() {
     }, [outputDir]);
 
     useEffect(() => {
-        localStorage.setItem(EDGE_REMOVAL_STORAGE_KEY, String(exportAsciiDieData));
-    }, [exportAsciiDieData]);
+        localStorage.setItem(EDGE_REMOVAL_STORAGE_KEY, String(edgeRemovalEnabled));
+    }, [edgeRemovalEnabled]);
 
     useEffect(() => {
-        const goodBinIdsFromConfig = (config: BinConfigFile) => config.binValues
-            .filter((bin: BinValue) => bin.isGoodBin)
-            .map((bin: BinValue) => bin.id);
+        if (!edgeRemovalBinsLoaded) return;
+        localStorage.setItem(EDGE_REMOVAL_FAIL_BINS_STORAGE_KEY, JSON.stringify(edgeRemovalFailBins));
+    }, [edgeRemovalBinsLoaded, edgeRemovalFailBins]);
 
-        const loadGoodBins = () => {
+    useEffect(() => {
+        const loadStoredEdgeRemovalBins = (config: BinConfigFile): string[] => {
+            const allBinIds = config.binValues.map(bin => bin.id);
+            const defaultSelectedBinIds = config.binValues
+                .filter(bin => !bin.isGoodBin)
+                .map(bin => bin.id);
+            const saved = localStorage.getItem(EDGE_REMOVAL_FAIL_BINS_STORAGE_KEY);
+            if (!saved) return defaultSelectedBinIds;
+
+            try {
+                const parsed = JSON.parse(saved);
+                if (!Array.isArray(parsed)) return defaultSelectedBinIds;
+                const validBinIds = new Set(allBinIds);
+                return parsed.filter((binId): binId is string =>
+                    typeof binId === 'string' && validBinIds.has(binId)
+                );
+            } catch (e) {
+                console.error('加载 edge removal bins 失败', e);
+                return defaultSelectedBinIds;
+            }
+        };
+
+        const applyBinConfig = (config: BinConfigFile) => {
+            setGoodBins(getGoodBinIdsFromConfig(config));
+            setEdgeRemovalBinOptions(config.binValues);
+            setEdgeRemovalFailBins(loadStoredEdgeRemovalBins(config));
+            setEdgeRemovalBinsLoaded(true);
+        };
+
+        const loadBinConfig = () => {
             const saved = localStorage.getItem('bin_config');
             if (saved) {
                 try {
-                    const config = JSON.parse(saved) as BinConfigFile;
-                    setGoodBins(goodBinIdsFromConfig(config));
+                    applyBinConfig(JSON.parse(saved) as BinConfigFile);
+                    return;
                 } catch (e) {
-                    console.error('加载 good bins 失败', e);
-                    setGoodBins(goodBinIdsFromConfig({
-                        binMappingRule: { startNumber: 10, startLetter: 'A' },
-                        binValues: DEFAULT_BIN_VALUES_CONFIG
-                    }));
+                    console.error('加载 bin config 失败', e);
                 }
-            } else {
-                setGoodBins(goodBinIdsFromConfig({
-                    binMappingRule: { startNumber: 10, startLetter: 'A' },
-                    binValues: DEFAULT_BIN_VALUES_CONFIG
-                }));
             }
+            applyBinConfig(DEFAULT_BIN_CONFIG);
         };
-        loadGoodBins();
+
+        loadBinConfig();
         const handleConfigChange = (event: CustomEvent) => {
-            const config = event.detail as BinConfigFile;
-            setGoodBins(goodBinIdsFromConfig(config));
+            applyBinConfig(event.detail as BinConfigFile);
         };
         window.addEventListener('binConfigChanged', handleConfigChange as EventListener);
         return () => window.removeEventListener('binConfigChanged', handleConfigChange as EventListener);
     }, []);
 
-    const processSingleJob = async (jobItem: JobItem, exportAsciiData: boolean = false) => {
+    const processSingleJob = async (jobItem: JobItem, useEdgeRemoval: boolean = false) => {
         dispatch(queueUpdateJob({
             id: jobItem.id,
             changes: { status: 'active' }
@@ -322,8 +344,9 @@ export default function WaferStacking() {
                 selectedOutputs,
                 selectedDefectClasses: selectedOutputs2.map(asDefectClass),
                 imageRenderer,
-                exportAsciiData,
+                edgeRemovalEnabled: useEdgeRemoval,
                 goodBins,
+                edgeRemovalFailBins,
                 onFinalOutputDir: setFinalOutputDir,
             });
 
@@ -366,7 +389,7 @@ export default function WaferStacking() {
                 waferMaps: layerChoice.maps,
             };
 
-            const result = await processSingleJob(tempJob, exportAsciiDieData);
+            const result = await processSingleJob(tempJob, edgeRemovalEnabled);
             if (result.success) {
                 infoToast({ title: '成功', message: '当前任务处理完成' });
             } else {
@@ -403,7 +426,7 @@ export default function WaferStacking() {
         for (let i = 0; i < jobsToProcess.length; i++) {
             const jobItem = jobsToProcess[i];
             try {
-                const result = await processSingleJob(jobItem, exportAsciiDieData);
+                const result = await processSingleJob(jobItem, edgeRemovalEnabled);
                 if (!result.success) {
                     const error = {
                         id: result.jobId,
@@ -495,6 +518,24 @@ export default function WaferStacking() {
                                         key={opt.id}
                                         value={opt.id}
                                         label={renderBinLabel(opt)}
+                                    />
+                                ))}
+                            </SimpleGrid>
+                        </Checkbox.Group>
+
+                        <Checkbox.Group
+                            label="选择参与失效边缘去除的BIN"
+                            value={edgeRemovalFailBins}
+                            onChange={(vals) => setEdgeRemovalFailBins(vals as string[])}
+                            style={{ flex: 1 }}
+                        >
+                            <SimpleGrid cols={3} spacing="sm" mt="xs">
+                                {edgeRemovalBinOptions.map((bin) => (
+                                    <Checkbox
+                                        key={bin.id}
+                                        value={bin.id}
+                                        label={bin.label}
+                                        disabled={!edgeRemovalEnabled || processing || batchProcessing}
                                     />
                                 ))}
                             </SimpleGrid>
@@ -656,8 +697,8 @@ export default function WaferStacking() {
                         </Stack>
                         <Group align="end" grow>
                             <Checkbox
-                                checked={exportAsciiDieData}
-                                onChange={(e) => setExportAsciiDieData(e.target.checked)}
+                                checked={edgeRemovalEnabled}
+                                onChange={(e) => setEdgeRemovalEnabled(e.target.checked)}
                                 label="失效DIE边缘去除"
                                 disabled={processing || batchProcessing}
                                 size="sm"

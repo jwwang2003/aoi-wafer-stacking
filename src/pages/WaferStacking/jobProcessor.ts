@@ -66,8 +66,9 @@ export interface WaferStackingJobOptions {
     selectedOutputs: WaferStackingOutputId[];
     selectedDefectClasses: string[];
     imageRenderer: 'bin' | 'substrate';
-    exportAsciiData: boolean;
+    edgeRemovalEnabled: boolean;
     goodBins: string[];
+    edgeRemovalFailBins: string[];
     onFinalOutputDir?: (outputRootDir: string) => void;
 }
 
@@ -415,14 +416,14 @@ export async function processWaferStackingJob(
         throw new Error('没有有效的地图数据可供处理');
     }
 
+    const passValues = createPassValueSet(options.goodBins);
     const orderedLayers = sortStackingLayersByPriority(parsedLayers);
     const alignedLayers = alignStackingLayers(orderedLayers);
-    const mergedDies = mergeStackingLayers(alignedLayers);
+    const mergedDies = mergeStackingLayers(alignedLayers, passValues);
     if (mergedDies.length === 0) {
         throw new Error('处理后地图为空');
     }
 
-    const passValues = createPassValueSet(options.goodBins);
     const stats = calculateStatsFromDies(mergedDies, passValues);
     const statsToSave = createStatsRecord(jobItem, mergedDies, stats, deps.now);
 
@@ -460,8 +461,9 @@ export async function processWaferStackingJob(
         allSubstrateDefects,
         currentDieSize,
         currentSubstrateOffset,
-        exportAsciiData: options.exportAsciiData,
         selectedPassBins: options.goodBins,
+        edgeRemovalEnabled: options.edgeRemovalEnabled,
+        edgeRemovalFailBins: options.edgeRemovalFailBins,
     });
 
     return {

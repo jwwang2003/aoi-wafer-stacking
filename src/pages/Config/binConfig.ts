@@ -1,3 +1,5 @@
+import type { BinValue } from '@/types/ipc';
+
 export interface BinConfig {
     id: string;
     label: string;
@@ -97,6 +99,42 @@ export const binIdToPassValues = (binId: string): string[] => {
 
 export const createPassValueSet = (binIds: string[]): Set<string> => {
     return new Set(binIds.flatMap(binIdToPassValues));
+};
+
+export const getGoodBinIdsFromConfig = (config: BinConfigFile): string[] => {
+    return config.binValues.filter(bin => bin.isGoodBin).map(bin => bin.id);
+};
+
+export const getBadBinIdsFromConfig = (config: BinConfigFile): string[] => {
+    return config.binValues.filter(bin => !bin.isGoodBin).map(bin => bin.id);
+};
+
+export const binValueToComparableValues = (bin: BinValue): string[] => {
+    const values = new Set<string>();
+
+    if ('number' in bin) {
+        const numericValue = bin.number.toString();
+        values.add(numericValue);
+        values.add(numberToBinLetter(bin.number));
+    } else {
+        const specialValue = bin.special || '';
+        if (specialValue) {
+            values.add(specialValue);
+        }
+        if (/^[A-Z]+$/i.test(specialValue)) {
+            const numericValue = binLetterToNumber(specialValue);
+            if (numericValue !== null) {
+                values.add(numericValue.toString());
+                values.add(numberToBinLetter(numericValue));
+            }
+        }
+    }
+
+    return Array.from(values);
+};
+
+export const binValueMatchesValues = (bin: BinValue, values: Set<string>): boolean => {
+    return binValueToComparableValues(bin).some(value => values.has(value));
 };
 
 export const getAllBinIds = (): string[] => {

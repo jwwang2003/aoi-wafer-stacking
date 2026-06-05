@@ -13,6 +13,7 @@ import {
     SilanMapData,
 } from '@/types/ipc';
 import { PRIORITY_RULES, LayerMeta, PASS_VALUES } from '@/pages/WaferStacking/priority';
+import { binValueMatchesValues } from '@/pages/Config/binConfig';
 
 export const getLayerPriority = (meta: LayerMeta): number => {
     const matchedRule = PRIORITY_RULES.find((rule) => rule.when(meta));
@@ -81,7 +82,8 @@ export const createDieMapStructure = (
 export const mergeLayerToDieMap = (
     dieMap: Map<string, { die: AsciiDie; priority: number }>,
     dies: AsciiDie[],
-    layerPriority: number
+    layerPriority: number,
+    passValues: Set<string> = PASS_VALUES
 ) => {
     dies.forEach(die => {
         const isImportantMarker = isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special);
@@ -112,10 +114,7 @@ export const mergeLayerToDieMap = (
         } else if (layerPriority > existing.priority) {
             shouldOverwrite = true;
         } else if (layerPriority < existing.priority) {
-            const existingValue = 'number' in existing.die.bin
-                ? existing.die.bin.number.toString()
-                : existing.die.bin.special;
-            shouldOverwrite = existingValue === '1';
+            shouldOverwrite = binValueMatchesValues(existing.die.bin, passValues);
         }
 
         if (shouldOverwrite) {
@@ -185,11 +184,7 @@ export const calculateStatsFromDies = (
         }
         totalTested++;
 
-        const binValue = isNumberBin(die.bin)
-            ? die.bin.number.toString()
-            : die.bin.special;
-
-        if (passValues.has(binValue)) {
+        if (binValueMatchesValues(die.bin, passValues)) {
             totalPass++;
         }
     });

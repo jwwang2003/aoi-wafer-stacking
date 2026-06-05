@@ -82,8 +82,9 @@ const createOptions = (
     selectedOutputs: ['mapEx', 'bin'],
     selectedDefectClasses: [],
     imageRenderer: 'bin',
-    exportAsciiData: false,
+    edgeRemovalEnabled: false,
     goodBins: ['BIN 1'],
+    edgeRemovalFailBins: ['BIN 2'],
     ...overrides,
 });
 
@@ -151,8 +152,9 @@ describe('processWaferStackingJob', () => {
             allSubstrateDefects: [],
             currentDieSize: { x: 1.5, y: 2.5 },
             currentSubstrateOffset: { x: 3, y: 4 },
-            exportAsciiData: false,
             selectedPassBins: ['BIN 1'],
+            edgeRemovalEnabled: false,
+            edgeRemovalFailBins: ['BIN 2'],
         }));
         expect(result).toEqual({
             jobId: 'job-1',
@@ -224,6 +226,22 @@ describe('processWaferStackingJob', () => {
                 { x: 1, y: 0, bin: { special: 'E' } },
                 { x: 0, y: 1, bin: { number: 1 } },
             ]),
+        }));
+    });
+
+    it('keeps stacking pass bins separate from edge-removal fail bins for export', async () => {
+        const deps = createDependencies();
+
+        await processWaferStackingJob(createJob(), createOptions({
+            goodBins: ['BIN 1', 'BIN 16'],
+            edgeRemovalEnabled: true,
+            edgeRemovalFailBins: ['BIN 3'],
+        }), deps);
+
+        expect(deps.exportWaferFiles).toHaveBeenCalledWith(expect.objectContaining({
+            selectedPassBins: ['BIN 1', 'BIN 16'],
+            edgeRemovalEnabled: true,
+            edgeRemovalFailBins: ['BIN 3'],
         }));
     });
 });

@@ -32,8 +32,9 @@ export interface WaferOutputConfig {
     allSubstrateDefects: Array<{ x: number; y: number; w: number; h: number; class: string }>;
     currentDieSize: { x: number; y: number };
     currentSubstrateOffset: { x: number; y: number };
-    exportAsciiData: boolean;
     selectedPassBins: string[];
+    edgeRemovalEnabled: boolean;
+    edgeRemovalFailBins: string[];
 }
 
 export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
@@ -107,9 +108,13 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     const mapExSubDir = await join(outputRootDir, 'Ink');
     await mkdir(mapExSubDir, { recursive: true });
 
-    const goodValues = createPassValueSet(config.selectedPassBins);
-    const { processedDies } = processInkRules(mergedDies, { goodValues });
-    const inkStats = calculateStatsFromDies(processedDies, goodValues);
+    const passValues = createPassValueSet(config.selectedPassBins);
+    const failValues = createPassValueSet(config.edgeRemovalFailBins);
+    const { processedDies } = processInkRules(mergedDies, {
+        goodValues: passValues,
+        failValues,
+    });
+    const inkStats = calculateStatsFromDies(processedDies, passValues);
     console.log('Ink Stats:', inkStats);
     if (selectedOutputs.includes('mapEx')) {
         const mapExData = convertToMapData(processedDies, inkStats, useHeader);
@@ -132,8 +137,8 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     if (selectedOutputs.includes('image')) {
         const imagePath = await join(mapExSubDir, `${baseFileName}_overlayed.jpg`);
         const imageData = imageRenderer === 'substrate'
-            ? await renderSubstrateAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, goodValues)
-            : await renderAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, goodValues);
+            ? await renderSubstrateAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, passValues)
+            : await renderAsJpg(processedDies, allSubstrateDefects, currentDieSize.x, currentDieSize.y, currentSubstrateOffset, useHeader, passValues);
         await exportWaferJpg(imageData, imagePath);
     }
 };
@@ -144,7 +149,7 @@ export const exportWaferFiles = async (config: WaferOutputConfig) => {
     await exportNormalWaferFiles(config);
 
     // 输出INK文件
-    if (config.exportAsciiData) {
+    if (config.edgeRemovalEnabled) {
         await exportInkWaferFiles(config);
     }
 };
