@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    binValueMatchesValues,
+    binValueToComparableValues,
     binIdToPassValues,
     binLetterToNumber,
     createPassValueSet,
@@ -39,5 +41,14 @@ describe('binConfig', () => {
         expect(createPassValueSet(['BIN 1', 'BIN 16', 'manual'])).toEqual(
             new Set(['1', '16', 'G', 'manual']),
         );
+    });
+
+    it('matches bin values against numeric and letter aliases', () => {
+        const passValues = createPassValueSet(['BIN 16']);
+
+        expect(binValueToComparableValues({ number: 16 })).toEqual(['16', 'G']);
+        expect(binValueMatchesValues({ number: 16 }, passValues)).toBe(true);
+        expect(binValueMatchesValues({ special: 'G' }, passValues)).toBe(true);
+        expect(binValueMatchesValues({ special: 'z' }, passValues)).toBe(false);
     });
 });

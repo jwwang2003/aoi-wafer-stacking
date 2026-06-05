@@ -1,5 +1,6 @@
 import type { AsciiDie } from '@/types/ipc';
 import { DataSourceType } from '@/types/dataSource';
+import { PASS_VALUES } from './priority';
 import {
     generateGridWithSubstrateDefects,
     type DefectRect,
@@ -47,10 +48,13 @@ export function alignStackingLayers(layers: ParsedStackingLayer[]): ParsedStacki
     });
 }
 
-export function mergeStackingLayers(layers: ParsedStackingLayer[]): AsciiDie[] {
+export function mergeStackingLayers(
+    layers: ParsedStackingLayer[],
+    passValues: Set<string> = PASS_VALUES
+): AsciiDie[] {
     if (layers.length === 0) return [];
     const { dieMap } = createDieMapStructure(layers.map((layer) => layer.dies));
-    layers.forEach((layer) => mergeLayerToDieMap(dieMap, layer.dies, layer.priority));
+    layers.forEach((layer) => mergeLayerToDieMap(dieMap, layer.dies, layer.priority, passValues));
     return pruneEmptyRegions(dieMap);
 }
 

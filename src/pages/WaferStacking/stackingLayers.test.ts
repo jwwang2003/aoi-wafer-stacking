@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createPassValueSet } from '@/pages/Config/binConfig';
 import type { AsciiDie } from '@/types/ipc';
 import {
     alignStackingLayers,
@@ -111,6 +112,22 @@ describe('stackingLayers', () => {
 
         const orderedLayers = sortStackingLayersByPriority([cpLayer, aoiLayer, substrateLayer!]);
         const merged = mergeStackingLayers(alignStackingLayers(orderedLayers));
+
+        expect(findDie(merged, 0, 0)?.bin).toEqual({ number: 2 });
+    });
+
+    it('uses configured pass bins when a lower-priority failure overlays a higher-priority pass die', () => {
+        const cpLayer = createLayer('CP2', 6, [
+            { x: 0, y: 0, bin: { number: 16 } },
+        ]);
+        const aoiLayer = createLayer('AOI', 1, [
+            { x: 0, y: 0, bin: { number: 2 } },
+        ]);
+
+        const merged = mergeStackingLayers(
+            [cpLayer, aoiLayer],
+            createPassValueSet(['BIN 16'])
+        );
 
         expect(findDie(merged, 0, 0)?.bin).toEqual({ number: 2 });
     });

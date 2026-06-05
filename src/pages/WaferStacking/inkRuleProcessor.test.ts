@@ -50,4 +50,19 @@ describe('processInkRules', () => {
 
         expect(processedDies.find(die => die.x === 0 && die.y === 0)?.bin).toEqual({ number: 16 });
     });
+
+    it('only counts selected fail bins when failValues are provided', () => {
+        const dies: AsciiDie[] = [
+            { x: 0, y: 0, bin: { number: 16 } },
+            { x: -1, y: 0, bin: { number: 2 } },
+            { x: 1, y: 0, bin: { number: 3 } },
+        ];
+
+        const { processedDies } = processInkRules(dies, {
+            goodValues: createPassValueSet(['BIN 16']),
+            failValues: createPassValueSet(['BIN 2']),
+        });
+
+        expect(processedDies.find(die => die.x === 0 && die.y === 0)?.bin).toEqual({ number: 16 });
+    });
 });
