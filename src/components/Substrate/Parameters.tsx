@@ -70,8 +70,8 @@ export default function Parameters({
     minDie = 0,
     maxDie = 50,
     // Defect size offset
-    minDefectSizeOffset = -10,
-    maxDefectSizeOffset = 10,
+    minDefectSizeOffset = -1000,
+    maxDefectSizeOffset = 1000,
     stepDefectSizeOffset = 0.001,
     stepDie = 0.001,
 }: ParametersProps) {
@@ -151,7 +151,9 @@ export default function Parameters({
         return nx !== lx || ny !== ly || !dbHasOffset;
     };
 
-    const DefectclampOff = (v: number) => Math.min(maxDefectSizeOffset, Math.max(minDefectSizeOffset, v));
+    // const DefectclampOff = (v: number) => Math.min(maxDefectSizeOffset, Math.max(minDefectSizeOffset, v));
+    const clampDefectSliderValue = (v: number) => Math.min(maxDefectSizeOffset, Math.max(minDefectSizeOffset, v));
+    const normalizeDefectOffsetInput = (v: number) => Number.isFinite(v) ? v : 0;
     const changedDefectSizeOffset = (nx: number, ny: number) => {
         const { x: lx, y: ly } = lastSavedDefectSizeOffsetRef.current;
         return nx !== lx || ny !== ly || !dbHasDefectSizeOffset;
@@ -176,8 +178,8 @@ export default function Parameters({
     };
 
     const persistDefectSizeOffsets = async (nx = defectSizeOffsetX, ny = defectSizeOffsetY) => {
-        const cx = DefectclampOff(nx);
-        const cy = DefectclampOff(ny);
+        const cx = normalizeDefectOffsetInput(nx);
+        const cy = clampDefectSliderValue(ny);
         if (!changedDefectSizeOffset(cx, cy)) return;
 
         setSavingDefectSizeOffset(true);
@@ -275,12 +277,12 @@ export default function Parameters({
         persistOffsets(xOffset, ny);
     };
     const onDefectXOffBlur = () => {
-        const nx = clampOff(Number.isFinite(defectSizeOffsetX) ? defectSizeOffsetX : 0);
+        const nx = normalizeDefectOffsetInput(defectSizeOffsetX );
         if (nx !== defectSizeOffsetX) setDefectSizeOffsetX(nx);
         persistDefectSizeOffsets(nx, defectSizeOffsetY);
     };
     const onDefectYOffBlur = () => {
-        const ny = clampOff(Number.isFinite(defectSizeOffsetY) ? defectSizeOffsetY : 0);
+        const ny = normalizeDefectOffsetInput(defectSizeOffsetY);
         if (ny !== defectSizeOffsetY) setDefectSizeOffsetY(ny);
         persistDefectSizeOffsets(defectSizeOffsetX, ny);
     };
@@ -675,14 +677,11 @@ export default function Parameters({
                             w={120}
                             value={defectSizeOffsetX}
                             step={stepDefectSizeOffset}
-                            min={minDefectSizeOffset}
-                            max={maxDefectSizeOffset}
                             disabled={defectOffsetControlsDisabled}
                             onChange={onDefectXOffInputChange}
                             onBlur={onDefectXOffBlur}
                             onKeyDown={onDefectXOffKeyDown}
                             decimalScale={6}
-                            clampBehavior="strict"
                             suffix=" um"
                         />
                     </Group>
@@ -690,7 +689,7 @@ export default function Parameters({
                         min={minDefectSizeOffset}
                         max={maxDefectSizeOffset}
                         step={stepDefectSizeOffset}
-                        value={defectSizeOffsetX}
+                        value={clampDefectSliderValue(defectSizeOffsetX)}
                         disabled={defectOffsetControlsDisabled}
                         onChange={setDefectSizeOffsetX}
                         onChangeEnd={(val) => persistDefectSizeOffsets(val, defectSizeOffsetY)}
@@ -711,14 +710,11 @@ export default function Parameters({
                             w={120}
                             value={defectSizeOffsetY}
                             step={stepDefectSizeOffset}
-                            min={minDefectSizeOffset}
-                            max={maxDefectSizeOffset}
                             disabled={defectOffsetControlsDisabled}
                             onChange={onDefectYOffInputChange}
                             onBlur={onDefectYOffBlur}
                             onKeyDown={onDefectYOffKeyDown}
                             decimalScale={6}
-                            clampBehavior="strict"
                             suffix=" um"
                         />
                     </Group>
@@ -726,7 +722,7 @@ export default function Parameters({
                         min={minDefectSizeOffset}
                         max={maxDefectSizeOffset}
                         step={stepDefectSizeOffset}
-                        value={defectSizeOffsetY}
+                        value={clampDefectSliderValue(defectSizeOffsetY)}
                         disabled={defectOffsetControlsDisabled}
                         onChange={setDefectSizeOffsetY}
                         onChangeEnd={(val) => persistDefectSizeOffsets(defectSizeOffsetX, val)}
