@@ -69,6 +69,8 @@ export interface WaferStackingJobOptions {
     edgeRemovalEnabled: boolean;
     goodBins: string[];
     edgeRemovalFailBins: string[];
+    gdbnRuleEnabled: boolean;
+    gdbnMinRunLength?: number;
     onFinalOutputDir?: (outputRootDir: string) => void;
 }
 
@@ -464,6 +466,8 @@ export async function processWaferStackingJob(
         selectedPassBins: options.goodBins,
         edgeRemovalEnabled: options.edgeRemovalEnabled,
         edgeRemovalFailBins: options.edgeRemovalFailBins,
+        gdbnRuleEnabled: options.gdbnRuleEnabled,
+        gdbnMinRunLength: options.gdbnMinRunLength,
     });
 
     return {
