@@ -19,6 +19,7 @@ import {
     calculateStatsFromDies,
     convertToSilanMapData,
     convertToFabWafer,
+    type GridBounds,
 } from '@/utils/waferSubstrateRenderer';
 import { createPassValueSet } from '@/pages/Config/binConfig';
 
@@ -26,6 +27,8 @@ export interface WaferOutputConfig {
     baseFileName: string;
     outputRootDir: string;
     mergedDies: AsciiDie[];
+    /** 输入图完整网格范围（含只有 '.' 的行列），输出图按此范围framing */
+    gridBounds?: GridBounds;
     stats: ReturnType<typeof calculateStatsFromDies>;
     useHeader: Record<string, string>;
     selectedOutputs: ('mapEx' | 'bin' | 'HEX' | 'image' | 'fab' | 'SILAN')[];
@@ -45,6 +48,7 @@ export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
         baseFileName,
         outputRootDir,
         mergedDies,
+        gridBounds,
         stats,
         useHeader,
         selectedOutputs,
@@ -56,13 +60,13 @@ export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
     const passValues = createPassValueSet(config.selectedPassBins);
 
     if (selectedOutputs.includes('mapEx')) {
-        const mapExData = convertToMapData(mergedDies, stats, useHeader);
+        const mapExData = convertToMapData(mergedDies, stats, useHeader, gridBounds);
         const mapExPath = await join(outputRootDir, `${baseFileName}_overlayed.txt`);
         await exportWaferMapData(mapExData, mapExPath);
     }
 
     if (selectedOutputs.includes('HEX')) {
-        const hexData = convertToHexMapData(mergedDies, useHeader);
+        const hexData = convertToHexMapData(mergedDies, useHeader, gridBounds);
         const hexPath = await join(outputRootDir, `${baseFileName}_overlayed.sinf`);
         await exportWaferHex(hexData, hexPath);
     }
@@ -82,13 +86,13 @@ export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
     }
 
     if (selectedOutputs.includes('SILAN')) {
-        const silanData = convertToSilanMapData(mergedDies, stats, useHeader);
+        const silanData = convertToSilanMapData(mergedDies, stats, useHeader, gridBounds);
         const silanPath = await join(outputRootDir, `${baseFileName}_SILAN.txt`);
         await exportWaferSilan(silanData, silanPath);
     }
 
     if (selectedOutputs.includes('fab')) {
-        const fabData = convertToFabWafer(mergedDies, stats, useHeader);
+        const fabData = convertToFabWafer(mergedDies, stats, useHeader, gridBounds);
         const fabPath = await join(outputRootDir, `${baseFileName}_FAB.txt`);
         await exportFab(fabData, fabPath);
     }
@@ -100,6 +104,7 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
         baseFileName,
         outputRootDir,
         mergedDies,
+        gridBounds,
         useHeader,
         selectedOutputs,
         imageRenderer,
@@ -130,13 +135,13 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
     const inkStats = calculateStatsFromDies(processedDies, passValues);
     console.log('Ink Stats:', inkStats);
     if (selectedOutputs.includes('mapEx')) {
-        const mapExData = convertToMapData(processedDies, inkStats, useHeader);
+        const mapExData = convertToMapData(processedDies, inkStats, useHeader, gridBounds);
         const mapExPath = await join(mapExSubDir, `${baseFileName}_overlayed.txt`);
         await exportWaferMapData(mapExData, mapExPath);
     }
 
     if (selectedOutputs.includes('HEX')) {
-        const hexData = convertToHexMapData(processedDies, useHeader);
+        const hexData = convertToHexMapData(processedDies, useHeader, gridBounds);
         const hexPath = await join(mapExSubDir, `${baseFileName}_overlayed.sinf`);
         await exportWaferHex(hexData, hexPath);
     }

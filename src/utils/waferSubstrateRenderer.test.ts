@@ -169,4 +169,47 @@ describe('waferSubstrateRenderer', () => {
             yMax: 4,
         });
     });
+
+    it('keeps all-dot border rows and columns when input grid bounds are provided', () => {
+        const gridBounds = { minX: -1, maxX: 2, minY: -1, maxY: 2 };
+
+        const mapResult = convertToMapData(dies, stats, header, gridBounds);
+        expect(mapResult.mapColumns).toBe(4);
+        expect(mapResult.mapRows).toBe(4);
+        expect(mapResult.map.raw).toEqual(['....', '.12.', '.SG.', '....']);
+
+        const fabResult = convertToFabWafer(dies, stats, header, gridBounds);
+        expect(fabResult.map.raw).toEqual(['....', '.12.', '.SG.', '....']);
+
+        const hexResult = convertToHexMapData(dies, header, gridBounds);
+        expect(hexResult.header.rowCt).toBe(4);
+        expect(hexResult.header.colCt).toBe(4);
+        expect(hexResult.map.grid).toEqual([
+            [null, null, null, null],
+            [null, 1, 2, null],
+            [null, null, 16, null],
+            [null, null, null, null],
+        ]);
+
+        const silanResult = convertToSilanMapData(dies, stats, header, gridBounds);
+        expect(silanResult.sum).toMatchObject({
+            xMin: -1,
+            yMin: -1,
+            xMax: 2,
+            yMax: 2,
+        });
+    });
+
+    it('expands grid bounds to cover dies outside the declared input grid', () => {
+        const result = convertToMapData(dies, stats, header, {
+            minX: 0,
+            maxX: 0,
+            minY: 0,
+            maxY: 0,
+        });
+
+        expect(result.mapColumns).toBe(2);
+        expect(result.mapRows).toBe(2);
+        expect(result.map.raw).toEqual(['12', 'SG']);
+    });
 });

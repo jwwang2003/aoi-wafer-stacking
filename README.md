@@ -96,7 +96,7 @@ cargo test --no-default-features
 The current `v1.0.12` release prep passed:
 
 - `tsc --noEmit`
-- `vitest run` / `pnpm run test:unit`: 44 tests
+- `vitest run` / `pnpm run test:unit`: 48 tests
 - `eslint ./src`
 - `cargo test --no-default-features`: 13 tests
 - `pnpm run build`
