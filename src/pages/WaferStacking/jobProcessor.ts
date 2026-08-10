@@ -32,6 +32,7 @@ import {
     extractMapDataHeader,
     extractWaferHeader,
     getLayerPriority,
+    type GridBounds,
 } from '@/utils/waferSubstrateRenderer';
 import { createPassValueSet } from '@/pages/Config/binConfig';
 
@@ -41,6 +42,7 @@ import { LayerMeta } from './priority';
 import { countBinValues, formatDateTime } from './renderUtils';
 import {
     alignStackingLayers,
+    computeStackingGridBounds,
     createSubstrateStackingLayer,
     mergeStackingLayers,
     sortStackingLayersByPriority,
@@ -241,13 +243,34 @@ async function loadLayoutDies(
     }
 }
 
+/**
+ * 由地图尺寸推出完整网格范围，坐标系与 Rust 解析器一致：
+ * 列 0 -> x0 = -(cols / 2)，行 0 -> y0 = -(rows / 2)。
+ */
+const gridBoundsFromDims = (cols: number, rows: number): GridBounds | undefined => {
+    if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) {
+        return undefined;
+    }
+    // `|| 0` 将 -0 归一为 0
+    const minX = -Math.floor(cols / 2) || 0;
+    const minY = -Math.floor(rows / 2) || 0;
+    return { minX, minY, maxX: minX + cols - 1, maxY: minY + rows - 1 };
+};
+
+const gridBoundsFromRaw = (raw?: string[]): GridBounds | undefined => {
+    if (!raw || raw.length === 0) return undefined;
+    const cols = raw.reduce((max, line) => Math.max(max, line.length), 0);
+    return gridBoundsFromDims(cols, raw.length);
+};
+
 async function parseMapLayer(
     layer: Extract<SelectedLayerInfo, { layerType: 'map' }>,
     deps: WaferStackingJobDependencies
-): Promise<{ name: string; header: Record<string, string>; dies: AsciiDie[] } | null> {
+): Promise<{ name: string; header: Record<string, string>; dies: AsciiDie[]; gridBounds?: GridBounds } | null> {
     const { filePath, stage } = layer;
     let header: Record<string, string> = {};
     let dies: AsciiDie[] = [];
+    let gridBounds: GridBounds | undefined;
     let layerName = 'Unknown';
 
     layerName =
@@ -262,6 +285,8 @@ async function parseMapLayer(
             if (content && content.map.dies) {
                 header = extractMapDataHeader(content);
                 dies = content.map.dies;
+                gridBounds = gridBoundsFromDims(content.mapColumns, content.mapRows)
+                    ?? gridBoundsFromRaw(content.map.raw);
             }
         }
     } else if (stage === DataSourceType.Wlbi) {
@@ -280,18 +305,21 @@ async function parseMapLayer(
         if (content && content.map.dies) {
             header = extractMapDataHeader(content);
             dies = content.map.dies;
+            gridBounds = gridBoundsFromDims(content.mapColumns, content.mapRows)
+                ?? gridBoundsFromRaw(content.map.raw);
         }
     } else if (stage === DataSourceType.FabCp) {
         const content = await deps.invokeParseWafer(filePath);
         if (content && content.map.dies) {
             header = extractWaferHeader(content);
             dies = content.map.dies;
+            gridBounds = gridBoundsFromRaw(content.map.raw);
         }
     }
 
     if (dies.length === 0) return null;
 
-    return { name: layerName, header, dies };
+    return { name: layerName, header, dies, gridBounds };
 }
 
 function createStatsRecord(
@@ -392,6 +420,7 @@ export async function processWaferStackingJob(
             priority: getLayerPriority(layerMeta),
             header: parsedLayer.header,
             dies: parsedLayer.dies,
+            gridBounds: parsedLayer.gridBounds,
         });
         headers.push(parsedLayer.header);
     }
@@ -423,6 +452,8 @@ export async function processWaferStackingJob(
     if (mergedDies.length === 0) {
         throw new Error('处理后地图为空');
     }
+    // 输出网格保持输入完整范围（含只有 '.' 的行列），不随晶粒范围收缩
+    const gridBounds = computeStackingGridBounds(alignedLayers);
 
     const stats = calculateStatsFromDies(mergedDies, passValues);
     const statsToSave = createStatsRecord(jobItem, mergedDies, stats, deps.now);
@@ -454,6 +485,7 @@ export async function processWaferStackingJob(
         baseFileName,
         outputRootDir,
         mergedDies,
+        gridBounds,
         stats,
         useHeader,
         selectedOutputs: options.selectedOutputs,

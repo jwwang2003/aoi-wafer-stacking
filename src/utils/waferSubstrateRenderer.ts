@@ -20,6 +20,47 @@ export const getLayerPriority = (meta: LayerMeta): number => {
     return matchedRule ? matchedRule.score : 0;
 };
 
+/** Full grid extent in die coordinates, including '.'-only rows/columns. */
+export interface GridBounds {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+}
+
+export const computeDieBounds = (dies: AsciiDie[]): GridBounds | undefined => {
+    if (dies.length === 0) return undefined;
+    let minX = dies[0].x, maxX = dies[0].x, minY = dies[0].y, maxY = dies[0].y;
+    for (const die of dies) {
+        if (die.x < minX) minX = die.x;
+        if (die.x > maxX) maxX = die.x;
+        if (die.y < minY) minY = die.y;
+        if (die.y > maxY) maxY = die.y;
+    }
+    return { minX, maxX, minY, maxY };
+};
+
+export const unionGridBounds = (
+    a: GridBounds | undefined,
+    b: GridBounds | undefined
+): GridBounds | undefined => {
+    if (!a) return b ? { ...b } : undefined;
+    if (!b) return { ...a };
+    return {
+        minX: Math.min(a.minX, b.minX),
+        maxX: Math.max(a.maxX, b.maxX),
+        minY: Math.min(a.minY, b.minY),
+        maxY: Math.max(a.maxY, b.maxY),
+    };
+};
+
+/**
+ * 输出网格范围：以输入图的完整网格 (gridBounds) 为准，与实际晶粒范围取并集，
+ * 保证只含 '.' 的行列不会被裁掉，输出与输入保持一致。
+ */
+const resolveGridBounds = (dies: AsciiDie[], gridBounds?: GridBounds): GridBounds =>
+    unionGridBounds(computeDieBounds(dies), gridBounds) ?? { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+
 /**
  * 提取对齐标记
  */
@@ -251,11 +292,10 @@ export const extractMapDataHeader = (mapData: MapData): Record<string, string> =
 export const convertToMapData = (
     dies: AsciiDie[],
     stats: Statistics,
-    header: Record<string, string>
+    header: Record<string, string>,
+    gridBounds?: GridBounds
 ): MapData => {
-    const xs = dies.map(d => d.x), ys = dies.map(d => d.y);
-    const [minX, maxX] = xs.length ? [Math.min(...xs), Math.max(...xs)] : [0, 0];
-    const [minY, maxY] = ys.length ? [Math.min(...ys), Math.max(...ys)] : [0, 0];
+    const { minX, maxX, minY, maxY } = resolveGridBounds(dies, gridBounds);
     const [mapColumns, mapRows] = [maxX - minX + 1, maxY - minY + 1];
     const rawMap = Array.from({ length: mapRows }, () => Array(mapColumns).fill('.'));
     dies.forEach(die => {
@@ -336,15 +376,11 @@ export const convertToBinMapData = (
  */
 export const convertToHexMapData = (
     dies: AsciiDie[],
-    header?: Record<string, string>
+    header?: Record<string, string>,
+    gridBounds?: GridBounds
 ): HexMapData => {
     // Build quick lookup to avoid O(n^2) `.find` inside nested loops
-    const xs = dies.map(die => die.x);
-    const ys = dies.map(die => die.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
+    const { minX, maxX, minY, maxY } = resolveGridBounds(dies, gridBounds);
 
     const byCoord = new Map<string, AsciiDie>();
     for (const d of dies) byCoord.set(`${d.x},${d.y}`, d);
@@ -403,14 +439,10 @@ export const convertToHexMapData = (
 export const convertToFabWafer = (
     dies: AsciiDie[],
     stats: Statistics,
-    header: Record<string, string>
+    header: Record<string, string>,
+    gridBounds?: GridBounds
 ): Wafer => {
-    const xs = dies.map(d => d.x);
-    const ys = dies.map(d => d.y);
-    const minX = xs.length ? Math.min(...xs) : 0;
-    const maxX = xs.length ? Math.max(...xs) : 0;
-    const minY = ys.length ? Math.min(...ys) : 0;
-    const maxY = ys.length ? Math.max(...ys) : 0;
+    const { minX, maxX, minY, maxY } = resolveGridBounds(dies, gridBounds);
     const cols = maxX - minX + 1;
     const rows = maxY - minY + 1;
 
@@ -443,14 +475,10 @@ export const convertToFabWafer = (
 export const convertToSilanMapData = (
     dies: AsciiDie[],
     stats: Statistics,
-    header: Record<string, string>
+    header: Record<string, string>,
+    gridBounds?: GridBounds
 ): SilanMapData => {
-    const xs = dies.map(d => d.x);
-    const ys = dies.map(d => d.y);
-    const minX = xs.length ? Math.min(...xs) : 0;
-    const maxX = xs.length ? Math.max(...xs) : 0;
-    const minY = ys.length ? Math.min(...ys) : 0;
-    const maxY = ys.length ? Math.max(...ys) : 0;
+    const { minX, maxX, minY, maxY } = resolveGridBounds(dies, gridBounds);
 
     const now = new Date();
     const yyyy = now.getFullYear();

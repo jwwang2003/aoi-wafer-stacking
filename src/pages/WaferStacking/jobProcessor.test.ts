@@ -147,6 +147,8 @@ describe('processWaferStackingJob', () => {
             baseFileName: 'OEM-1_PROD-1_LOT-1_7_SUB-1',
             outputRootDir: 'output/OEM-1_PROD-1_LOT-1_7_SUB-1',
             mergedDies: mapExData.map.dies,
+            // mapColumns/mapRows(2x1, 居中原点) ∪ 晶粒范围 -> 完整输入网格
+            gridBounds: { minX: -1, maxX: 1, minY: 0, maxY: 0 },
             selectedOutputs: ['mapEx', 'bin'],
             imageRenderer: 'bin',
             allSubstrateDefects: [],

@@ -10,11 +10,14 @@ import {
 import {
     applyOffsetToDies,
     calculateOffset,
+    computeDieBounds,
     createDieMapStructure,
     extractAlignmentMarkers,
     getLayerPriority,
     mergeLayerToDieMap,
     pruneEmptyRegions,
+    unionGridBounds,
+    type GridBounds,
 } from '@/utils/waferSubstrateRenderer';
 
 export interface ParsedStackingLayer {
@@ -22,6 +25,8 @@ export interface ParsedStackingLayer {
     priority: number;
     header: Record<string, string>;
     dies: AsciiDie[];
+    /** 输入图完整网格范围（含只有 '.' 的行列），用于保持输出尺寸与输入一致 */
+    gridBounds?: GridBounds;
 }
 
 export interface DeferredSubstrateLayerInput {
@@ -44,8 +49,35 @@ export function alignStackingLayers(layers: ParsedStackingLayer[]): ParsedStacki
         if (index === 0) return { ...layer, dies: [...layer.dies] };
         const currentMarkers = sortMarkersByCoordinate(extractAlignmentMarkers(layer.dies));
         const { dx, dy } = calculateOffset(baseMarkers, currentMarkers);
-        return { ...layer, dies: applyOffsetToDies(layer.dies, dx, dy) };
+        return {
+            ...layer,
+            dies: applyOffsetToDies(layer.dies, dx, dy),
+            gridBounds: layer.gridBounds
+                ? {
+                    minX: layer.gridBounds.minX + dx,
+                    maxX: layer.gridBounds.maxX + dx,
+                    minY: layer.gridBounds.minY + dy,
+                    maxY: layer.gridBounds.maxY + dy,
+                }
+                : undefined,
+        };
     });
+}
+
+/**
+ * 计算叠图输出的网格范围：所有图层完整网格（含 '.' 行列）与晶粒范围的并集，
+ * 使输出不会裁掉输入中只含 '.' 的行列。
+ */
+export function computeStackingGridBounds(
+    layers: ParsedStackingLayer[]
+): GridBounds | undefined {
+    return layers.reduce<GridBounds | undefined>(
+        (bounds, layer) => unionGridBounds(
+            unionGridBounds(bounds, layer.gridBounds),
+            computeDieBounds(layer.dies)
+        ),
+        undefined
+    );
 }
 
 export function mergeStackingLayers(

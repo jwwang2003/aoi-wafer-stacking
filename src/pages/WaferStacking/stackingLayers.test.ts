@@ -4,6 +4,7 @@ import { createPassValueSet } from '@/pages/Config/binConfig';
 import type { AsciiDie } from '@/types/ipc';
 import {
     alignStackingLayers,
+    computeStackingGridBounds,
     createSubstrateStackingLayer,
     mergeStackingLayers,
     sortStackingLayersByPriority,
@@ -70,6 +71,51 @@ describe('stackingLayers', () => {
     it('returns an empty array for empty layer lists', () => {
         expect(alignStackingLayers([])).toEqual([]);
         expect(mergeStackingLayers([])).toEqual([]);
+        expect(computeStackingGridBounds([])).toBeUndefined();
+    });
+
+    it('shifts layer grid bounds by the alignment offset and unions them for the output grid', () => {
+        const baseLayer: ParsedStackingLayer = {
+            ...createLayer('CP1', 6, [
+                { x: 0, y: 0, bin: { special: 'S' } },
+                { x: 1, y: 1, bin: { number: 1 } },
+            ]),
+            gridBounds: { minX: -3, maxX: 3, minY: -3, maxY: 3 },
+        };
+        const targetLayer: ParsedStackingLayer = {
+            ...createLayer('AOI', 1, [
+                { x: 5, y: 5, bin: { special: 'S' } },
+                { x: 6, y: 6, bin: { number: 2 } },
+            ]),
+            gridBounds: { minX: 1, maxX: 9, minY: 1, maxY: 9 },
+        };
+
+        const aligned = alignStackingLayers([baseLayer, targetLayer]);
+
+        // target markers moved onto base markers => offset (-5, -5)
+        expect(aligned[0].gridBounds).toEqual({ minX: -3, maxX: 3, minY: -3, maxY: 3 });
+        expect(aligned[1].gridBounds).toEqual({ minX: -4, maxX: 4, minY: -4, maxY: 4 });
+
+        expect(computeStackingGridBounds(aligned)).toEqual({
+            minX: -4,
+            maxX: 4,
+            minY: -4,
+            maxY: 4,
+        });
+    });
+
+    it('falls back to die extents for layers without grid bounds', () => {
+        const layer = createLayer('WLBI', 4, [
+            { x: -2, y: 1, bin: { number: 1 } },
+            { x: 5, y: -3, bin: { number: 2 } },
+        ]);
+
+        expect(computeStackingGridBounds([layer])).toEqual({
+            minX: -2,
+            maxX: 5,
+            minY: -3,
+            maxY: 1,
+        });
     });
 
     it('creates a deferred substrate layer from the first parsed layer seed', () => {
