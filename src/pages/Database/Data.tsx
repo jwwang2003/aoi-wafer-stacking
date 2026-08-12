@@ -1,4 +1,5 @@
 import { Container, Group, Stack, SegmentedControl, Button, Paper, useMantineTheme, Switch } from '@mantine/core';
+import { confirmAction } from '@/utils/confirm';
 import { useMediaQuery } from '@mantine/hooks';
 import {
     Routes,
@@ -21,6 +22,7 @@ import { deleteAllFileIndexes } from '@/db/fileIndex';
 import { resetSpreadSheetData } from '@/db/spreadSheet';
 import { deleteAllFolderIndexes } from '@/db/folderIndex';
 import { deleteAllWaferMaps } from '@/db/wafermaps';
+import { deleteAllWaferStackStats } from '@/db/waferStackStats';
 import { warmIndexCaches } from '@/utils/fs';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { setSqlDebug } from '@/slices/preferencesSlice';
@@ -106,13 +108,14 @@ function MorePage() {
     const sqlDebug = useAppSelector(s => s.preferences.sqlDebug);
     const [busy, setBusy] = useState(false);
     const handleResetDb = async () => {
-        if (!await Promise.resolve(window.confirm('确认要重置数据库吗？该操作将清空所有晶圆、缓存与索引数据，且无法撤销。'))) {
+        if (!await confirmAction('确认要重置数据库吗？该操作将清空所有晶圆、缓存与索引数据，且无法撤销。')) {
             return;
         }
 
         setBusy(true);
         try {
             await deleteAllWaferMaps();
+            await deleteAllWaferStackStats();
             await resetSpreadSheetData();
             await deleteAllFileIndexes();
             await deleteAllFolderIndexes();

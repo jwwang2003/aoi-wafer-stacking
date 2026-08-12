@@ -64,7 +64,7 @@ fn read_xls_invalid_format() {
 fn read_txt_valid_file() {
     use super::read_txt;
     // Assuming that the CWD is src-tauri
-    let path: &str = "static/S1M032120B_B003332_01_mapEx.txt";
+    let path: &str = "../test/fixtures/parser/wafer-mapEx.txt";
     let result = read_txt(path);
     // Check if the .txt file was read successfully
     assert!(result.is_ok());
@@ -78,7 +78,7 @@ fn read_xls_valid_defect_list() {
     use super::read_xls;
     use calamine::Reader;
     // Assuming that the CWD is src-tauri
-    let path: &str = "static/86107919CNF1.xls";
+    let path: &str = "../test/fixtures/parser/substrate-defect.xls";
     let result = read_xls(path);
     // Check if the .xls file was read successfully
     assert!(result.is_ok());

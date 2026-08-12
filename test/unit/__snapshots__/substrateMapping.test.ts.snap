@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateGridWithSubstrateDefects on real B003990 data > pins the projected defect count with default 1x1mm dies 1`] = `
+{
+  "defectiveDies": 4,
+  "defects": 186,
+  "seeds": 981,
+}
+`;

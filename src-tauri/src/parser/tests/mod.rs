@@ -1,8 +1,20 @@
+//! Parser tests run against the shared fixture set in `test/fixtures/`.
+//! Cargo runs tests with CWD = `src-tauri`, so paths are relative to it.
+
+use std::fs;
+use std::path::PathBuf;
+
+fn fixture(rel: &str) -> String {
+    let path = PathBuf::from("../test/fixtures").join(rel);
+    assert!(path.exists(), "missing fixture: {}", path.display());
+    path.to_string_lossy().into_owned()
+}
+
 #[test]
 fn test_parse_product_mapping_xls() {
     use super::parse_product_mapping_xls;
 
-    let path = "static/Product list.xlsx".to_string();
+    let path = fixture("parser/product-mapping.xlsx");
 
     let by_sheet = parse_product_mapping_xls(path.clone())
         .expect(&format!("Failed to parse product mapping from '{}'", path));
@@ -48,7 +60,7 @@ fn test_parse_product_mapping_xls() {
 fn test_parse_product_xls() {
     use super::parse_product_xls;
 
-    let path = "static/P0097B_20250721160205.xlsx".to_string();
+    let path = fixture("parser/product-list.xlsx");
 
     let by_sheet = parse_product_xls(path.clone())
         .expect(&format!("Failed to parse product records from '{}'", path));
@@ -91,7 +103,7 @@ fn test_parse_product_xls() {
 fn test_parse_substrate_defect_xls() {
     use super::parse_substrate_defect_xls;
 
-    let path = "static/86107919CNF1.xls".to_string();
+    let path = fixture("parser/substrate-defect.xls");
 
     let defects_by_sheet = parse_substrate_defect_xls(path.clone())
         .expect(&format!("Failed to parse defects from '{}'", path));
@@ -137,7 +149,7 @@ fn test_parse_substrate_defect_xls() {
 #[test]
 fn test_parse_wafer_0() {
     use super::parse_wafer;
-    let path = "static/P0094B_B003332_01.txt".to_string();
+    let path = fixture("parser/fab-cp-wafer.txt");
     match parse_wafer(path) {
         Ok(wafer) => {
             println!("Parsed Wafer: {:#?}", wafer);
@@ -162,7 +174,7 @@ fn test_parse_wafer_0() {
 #[test]
 fn test_parse_wafer_bin() {
     use super::parse_wafer_bin;
-    let path = "static/B003332-01_20250325_170454.WaferMap".to_string();
+    let path = fixture("parser/wlbi-bin.WaferMap");
     match parse_wafer_bin(path) {
         Ok(wafer) => {
             println!("Parsed WaferMap: {:#?}", wafer);
@@ -182,7 +194,7 @@ fn test_parse_wafer_bin() {
 #[test]
 fn test_parse_wafer_map_data() {
     use super::parse_wafer_map_data;
-    let path = "static/S1M032120B_B003332_01_mapEx.txt".to_string();
+    let path = fixture("parser/wafer-mapEx.txt");
     match parse_wafer_map_data(path) {
         Ok(wafer) => {
             println!("Parsed Wafer MapEx: {:#?}", wafer);
@@ -198,4 +210,117 @@ fn test_parse_wafer_map_data() {
         }
         Err(e) => panic!("Failed to parse wafer: {}", e),
     }
+}
+
+#[test]
+fn test_parse_die_layout_xls() {
+    use super::parse_die_layout_xls;
+    use crate::wafer::ds::BinValue;
+
+    let path = fixture("parser/die-layout.xlsx");
+    let layouts = parse_die_layout_xls(path).expect("Failed to parse die layout xlsx");
+
+    for (sheet, expected_dies) in [("S1M032120B", 807usize), ("S1M040120B", 981usize)] {
+        let layout = layouts
+            .get(sheet)
+            .unwrap_or_else(|| panic!("Missing layout sheet '{}': {:?}", sheet, layouts.keys()));
+        assert_eq!(layout.dies.len(), expected_dies, "die count for '{}'", sheet);
+
+        let markers: Vec<_> = layout
+            .dies
+            .iter()
+            .filter(|die| matches!(&die.bin, BinValue::Special(c) if *c == 'S'))
+            .collect();
+        assert_eq!(markers.len(), 2, "alignment markers for '{}'", sheet);
+    }
+}
+
+/// Regenerates `test/fixtures/parsed/*.json` — the parsed-layer fixtures the
+/// vitest suite runs the stacking pipeline against. The JSON is serialized
+/// with the same serde definitions Tauri IPC uses, so the TS side sees
+/// identical shapes to production `invoke` results.
+///
+/// Run explicitly with:
+/// `cargo test --no-default-features dump_parsed_fixtures -- --ignored`
+#[test]
+#[ignore]
+fn dump_parsed_fixtures() {
+    use super::{parse_substrate_defect_xls, parse_wafer, parse_wafer_bin, parse_wafer_map_data};
+
+    fn write_json<T: serde::Serialize>(rel: &str, value: &T) {
+        let path = PathBuf::from("../test/fixtures/parsed").join(rel);
+        fs::create_dir_all(path.parent().unwrap()).expect("create parsed fixture dir");
+        let json = serde_json::to_string_pretty(value).expect("serialize fixture");
+        fs::write(&path, json).expect("write fixture");
+        println!("wrote {}", path.display());
+    }
+
+    // Lot B003332 — wafer 01 across all map stages
+    write_json(
+        "B003332/fab-cp.json",
+        &parse_wafer(fixture("lots/B003332/fab-cp/P0094B_B003332_01.txt")).unwrap(),
+    );
+    write_json(
+        "B003332/cp1.json",
+        &parse_wafer_map_data(fixture("lots/B003332/cp1/S1M032120B_B003332_01_mapEx.txt"))
+            .unwrap(),
+    );
+    write_json(
+        "B003332/cp2.json",
+        &parse_wafer_map_data(fixture("lots/B003332/cp2/S1M032120B_B003332_01_mapEx.txt"))
+            .unwrap(),
+    );
+    write_json(
+        "B003332/wlbi.json",
+        &parse_wafer_bin(fixture("lots/B003332/wlbi/B003332-01_20250325_170454.WaferMap"))
+            .unwrap(),
+    );
+    write_json(
+        "B003332/aoi.json",
+        &parse_wafer_map_data(fixture("lots/B003332/aoi/S1M032120B_B003332_01.txt")).unwrap(),
+    );
+
+    // Lot B003990 — wafer 02 across all stages, plus substrate defect list
+    write_json(
+        "B003990/fab-cp.json",
+        &parse_wafer(fixture("lots/B003990/fab-cp/P0097B_B003990_02.txt")).unwrap(),
+    );
+    write_json(
+        "B003990/cp1.json",
+        &parse_wafer_map_data(fixture(
+            "lots/B003990/cp1/S1M040120B_B003990_02_mapEx.txt",
+        ))
+        .unwrap(),
+    );
+    write_json(
+        "B003990/cp2.json",
+        &parse_wafer_map_data(fixture(
+            "lots/B003990/cp2/S1M040120B_B003990_02_mapEx.txt",
+        ))
+        .unwrap(),
+    );
+    write_json(
+        "B003990/wlbi.json",
+        &parse_wafer_bin(fixture(
+            "lots/B003990/wlbi/B003990_02_20250325_165831.WaferMap",
+        ))
+        .unwrap(),
+    );
+    write_json(
+        "B003990/aoi.json",
+        &parse_wafer_map_data(fixture(
+            "lots/B003990/aoi/S1M040120B_B003990_02_20250721095040.txt",
+        ))
+        .unwrap(),
+    );
+    write_json(
+        "B003990/substrate-defects.json",
+        &parse_substrate_defect_xls(fixture("lots/B003990/substrate/86107919CNF1.xls")).unwrap(),
+    );
+
+    // 基板布局 Excel — one sheet per product, shared by both lots
+    write_json(
+        "die-layout.json",
+        &super::parse_die_layout_xls(fixture("parser/die-layout.xlsx")).unwrap(),
+    );
 }

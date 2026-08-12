@@ -100,6 +100,16 @@ export async function getWaferStackStatsByOem(
  * @param oemProductId OEM产品编号
  * @returns 删除的记录数
  */
+/** 清空全部叠图统计数据（数据库重置用）。返回删除的记录数。 */
+export async function deleteAllWaferStackStats(): Promise<number> {
+    const db = await getDb();
+    const countResult = await db.select(
+        `SELECT COUNT(*) as count FROM wafer_stack_stats`
+    ) as unknown as Array<{ count: number }>;
+    await db.execute(`DELETE FROM wafer_stack_stats`);
+    return countResult[0]?.count || 0;
+}
+
 export async function deleteWaferStackStatsByOem(
     oemProductId: string
 ): Promise<number> {

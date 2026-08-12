@@ -51,6 +51,24 @@ describe('processInkRules', () => {
         expect(processedDies.find(die => die.x === 0 && die.y === 0)?.bin).toEqual({ number: 16 });
     });
 
+    it.each(['S', '*'])('never changes the %s alignment marker', (marker) => {
+        const dies: AsciiDie[] = [
+            { x: 0, y: 0, bin: { special: marker } },
+            { x: -1, y: 0, bin: { number: 2 } },
+            { x: 1, y: 0, bin: { number: 2 } },
+            { x: 0, y: -1, bin: { number: 2 } },
+            { x: 0, y: 1, bin: { number: 2 } },
+        ];
+
+        const { processedDies } = processInkRules(dies, {
+            goodValues: createPassValueSet(['BIN 1']),
+            failThreshold: 1,
+        });
+
+        expect(processedDies.find(die => die.x === 0 && die.y === 0)?.bin)
+            .toEqual({ special: marker });
+    });
+
     it('only counts selected fail bins when failValues are provided', () => {
         const dies: AsciiDie[] = [
             { x: 0, y: 0, bin: { number: 16 } },

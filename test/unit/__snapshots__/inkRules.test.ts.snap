@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`processInkRules on real CP1 layer (B003332) > pins ink statistics 1`] = `
+{
+  "filtered": 141,
+  "inked": 60,
+  "input": 807,
+}
+`;
+
+exports[`processInkRules on real CP1 layer (B003990) > pins ink statistics 1`] = `
+{
+  "filtered": 101,
+  "inked": 56,
+  "input": 981,
+}
+`;

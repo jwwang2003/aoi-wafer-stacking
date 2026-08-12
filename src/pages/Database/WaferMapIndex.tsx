@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmAction } from '@/utils/confirm';
 import {
     Box,
     ActionIcon,
@@ -404,7 +405,7 @@ export default function WaferMapIndex() {
 
     const handleBatchDelete = async () => {
         if (!selectedIds.size) return;
-        if (!await window.confirm(`确认删除选中的 ${selectedIds.size} 条记录？该操作不可撤销。`)) {
+        if (!await confirmAction(`确认删除选中的 ${selectedIds.size} 条记录？该操作不可撤销。`)) {
             return;
         }
 
