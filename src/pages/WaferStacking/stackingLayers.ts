@@ -9,7 +9,7 @@ import {
 } from '@/utils/substrateMapping';
 import {
     applyOffsetToDies,
-    calculateOffset,
+    calculateValidatedOffset,
     computeDieBounds,
     createDieMapStructure,
     extractAlignmentMarkers,
@@ -17,6 +17,7 @@ import {
     mergeLayerToDieMap,
     pruneEmptyRegions,
     unionGridBounds,
+    withoutAlignmentMarkers,
     type GridBounds,
 } from '@/utils/waferSubstrateRenderer';
 
@@ -48,7 +49,16 @@ export function alignStackingLayers(layers: ParsedStackingLayer[]): ParsedStacki
     return layers.map((layer, index) => {
         if (index === 0) return { ...layer, dies: [...layer.dies] };
         const currentMarkers = sortMarkersByCoordinate(extractAlignmentMarkers(layer.dies));
-        const { dx, dy } = calculateOffset(baseMarkers, currentMarkers);
+        const offset = calculateValidatedOffset(baseMarkers, currentMarkers);
+        if (!offset) {
+            return {
+                ...layer,
+                // Retain the layer's die results, but never let an incompatible
+                // marker set add extra S/* points to the merged wafer.
+                dies: withoutAlignmentMarkers(layer.dies),
+            };
+        }
+        const { dx, dy } = offset;
         return {
             ...layer,
             dies: applyOffsetToDies(layer.dies, dx, dy),

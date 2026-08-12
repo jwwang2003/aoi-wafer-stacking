@@ -4,11 +4,13 @@ import { createPassValueSet } from '@/pages/Config/binConfig';
 import { AsciiDie } from '@/types/ipc';
 import {
     calculateStatsFromDies,
+    calculateValidatedOffset,
     convertToBinMapData,
     convertToFabWafer,
     convertToHexMapData,
     convertToMapData,
     convertToSilanMapData,
+    findDieLayoutSheet,
 } from './waferSubstrateRenderer';
 
 const dies = [
@@ -45,6 +47,24 @@ const gapDies = [
 ] satisfies AsciiDie[];
 
 describe('waferSubstrateRenderer', () => {
+    it('matches normalized layout names without falling back to a different model', () => {
+        const layouts = {
+            S1M040120B: { xHeaders: [], yHeaders: [], dies: [] },
+            'S2M12K180BJ-A': { xHeaders: [], yHeaders: [], dies: [] },
+        };
+
+        expect(findDieLayoutSheet(layouts, ['S2M12K180BJA'])?.key)
+            .toBe('S2M12K180BJ-A');
+        expect(findDieLayoutSheet(layouts, ['UNKNOWN_MODEL'])).toBeUndefined();
+    });
+
+    it('rejects the reported 7-vs-67 alignment-marker distance mismatch', () => {
+        expect(calculateValidatedOffset(
+            [{ x: -4, y: -18 }, { x: 3, y: -18 }],
+            [{ x: -34, y: -101 }, { x: 33, y: -101 }]
+        )).toBeNull();
+    });
+
     it('calculates tested, pass, fail, and yield stats from dies', () => {
         const result = calculateStatsFromDies(dies, createPassValueSet(['BIN 1', 'BIN 16']));
 

@@ -11,6 +11,8 @@ import {
     isNumberBin,
     BinValue,
     SilanMapData,
+    DieLayoutMap,
+    DieLayoutSheet,
 } from '@/types/ipc';
 import { PRIORITY_RULES, LayerMeta, PASS_VALUES } from '@/pages/WaferStacking/priority';
 import { binValueMatchesValues } from '@/pages/Config/binConfig';
@@ -72,6 +74,73 @@ export const extractAlignmentMarkers = (
             (die) => isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special)
         )
         .map((die) => ({ x: die.x, y: die.y }));
+};
+
+export const withoutAlignmentMarkers = (dies: AsciiDie[]): AsciiDie[] =>
+    dies.filter(
+        (die) => !(isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special))
+    );
+
+export type AlignmentMarker = { x: number; y: number };
+
+const normalizeProductId = (value: string): string =>
+    value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+/**
+ * Select a layout only when a requested product identifier identifies one
+ * sheet. Exact matches win; separator-insensitive matches must be unique.
+ */
+export const findDieLayoutSheet = (
+    layouts: DieLayoutMap | null | undefined,
+    productIds: Array<string | null | undefined>
+): { key: string; sheet: DieLayoutSheet } | undefined => {
+    if (!layouts) return undefined;
+
+    const entries = Object.entries(layouts);
+    for (const productId of productIds) {
+        const requested = productId?.trim();
+        if (!requested) continue;
+
+        const exact = entries.find(([key]) => key.trim().toUpperCase() === requested.toUpperCase());
+        if (exact) return { key: exact[0], sheet: exact[1] };
+
+        const normalized = normalizeProductId(requested);
+        if (!normalized) continue;
+        const normalizedMatches = entries.filter(([key]) => normalizeProductId(key) === normalized);
+        if (normalizedMatches.length === 1) {
+            return { key: normalizedMatches[0][0], sheet: normalizedMatches[0][1] };
+        }
+    }
+
+    return undefined;
+};
+
+const markerShape = (markers: AlignmentMarker[]): string[] => {
+    if (markers.length === 0) return [];
+    const sorted = [...markers].sort((a, b) => a.y - b.y || a.x - b.x);
+    const origin = sorted[0];
+    return sorted
+        .map(({ x, y }) => `${x - origin.x},${y - origin.y}`)
+        .sort();
+};
+
+/** Return a translation only when both complete marker sets have equal geometry. */
+export const calculateValidatedOffset = (
+    baseMarkers: AlignmentMarker[],
+    targetMarkers: AlignmentMarker[]
+): { dx: number; dy: number } | null => {
+    if (baseMarkers.length === 0 || baseMarkers.length !== targetMarkers.length) return null;
+
+    const baseShape = markerShape(baseMarkers);
+    const targetShape = markerShape(targetMarkers);
+    if (baseShape.some((point, index) => point !== targetShape[index])) return null;
+
+    const baseOrigin = [...baseMarkers].sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    const targetOrigin = [...targetMarkers].sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    return {
+        dx: baseOrigin.x - targetOrigin.x,
+        dy: baseOrigin.y - targetOrigin.y,
+    };
 };
 export interface Statistics {
     totalTested: number;

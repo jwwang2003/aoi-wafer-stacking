@@ -31,6 +31,9 @@ import {
     extractBinMapHeader,
     extractMapDataHeader,
     extractWaferHeader,
+    extractAlignmentMarkers,
+    calculateValidatedOffset,
+    findDieLayoutSheet,
     getLayerPriority,
     type GridBounds,
 } from '@/utils/waferSubstrateRenderer';
@@ -233,10 +236,16 @@ async function loadLayoutDies(
 
     try {
         const dieLayoutMap = await deps.invokeParseDieLayoutXls(dieLayoutPath);
-        const keys = Object.keys(dieLayoutMap || {});
-        return dieLayoutMap[jobItem.productId || '']?.dies ||
-            dieLayoutMap[jobItem.oemProductId || '']?.dies ||
-            (keys.length > 0 ? dieLayoutMap[keys[0]]?.dies : undefined);
+        const matchedLayout = findDieLayoutSheet(
+            dieLayoutMap,
+            [jobItem.productId, jobItem.oemProductId]
+        );
+        if (!matchedLayout) {
+            deps.logger.warn(
+                `[wafer stacking] No die layout sheet matches product ${jobItem.productId} / ${jobItem.oemProductId}; using map files only`
+            );
+        }
+        return matchedLayout?.sheet.dies;
     } catch (error) {
         deps.logger.warn('[wafer stacking] Failed to load die layout map; falling back to map files', error);
         return undefined;
@@ -373,17 +382,7 @@ export async function processWaferStackingJob(
     const tempCombinedHeaders: Record<string, string> = {};
     let allSubstrateDefects: SubstrateDefect[] = [];
     let deferredSubstrateDefects: SubstrateDefect[] | null = null;
-    const layoutDies = await loadLayoutDies(jobItem, options.dieLayoutPath, deps);
-
-    if (layoutDies && layoutDies.length > 0) {
-        parsedLayers.push({
-            name: 'DieLayout',
-            priority: 100,
-            header: {},
-            dies: layoutDies,
-        });
-        headers.push({ LayerType: 'DieLayout', Priority: 'Highest' });
-    }
+    const layoutCandidate = await loadLayoutDies(jobItem, options.dieLayoutPath, deps);
 
     for (const layer of sortedLayers) {
         if (!layer.filePath) continue;
@@ -423,6 +422,30 @@ export async function processWaferStackingJob(
             gridBounds: parsedLayer.gridBounds,
         });
         headers.push(parsedLayer.header);
+    }
+
+    let layoutDies: AsciiDie[] | undefined;
+    if (layoutCandidate && layoutCandidate.length > 0) {
+        const referenceLayer = sortStackingLayersByPriority(parsedLayers)[0];
+        const layoutIsCompatible = !referenceLayer || calculateValidatedOffset(
+            extractAlignmentMarkers(layoutCandidate),
+            extractAlignmentMarkers(referenceLayer.dies)
+        ) !== null;
+
+        if (layoutIsCompatible) {
+            layoutDies = layoutCandidate;
+            parsedLayers.push({
+                name: 'DieLayout',
+                priority: 100,
+                header: {},
+                dies: layoutDies,
+            });
+            headers.push({ LayerType: 'DieLayout', Priority: 'Highest' });
+        } else {
+            deps.logger.warn(
+                '[wafer stacking] Die layout alignment markers do not match wafer map geometry; ignoring layout'
+            );
+        }
     }
 
     if (deferredSubstrateDefects) {

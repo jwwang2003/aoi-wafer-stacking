@@ -68,6 +68,27 @@ describe('stackingLayers', () => {
         expect(targetDies).toEqual(originalTargetDies);
     });
 
+    it('removes incompatible layer markers instead of adding extra S points', () => {
+        const layout = createLayer('DieLayout', 100, [
+            { x: -4, y: -18, bin: { special: 'S' } },
+            { x: 3, y: -18, bin: { special: 'S' } },
+        ]);
+        const map = createLayer('CP2', 6, [
+            { x: -34, y: -101, bin: { special: 'S' } },
+            { x: 33, y: -101, bin: { special: 'S' } },
+            { x: 0, y: 0, bin: { number: 2 } },
+        ]);
+
+        const aligned = alignStackingLayers([layout, map]);
+        expect(aligned[1].dies).toContainEqual({ x: 0, y: 0, bin: { number: 2 } });
+        expect(aligned[1].dies.filter((die) => 'special' in die.bin && die.bin.special === 'S'))
+            .toEqual([]);
+
+        const merged = mergeStackingLayers(aligned);
+        expect(merged.filter((die) => 'special' in die.bin && die.bin.special === 'S'))
+            .toHaveLength(2);
+    });
+
     it('returns an empty array for empty layer lists', () => {
         expect(alignStackingLayers([])).toEqual([]);
         expect(mergeStackingLayers([])).toEqual([]);

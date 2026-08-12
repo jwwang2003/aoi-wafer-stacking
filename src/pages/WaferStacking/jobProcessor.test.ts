@@ -119,6 +119,29 @@ const createDependencies = (
 });
 
 describe('processWaferStackingJob', () => {
+    it('does not use the first layout sheet when the product does not match', async () => {
+        const wrongLayoutDies = [
+            { x: -4, y: -18, bin: { special: 'S' as const } },
+            { x: 3, y: -18, bin: { special: 'S' as const } },
+        ];
+        const deps = createDependencies({
+            invokeParseDieLayoutXls: vi.fn().mockResolvedValue({
+                S1M040120B: { xHeaders: [], yHeaders: [], dies: wrongLayoutDies },
+            }),
+        });
+
+        await processWaferStackingJob(createJob(), createOptions({
+            dieLayoutPath: 'layout.xlsx',
+        }), deps);
+
+        expect(deps.exportWaferFiles).toHaveBeenCalledWith(expect.objectContaining({
+            mergedDies: mapExData.map.dies,
+        }));
+        expect(deps.logger.warn).toHaveBeenCalledWith(
+            '[wafer stacking] No die layout sheet matches product PROD-1 / OEM-1; using map files only'
+        );
+    });
+
     it('processes the selected map layer and exports the merged wafer files', async () => {
         const deps = createDependencies();
         const onFinalOutputDir = vi.fn();
