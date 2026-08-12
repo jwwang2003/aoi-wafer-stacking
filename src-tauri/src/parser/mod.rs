@@ -239,6 +239,11 @@ pub fn parse_die_layout_xls(path: String) -> Result<HashMap<String, DieLayoutShe
                     }
                 };
 
+                // Empty cells simply mean "no die here" — skip silently.
+                if matches!(cell, Data::Empty) {
+                    continue;
+                }
+
                 let val = match cell_to_str(cell) {
                     Some(v) => v,
                     None => {
