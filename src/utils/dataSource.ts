@@ -5,6 +5,42 @@ import type { DirResult } from '@/types/ipc';
 import { ExcelMetadata, ExcelType, DirCollection, RawWaferMetadataCollection, WaferFileMetadata } from '@/types/wafer';
 
 /**
+ * Folder / file name patterns for each data source directory layout.
+ * These define the on-disk contract with the production machines; exported
+ * so tests (see test/unit/scanTreeLayout.test.ts) can verify them against
+ * the canonical fixture tree.
+ */
+export const SCAN_PATTERNS = {
+    cpProber: {
+        // 产品型号_批次号_工序_复测次数
+        processFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/,
+        // 产品型号_批次号_片号
+        waferFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)$/,
+        // 产品型号_批次号_片号_mapEx.txt
+        mapExFile: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_mapEx\.txt$/,
+    },
+    wlbi: {
+        // 产品型号_批次号_工序_复测次数
+        processFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/,
+        waferMapFolder: /^WaferMap$/,
+        // 批次号_片号_年月日_时分秒.WaferMap
+        waferMapFile: /^([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})_([0-9]{6})\.WaferMap$/,
+    },
+    fabCp: {
+        binMapFolder: /^BinMap$/,
+        batchFolder: /^([A-Za-z0-9]+)$/,
+        // oem型号_批次号_片号.txt
+        mapFile: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)\.txt$/,
+    },
+    aoi: {
+        // 产品型号_批次号
+        processFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)$/,
+        // 产品型号_批次号_片号_年月日时分秒.txt
+        mapFile: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})([0-9]{6})\.txt$/,
+    },
+} as const;
+
+/**
  * Categorize subfolder **paths** by data source type using provided regex rules.
  *
  * How it works:
@@ -260,15 +296,7 @@ export async function readCpProberMetadata(
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
-    // Folder: 产品型号_批次号_工序_复测次数
-    const processFolder = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/;
-    //                            productModel   batch         processSubStage  retestCount
-    // Folder: 产品型号_批次号_片号
-    const waferFolder = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)$/;
-    //                          productModel   batch         waferId
-    // File: 产品型号_批次号_片号_mapExt.txt
-    const fileName = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_mapEx\.txt$/;
-    //                   productModel   batch         waferId
+    const { processFolder, waferFolder, mapExFile: fileName } = SCAN_PATTERNS.cpProber;
 
     type Ctx = {
         productModel: string; batch: string; processSubStage: string; retestCount: string; waferId?: string;
@@ -353,9 +381,7 @@ export async function readWlbiMetadata(
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
 
-    const processFolder = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/; // model,batch,subStage,retest
-    const wlbiFolder = /^WaferMap$/;
-    const fileName = /^([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})_([0-9]{6})\.WaferMap$/; // wafer,batch,date,time
+    const { processFolder, waferMapFolder: wlbiFolder, waferMapFile: fileName } = SCAN_PATTERNS.wlbi;
 
     type Ctx = { productModel: string; batch: string; processSubStage: string; retestCount: string };
 
@@ -417,11 +443,7 @@ export async function readFabCpMetadata(
     folders: DirResult[]
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
-    //test/data1/FAB CP/BinMap/B003990/P0097B_B003990_02.txt
-    const binMapFolder = /^BinMap$/;
-    const batchFolder = /^([A-Za-z0-9]+)$/;
-    const mapFile = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)\.txt$/;
-    //                 oemModel   batch        waferId
+    const { binMapFolder, batchFolder, mapFile } = SCAN_PATTERNS.fabCp;
 
     type Ctx = { batch: string };
 
@@ -496,15 +518,7 @@ export async function readAoiMetadata(
     folders: DirResult[]
 ): Promise<{ data: WaferFileMetadata[]; totDir: number; numRead: number; numCached: number; totMatch: number; totAdded: number, elapsed: number }> {
     const roots = folders.filter(f => f.exists && f.info?.isDirectory).map(f => f.path);
-    //test/data1/AOI-01/S1M040120B_B003990/S1M040120B_B003990_02_20250721095040.txt
-    // Folder: 产品型号_批次号
-    const processFolder = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)$/;
-    //                            productModel   batch
-    // Folder: 片号片号
-    // const waferFolderRegex = /^WaferMap$/;           // Wafer folder so far has no use case
-    // File: 产品型号_批次号_片号_年月日时分秒.txt
-    const mapFile = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})([0-9]{6})\.txt$/
-    //                  productModel   batch        waferId    date & time
+    const { processFolder, mapFile } = SCAN_PATTERNS.aoi;
 
     type Ctx = { productModel: string; batch: string };
 

@@ -1,0 +1,103 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`lot B003332 > pins merged map stats 1`] = `
+{
+  "bounds": {
+    "maxX": 13,
+    "maxY": 18,
+    "minX": -14,
+    "minY": -18,
+  },
+  "mergedDieCount": 807,
+  "stats": {
+    "totalFail": 131,
+    "totalPass": 674,
+    "totalTested": 805,
+    "yieldPercentage": 83.72670807453416,
+  },
+}
+`;
+
+exports[`lot B003332 > pins per-layer alignment offsets against the base layer 1`] = `
+[
+  {
+    "layer": "WLBI",
+    "offset": {
+      "dx": 0,
+      "dy": 0,
+    },
+  },
+  {
+    "layer": "CP1",
+    "offset": {
+      "dx": 0,
+      "dy": 0,
+    },
+  },
+  {
+    "layer": "FAB CP",
+    "offset": {
+      "dx": 0,
+      "dy": 0,
+    },
+  },
+  {
+    "layer": "AOI",
+    "offset": {
+      "dx": 0,
+      "dy": 0,
+    },
+  },
+]
+`;
+
+exports[`lot B003990 > pins merged map stats 1`] = `
+{
+  "bounds": {
+    "maxX": 17,
+    "maxY": 18,
+    "minX": -16,
+    "minY": -18,
+  },
+  "mergedDieCount": 981,
+  "stats": {
+    "totalFail": 99,
+    "totalPass": 880,
+    "totalTested": 979,
+    "yieldPercentage": 89.8876404494382,
+  },
+}
+`;
+
+exports[`lot B003990 > pins per-layer alignment offsets against the base layer 1`] = `
+[
+  {
+    "layer": "WLBI",
+    "offset": {
+      "dx": 1,
+      "dy": 0,
+    },
+  },
+  {
+    "layer": "CP1",
+    "offset": {
+      "dx": 0,
+      "dy": 0,
+    },
+  },
+  {
+    "layer": "FAB CP",
+    "offset": {
+      "dx": 1,
+      "dy": 0,
+    },
+  },
+  {
+    "layer": "AOI",
+    "offset": {
+      "dx": 0,
+      "dy": 0,
+    },
+  },
+]
+`;

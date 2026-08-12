@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`converters on real CP1 layer (B003332) > pins stats of the parsed layer 1`] = `
+{
+  "totalFail": 81,
+  "totalPass": 724,
+  "totalTested": 805,
+  "yieldPercentage": 89.93788819875776,
+}
+`;
+
+exports[`converters on real CP1 layer (B003990) > pins stats of the parsed layer 1`] = `
+{
+  "totalFail": 45,
+  "totalPass": 934,
+  "totalTested": 979,
+  "yieldPercentage": 95.40347293156282,
+}
+`;

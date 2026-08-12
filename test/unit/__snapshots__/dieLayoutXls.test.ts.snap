@@ -1,0 +1,25 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layout adoption for lot B003332 > pins the merged result when stacking with the layout at priority 100 1`] = `
+{
+  "mergedDieCount": 807,
+  "stats": {
+    "totalFail": 131,
+    "totalPass": 674,
+    "totalTested": 805,
+    "yieldPercentage": 83.72670807453416,
+  },
+}
+`;
+
+exports[`layout adoption for lot B003990 > pins the merged result when stacking with the layout at priority 100 1`] = `
+{
+  "mergedDieCount": 981,
+  "stats": {
+    "totalFail": 99,
+    "totalPass": 880,
+    "totalTested": 979,
+    "yieldPercentage": 89.8876404494382,
+  },
+}
+`;
