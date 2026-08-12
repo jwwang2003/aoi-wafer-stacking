@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { confirmAction } from '@/utils/confirm';
 import {
     Box,
     Group,
@@ -266,7 +267,7 @@ function FilesTable({ refreshToken }: { refreshToken: number }) {
     const handleClear = async () => {
         setClearLoading(true);
         try {
-            if (!await window.confirm('确认清空文件的缓存记录？该操作不可撤销。')) return;
+            if (!await confirmAction('确认清空文件的缓存记录？该操作不可撤销。')) return;
             await clearFileCache();
             await refresh();
         } finally {
@@ -361,7 +362,7 @@ function FoldersTable({ refreshToken }: { refreshToken: number }) {
     const handleClear = async () => {
         setClearLoading(true);
         try {
-            if (!await window.confirm('确认清空文件夹的缓存记录？该操作不可撤销。')) return;
+            if (!await confirmAction('确认清空文件夹的缓存记录？该操作不可撤销。')) return;
             await clearFolderCache();
             await refresh();
         } finally {
@@ -426,7 +427,7 @@ export default function DatabaseViewerPage() {
     const [refreshToken, setRefreshToken] = useState(0);
 
     const handleClearAll = async () => {
-        if (!await window.confirm('确认清空的全部缓存记录？该操作不可撤销。')) return;
+        if (!await confirmAction('确认清空的全部缓存记录？该操作不可撤销。')) return;
         await clearAllCaches();
         setRefreshToken((x) => x + 1);
     };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmAction } from '@/utils/confirm';
 import {
     ActionIcon,
     Badge,
@@ -602,7 +603,7 @@ export default function OffsetsAndSizes() {
     };
 
     const handleDelete = async (row: CombinedRow) => {
-        if (!await window.confirm(`确认删除 ${row.oem_product_id} 的偏移与晶粒尺寸记录？该操作不可撤销。`)) {
+        if (!await confirmAction(`确认删除 ${row.oem_product_id} 的偏移与晶粒尺寸记录？该操作不可撤销。`)) {
             return;
         }
         setDeletingId(row.oem_product_id);
@@ -626,7 +627,7 @@ export default function OffsetsAndSizes() {
 
     const handleBatchDelete = async () => {
         if (!selectedIds.size) return;
-        if (!await window.confirm(`确认删除选中的 ${selectedIds.size} 条记录？该操作不可撤销。`)) {
+        if (!await confirmAction(`确认删除选中的 ${selectedIds.size} 条记录？该操作不可撤销。`)) {
             return;
         }
         setBatchDeleting(true);
