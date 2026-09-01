@@ -86,6 +86,26 @@ describe('processGdbnRule', () => {
         expect(processGdbnRule(markerDies, { goodValues: GOOD_VALUES }).inkedDies).toHaveLength(0);
     });
 
+    it('never inks S/star markers on the run perimeter, even when good values collide with letter S (BIN 28)', () => {
+        // BIN 28 maps to the letter 'S', so with bin 28 configured as a good
+        // bin the alignment marker compares as "good". GDBN must still leave
+        // markers on the perimeter untouched.
+        const dies = buildHorizontalRunMap(10).map(die => {
+            if (die.x === 5 && die.y === 1) return { ...die, bin: { special: 'S' } };
+            if (die.x === 5 && die.y === -1) return { ...die, bin: { special: '*' } };
+            return die;
+        });
+
+        const { processedDies } = processGdbnRule(dies, {
+            goodValues: createPassValueSet(['BIN 16', 'BIN 28']),
+        });
+
+        expect(binAt(processedDies, 5, 1)).toEqual({ special: 'S' });
+        expect(binAt(processedDies, 5, -1)).toEqual({ special: '*' });
+        // Regular good dies on the perimeter are still inked
+        expect(binAt(processedDies, 4, 1)).toEqual({ special: 'z' });
+    });
+
     it('only counts selected fail bins when failValues are provided', () => {
         const dies = buildHorizontalRunMap(10);
 

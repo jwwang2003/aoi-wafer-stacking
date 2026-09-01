@@ -81,6 +81,15 @@ export const withoutAlignmentMarkers = (dies: AsciiDie[]): AsciiDie[] =>
         (die) => !(isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special))
     );
 
+/**
+ * S/* 对齐标记与 WLBI 257 起始标记：任何后处理（INK/GDBN 等）都不得改写。
+ * 注意不能只依赖 good/fail 值集合判断——BIN 28 经字母映射后即为 'S'，
+ * 值集合可能与标记字符冲突。
+ */
+export const isProtectedMarkerDie = (die: AsciiDie): boolean =>
+    (isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special)) ||
+    (isNumberBin(die.bin) && die.bin.number === 257);
+
 export type AlignmentMarker = { x: number; y: number };
 
 const normalizeProductId = (value: string): string =>

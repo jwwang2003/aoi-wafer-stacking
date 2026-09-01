@@ -1,5 +1,6 @@
-import { AsciiDie, isNumberBin } from '@/types/ipc';
+import { AsciiDie } from '@/types/ipc';
 import { binValueMatchesValues } from '@/pages/Config/binConfig';
+import { isProtectedMarkerDie } from '@/utils/waferSubstrateRenderer';
 
 export interface InkRuleConfig {
     goodValues?: Set<string>;
@@ -33,16 +34,11 @@ export function processInkRules(
 
     const isFailDie = (die: AsciiDie | undefined): boolean => {
         if (!die) return false;
-        const isGood = binValueMatchesValues(die.bin, goodValues);
-
-        const ignoreFailChars = new Set(['S', '*']);
-        const hasIgnore = !isNumberBin(die.bin) && ignoreFailChars.has(die.bin.special);
-
-        if (hasIgnore) return false;
+        if (isProtectedMarkerDie(die)) return false;
         if (failValues) {
             return binValueMatchesValues(die.bin, failValues);
         }
-        return !isGood;
+        return !binValueMatchesValues(die.bin, goodValues);
     };
 
     const dieMap = new Map<string, AsciiDie>();
@@ -66,7 +62,7 @@ export function processInkRules(
             const neighborY = fy + dy;
             const neighborKey = `${neighborX},${neighborY}`;
             const neighborDie = dieMap.get(neighborKey);
-            if (isGoodDie(neighborDie) && neighborDie) {
+            if (neighborDie && !isProtectedMarkerDie(neighborDie) && isGoodDie(neighborDie)) {
                 goodDieFailCountMap.set(
                     neighborKey,
                     (goodDieFailCountMap.get(neighborKey) || 0) + 1

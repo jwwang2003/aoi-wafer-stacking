@@ -1,5 +1,6 @@
-import { AsciiDie, isNumberBin } from '@/types/ipc';
+import { AsciiDie } from '@/types/ipc';
 import { binValueMatchesValues } from '@/pages/Config/binConfig';
+import { isProtectedMarkerDie } from '@/utils/waferSubstrateRenderer';
 
 export interface GdbnRuleConfig {
     goodValues?: Set<string>;
@@ -46,16 +47,11 @@ export function processGdbnRule(
 
     const isFailDie = (die: AsciiDie | undefined): boolean => {
         if (!die) return false;
-        const isGood = binValueMatchesValues(die.bin, goodValues);
-
-        const ignoreFailChars = new Set(['S', '*']);
-        const hasIgnore = !isNumberBin(die.bin) && ignoreFailChars.has(die.bin.special);
-
-        if (hasIgnore) return false;
+        if (isProtectedMarkerDie(die)) return false;
         if (failValues) {
             return binValueMatchesValues(die.bin, failValues);
         }
-        return !isGood;
+        return !binValueMatchesValues(die.bin, goodValues);
     };
 
     const dieMap = new Map<string, AsciiDie>();
@@ -68,7 +64,8 @@ export function processGdbnRule(
         for (let x = box.x0 - 1; x <= box.x1 + 1; x++) {
             for (let y = box.y0 - 1; y <= box.y1 + 1; y++) {
                 const key = `${x},${y}`;
-                if (isGoodDie(dieMap.get(key))) {
+                const die = dieMap.get(key);
+                if (die && !isProtectedMarkerDie(die) && isGoodDie(die)) {
                     inkTargets.add(key);
                 }
             }
