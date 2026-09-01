@@ -25,6 +25,8 @@ export interface JobItem extends WaferState {
     note?: string;
     createdAt: number;
     status: JobStatus;
+    /** 勾选后参与批量处理 */
+    selected?: boolean;
 }
 
 interface JobsState extends WaferState {
@@ -95,14 +97,14 @@ function sortWaferMaps(maps: WaferMapRow[]): WaferMapRow[] {
 }
 
 // Build a stable selection key for a wafer map row based on stage+sub_stage only
-function layerKey(r: WaferMapRow): string {
+export function layerKey(r: WaferMapRow): string {
     const stage = String(r.stage ?? '').toLowerCase();
     const sub = r.sub_stage == null ? '' : String(r.sub_stage);
     return `${stage}|${sub}`;
 }
 
 // Group maps by (stage, sub_stage) and pick the one with highest retest_count
-function pickHighestRetestPerGroup(rows: WaferMapRow[]): WaferMapRow[] {
+export function pickHighestRetestPerGroup(rows: WaferMapRow[]): WaferMapRow[] {
     const byKey = new Map<string, WaferMapRow>();
     for (const r of rows) {
         const key = `${String(r.stage).toLowerCase()}|${r.sub_stage ?? ''}`;
@@ -330,10 +332,21 @@ const stackingJobSlice = createSlice({
             state.subId = j.subId;
             state.waferSubstrate = j.waferSubstrate;
             state.waferMaps = j.waferMaps.slice();
-            // reflect selection from the active job
-            state.includeSubstrateSelected = !!j.waferSubstrate;
-            const selectedLayers = pickHighestRetestPerGroup(state.waferMaps);
-            state.selectedLayerKeys = selectedLayers.reverse().map((r) => layerKey(r));
+            // reflect selection from the active job; keep the job's saved
+            // per-layer choice when it has one instead of resetting to defaults
+            state.includeSubstrateSelected = j.includeSubstrateSelected ?? !!j.waferSubstrate;
+            state.selectedLayerKeys = j.selectedLayerKeys
+                ? j.selectedLayerKeys.slice()
+                : pickHighestRetestPerGroup(state.waferMaps).map((r) => layerKey(r));
+        },
+        // ===== Batch selection =====
+        queueToggleSelected(state, action: PayloadAction<{ id: string; selected?: boolean }>) {
+            const j = state.queue.find(x => x.id === action.payload.id);
+            if (!j) return;
+            j.selected = action.payload.selected ?? !j.selected;
+        },
+        queueSetAllSelected(state, action: PayloadAction<boolean>) {
+            state.queue.forEach(j => { j.selected = action.payload; });
         },
         // Reset all job statuses to queued and unset active
         queueResetAllStatus(state) {
@@ -404,6 +417,8 @@ export const {
     queueRemoveJob,
     queueUpdateJob,
     queueSetActive,
+    queueToggleSelected,
+    queueSetAllSelected,
     queueResetAllStatus,
     queueClearCompleted,
     queueClearAll,

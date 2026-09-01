@@ -81,14 +81,31 @@ export const withoutAlignmentMarkers = (dies: AsciiDie[]): AsciiDie[] =>
         (die) => !(isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special))
     );
 
+/**
+ * S/* 对齐标记与 WLBI 257 起始标记：任何后处理（INK/GDBN 等）都不得改写。
+ * 注意不能只依赖 good/fail 值集合判断——BIN 28 经字母映射后即为 'S'，
+ * 值集合可能与标记字符冲突。
+ */
+export const isProtectedMarkerDie = (die: AsciiDie): boolean =>
+    (isSpecialBin(die.bin) && ['S', '*'].includes(die.bin.special)) ||
+    (isNumberBin(die.bin) && die.bin.number === 257);
+
 export type AlignmentMarker = { x: number; y: number };
 
 const normalizeProductId = (value: string): string =>
     value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+/** 去掉型号尾部 "-A" 等后缀（第一个 '-' 之后的部分） */
+const stripSuffix = (value: string): string => {
+    const trimmed = value.trim();
+    const dashIndex = trimmed.indexOf('-');
+    return dashIndex > 0 ? trimmed.slice(0, dashIndex) : trimmed;
+};
+
 /**
  * Select a layout only when a requested product identifier identifies one
- * sheet. Exact matches win; separator-insensitive matches must be unique.
+ * sheet. Exact matches win; separator-insensitive matches must be unique;
+ * finally a "-A"-style suffix is ignored on both sides (unique match only).
  */
 export const findDieLayoutSheet = (
     layouts: DieLayoutMap | null | undefined,
@@ -109,6 +126,15 @@ export const findDieLayoutSheet = (
         const normalizedMatches = entries.filter(([key]) => normalizeProductId(key) === normalized);
         if (normalizedMatches.length === 1) {
             return { key: normalizedMatches[0][0], sheet: normalizedMatches[0][1] };
+        }
+
+        const baseNormalized = normalizeProductId(stripSuffix(requested));
+        if (!baseNormalized) continue;
+        const baseMatches = entries.filter(
+            ([key]) => normalizeProductId(stripSuffix(key)) === baseNormalized
+        );
+        if (baseMatches.length === 1) {
+            return { key: baseMatches[0][0], sheet: baseMatches[0][1] };
         }
     }
 
@@ -189,6 +215,32 @@ export const createDieMapStructure = (
     };
 };
 
+/**
+ * 坏 bin 字母的优先级次序（高 → 低）：E>D>C>B>F>A>L~T>Z>X。
+ * 'S' 不在列表内：special 'S' 一律视为对齐标记，不参与叠图取值。
+ */
+const BAD_LETTER_ORDER = ['E', 'D', 'C', 'B', 'F', 'A', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'T', 'Z', 'X'];
+
+/**
+ * 叠图取值优先级（数值越大越优先保留）：
+ *  1. bad bin > good bin
+ *  2. bad bin 内：数字 bin > E>D>C>B>F>A>L~T>Z>X > 其他
+ *  3. good bin 内：字母 bin > bin1（数字 good bin）
+ */
+export const binStackingRank = (
+    bin: BinValue,
+    passValues: Set<string> = PASS_VALUES
+): number => {
+    const isGood = binValueMatchesValues(bin, passValues);
+    if (isGood) {
+        return isNumberBin(bin) ? 10 : 20;
+    }
+    if (isNumberBin(bin)) return 1000;
+    const order = BAD_LETTER_ORDER.indexOf(bin.special.toUpperCase());
+    if (order >= 0) return 900 - order;
+    return 100; // 未知坏 bin 字母：仍高于所有 good bin
+};
+
 export const mergeLayerToDieMap = (
     dieMap: Map<string, { die: AsciiDie; priority: number }>,
     dies: AsciiDie[],
@@ -218,13 +270,15 @@ export const mergeLayerToDieMap = (
             }
         }
 
+        // 取值冲突按 bin 值优先级决定；同级时保留优先级更高的图层
         let shouldOverwrite = false;
         if (!existing) {
             shouldOverwrite = true;
-        } else if (layerPriority > existing.priority) {
-            shouldOverwrite = true;
-        } else if (layerPriority < existing.priority) {
-            shouldOverwrite = binValueMatchesValues(existing.die.bin, passValues);
+        } else {
+            const newRank = binStackingRank(die.bin, passValues);
+            const existingRank = binStackingRank(existing.die.bin, passValues);
+            shouldOverwrite = newRank > existingRank ||
+                (newRank === existingRank && layerPriority > existing.priority);
         }
 
         if (shouldOverwrite) {

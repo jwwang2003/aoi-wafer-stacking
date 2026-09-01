@@ -141,13 +141,55 @@ describe('merge precedence rules (synthetic)', () => {
     });
 
     it("lower priority layer DOES overwrite a pass ('1') die", () => {
-        // Documented quirk: a later, lower-priority layer replaces a pass die,
-        // so a defect found downstream still marks the die as failed.
+        // Bin-value priority: bad bin > good bin, so a defect found
+        // downstream still marks the die as failed.
         const result = mergeTwo(
             die(0, 0, { number: 1 }), 6,
             die(0, 0, { number: 9 }), 1
         );
         expect(result?.bin).toEqual({ number: 9 });
+    });
+
+    it('bad letter bin from a later layer overwrites a good letter bin', () => {
+        const result = mergeTwo(
+            die(0, 0, { special: 'G' }), 6,
+            die(0, 0, { special: 'E' }), 2
+        );
+        expect(result?.bin).toEqual({ special: 'E' });
+    });
+
+    it('numeric bad bin outranks every bad letter bin', () => {
+        const result = mergeTwo(
+            die(0, 0, { special: 'E' }), 6,
+            die(0, 0, { number: 9 }), 1
+        );
+        expect(result?.bin).toEqual({ number: 9 });
+    });
+
+    it('bad letters follow the E>D>C>B>F>A>L~T>Z>X order', () => {
+        // Later E beats earlier D…
+        expect(
+            mergeTwo(die(0, 0, { special: 'D' }), 6, die(0, 0, { special: 'E' }), 1)?.bin
+        ).toEqual({ special: 'E' });
+        // …but a later X never beats an earlier A.
+        expect(
+            mergeTwo(die(0, 0, { special: 'A' }), 6, die(0, 0, { special: 'X' }), 1)?.bin
+        ).toEqual({ special: 'A' });
+        // Z beats X.
+        expect(
+            mergeTwo(die(0, 0, { special: 'X' }), 6, die(0, 0, { special: 'Z' }), 1)?.bin
+        ).toEqual({ special: 'Z' });
+    });
+
+    it("good letter bin beats bin1 in both merge directions", () => {
+        // Good letter arriving after bin1 wins…
+        expect(
+            mergeTwo(die(0, 0, { number: 1 }), 6, die(0, 0, { special: 'G' }), 1)?.bin
+        ).toEqual({ special: 'G' });
+        // …and an established good letter is NOT clobbered by a later bin1.
+        expect(
+            mergeTwo(die(0, 0, { special: 'G' }), 6, die(0, 0, { number: 1 }), 1)?.bin
+        ).toEqual({ special: 'G' });
     });
 
     it('alignment markers survive any later layer regardless of priority', () => {

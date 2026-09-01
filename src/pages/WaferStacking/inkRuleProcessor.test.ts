@@ -69,6 +69,42 @@ describe('processInkRules', () => {
             .toEqual({ special: marker });
     });
 
+    it('never inks the S marker even when good values collide with letter S (BIN 28)', () => {
+        // BIN 28 maps to the letter 'S' (10 -> 'A'), so a bin config that marks
+        // bin 28 as a good bin makes the alignment marker compare as "good".
+        // Edge removal must still leave the marker untouched.
+        const dies: AsciiDie[] = [
+            { x: 0, y: 0, bin: { special: 'S' } },
+            { x: -1, y: 0, bin: { number: 2 } },
+            { x: 1, y: 0, bin: { number: 3 } },
+            { x: 0, y: -1, bin: { number: 8 } },
+        ];
+
+        const { processedDies } = processInkRules(dies, {
+            goodValues: createPassValueSet(['BIN 1', 'BIN 28']),
+            failThreshold: 1,
+        });
+
+        expect(processedDies.find(die => die.x === 0 && die.y === 0)?.bin)
+            .toEqual({ special: 'S' });
+    });
+
+    it('never inks the WLBI 257 start marker even when good values include it', () => {
+        const dies: AsciiDie[] = [
+            { x: 0, y: 0, bin: { number: 257 } },
+            { x: -1, y: 0, bin: { number: 2 } },
+            { x: 1, y: 0, bin: { number: 3 } },
+        ];
+
+        const { processedDies } = processInkRules(dies, {
+            goodValues: new Set(['1', '257']),
+            failThreshold: 1,
+        });
+
+        expect(processedDies.find(die => die.x === 0 && die.y === 0)?.bin)
+            .toEqual({ number: 257 });
+    });
+
     it('only counts selected fail bins when failValues are provided', () => {
         const dies: AsciiDie[] = [
             { x: 0, y: 0, bin: { number: 16 } },

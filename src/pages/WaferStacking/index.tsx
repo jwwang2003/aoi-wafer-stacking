@@ -2,7 +2,7 @@ import { desktopDir } from '@tauri-apps/api/path';
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/hooks';
 import { IconDownload, IconRefresh, IconRepeat } from '@tabler/icons-react';
-import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, NumberInput, Radio, Progress, Badge, Card, Box } from '@mantine/core';
+import { Title, Group, Container, Stack, Button, Text, SimpleGrid, Divider, Input, Checkbox, Radio, Progress, Badge, Card, Box } from '@mantine/core';
 import { PathPicker } from '@/components';
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
 import JobManager from '@/components/JobManager';
@@ -104,9 +104,6 @@ const OUTPUT_OPTIONS2 = [
 
 const EDGE_REMOVAL_STORAGE_KEY = 'wafer_edge_removal_enabled';
 const EDGE_REMOVAL_FAIL_BINS_STORAGE_KEY = 'wafer_edge_removal_fail_bins';
-const GDBN_RULE_STORAGE_KEY = 'wafer_gdbn_rule_enabled';
-const GDBN_MIN_RUN_LENGTH_STORAGE_KEY = 'wafer_gdbn_min_run_length';
-const DEFAULT_GDBN_MIN_RUN_LENGTH = 10;
 
 const DEFAULT_BIN_CONFIG: BinConfigFile = {
     binMappingRule: { startNumber: 10, startLetter: 'A' },
@@ -133,13 +130,6 @@ export default function WaferStacking() {
     const [batchErrors, setBatchErrors] = useState<BatchProcessingError[]>([]);
     const [edgeRemovalEnabled, setEdgeRemovalEnabled] = useState(() => {
         return localStorage.getItem(EDGE_REMOVAL_STORAGE_KEY) === 'true';
-    });
-    const [gdbnRuleEnabled, setGdbnRuleEnabled] = useState(() => {
-        return localStorage.getItem(GDBN_RULE_STORAGE_KEY) === 'true';
-    });
-    const [gdbnMinRunLength, setGdbnMinRunLength] = useState<number>(() => {
-        const saved = Number(localStorage.getItem(GDBN_MIN_RUN_LENGTH_STORAGE_KEY));
-        return Number.isInteger(saved) && saved >= 2 ? saved : DEFAULT_GDBN_MIN_RUN_LENGTH;
     });
     const [goodBins, setGoodBins] = useState<string[]>([]);
     const [edgeRemovalBinOptions, setEdgeRemovalBinOptions] = useState<BinConfig[]>(() =>
@@ -286,14 +276,6 @@ export default function WaferStacking() {
     }, [edgeRemovalEnabled]);
 
     useEffect(() => {
-        localStorage.setItem(GDBN_RULE_STORAGE_KEY, String(gdbnRuleEnabled));
-    }, [gdbnRuleEnabled]);
-
-    useEffect(() => {
-        localStorage.setItem(GDBN_MIN_RUN_LENGTH_STORAGE_KEY, String(gdbnMinRunLength));
-    }, [gdbnMinRunLength]);
-
-    useEffect(() => {
         if (!edgeRemovalBinsLoaded) return;
         localStorage.setItem(EDGE_REMOVAL_FAIL_BINS_STORAGE_KEY, JSON.stringify(edgeRemovalFailBins));
     }, [edgeRemovalBinsLoaded, edgeRemovalFailBins]);
@@ -365,8 +347,6 @@ export default function WaferStacking() {
                 edgeRemovalEnabled: useEdgeRemoval,
                 goodBins,
                 edgeRemovalFailBins,
-                gdbnRuleEnabled,
-                gdbnMinRunLength,
                 onFinalOutputDir: setFinalOutputDir,
             });
 
@@ -430,11 +410,17 @@ export default function WaferStacking() {
     };
 
     const handleBatchProcess = async () => {
-        const jobsToProcess = [...queue];
+        // 勾选了任务则只批量处理勾选的；否则处理整个队列。已完成的任务跳过
+        //（可用“重置状态”重新处理）。
+        const selectedJobs = queue.filter(j => j.selected);
+        const candidates = selectedJobs.length > 0 ? selectedJobs : [...queue];
+        const jobsToProcess = candidates.filter(j => j.status !== 'done');
         if (jobsToProcess.length === 0) {
             errorToast({
                 title: '无任务可处理',
-                message: '任务队列为空'
+                message: candidates.length > 0
+                    ? '所选任务均已完成，如需重新处理请先重置状态'
+                    : '任务队列为空'
             });
             return;
         }
@@ -544,7 +530,7 @@ export default function WaferStacking() {
                         </Checkbox.Group>
 
                         <Checkbox.Group
-                            label="选择参与失效边缘去除/GDBN的BIN"
+                            label="选择参与失效边缘去除的BIN"
                             value={edgeRemovalFailBins}
                             onChange={(vals) => setEdgeRemovalFailBins(vals as string[])}
                             style={{ flex: 1 }}
@@ -555,7 +541,7 @@ export default function WaferStacking() {
                                         key={bin.id}
                                         value={bin.id}
                                         label={bin.label}
-                                        disabled={(!edgeRemovalEnabled && !gdbnRuleEnabled) || processing || batchProcessing}
+                                        disabled={!edgeRemovalEnabled || processing || batchProcessing}
                                     />
                                 ))}
                             </SimpleGrid>
@@ -716,38 +702,13 @@ export default function WaferStacking() {
                             )}
                         </Stack>
                         <Group align="end" grow>
-                            <Stack gap="xs">
-                                <Checkbox
-                                    checked={edgeRemovalEnabled}
-                                    onChange={(e) => setEdgeRemovalEnabled(e.target.checked)}
-                                    label="失效DIE边缘去除"
-                                    disabled={processing || batchProcessing}
-                                    size="sm"
-                                />
-                                <Group gap="xs" align="center" wrap="nowrap">
-                                    <Checkbox
-                                        checked={gdbnRuleEnabled}
-                                        onChange={(e) => setGdbnRuleEnabled(e.target.checked)}
-                                        label="GDBN规则(连续失效除周边,含四角)"
-                                        disabled={processing || batchProcessing}
-                                        size="sm"
-                                    />
-                                    <NumberInput
-                                        value={gdbnMinRunLength}
-                                        onChange={(value) => {
-                                            const parsed = typeof value === 'number' ? Math.floor(value) : Number(value);
-                                            setGdbnMinRunLength(Number.isInteger(parsed) && parsed >= 2 ? parsed : DEFAULT_GDBN_MIN_RUN_LENGTH);
-                                        }}
-                                        min={2}
-                                        step={1}
-                                        allowDecimal={false}
-                                        size="xs"
-                                        w={90}
-                                        suffix=" 颗"
-                                        disabled={!gdbnRuleEnabled || processing || batchProcessing}
-                                    />
-                                </Group>
-                            </Stack>
+                            <Checkbox
+                                checked={edgeRemovalEnabled}
+                                onChange={(e) => setEdgeRemovalEnabled(e.target.checked)}
+                                label="失效DIE边缘去除"
+                                disabled={processing || batchProcessing}
+                                size="sm"
+                            />
                             <Button
                                 color="blue"
                                 leftSection={processing ? <IconRefresh size={16} /> : <IconDownload size={16} />}

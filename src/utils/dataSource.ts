@@ -10,33 +10,37 @@ import { ExcelMetadata, ExcelType, DirCollection, RawWaferMetadataCollection, Wa
  * so tests (see test/unit/scanTreeLayout.test.ts) can verify them against
  * the canonical fixture tree.
  */
+// 型号/批次 token：允许 "-A"、".2" 这类后缀（如 SZ4MA25120BK-8、HL9188.20）。
+// 下划线仍是字段分隔符，不允许出现在 token 内。
+const ID = '[A-Za-z0-9][A-Za-z0-9.-]*';
+
 export const SCAN_PATTERNS = {
     cpProber: {
         // 产品型号_批次号_工序_复测次数
-        processFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/,
+        processFolder: new RegExp(`^(${ID})_(${ID})_(\\d+)_(\\d+)$`),
         // 产品型号_批次号_片号
-        waferFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)$/,
+        waferFolder: new RegExp(`^(${ID})_(${ID})_(\\d+)$`),
         // 产品型号_批次号_片号_mapEx.txt
-        mapExFile: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_mapEx\.txt$/,
+        mapExFile: new RegExp(`^(${ID})_(${ID})_(\\d+)_mapEx\\.txt$`),
     },
     wlbi: {
         // 产品型号_批次号_工序_复测次数
-        processFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)_(\d+)$/,
+        processFolder: new RegExp(`^(${ID})_(${ID})_(\\d+)_(\\d+)$`),
         waferMapFolder: /^WaferMap$/,
         // 批次号_片号_年月日_时分秒.WaferMap
-        waferMapFile: /^([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})_([0-9]{6})\.WaferMap$/,
+        waferMapFile: new RegExp(`^(${ID})_([0-9]+)_([0-9]{8})_([0-9]{6})\\.WaferMap$`),
     },
     fabCp: {
         binMapFolder: /^BinMap$/,
-        batchFolder: /^([A-Za-z0-9]+)$/,
+        batchFolder: new RegExp(`^(${ID})$`),
         // oem型号_批次号_片号.txt
-        mapFile: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_(\d+)\.txt$/,
+        mapFile: new RegExp(`^(${ID})_(${ID})_(\\d+)\\.txt$`),
     },
     aoi: {
         // 产品型号_批次号
-        processFolder: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)$/,
+        processFolder: new RegExp(`^(${ID})_(${ID})$`),
         // 产品型号_批次号_片号_年月日时分秒.txt
-        mapFile: /^([A-Za-z0-9]+)_([A-Za-z0-9]+)_([0-9]+)_([0-9]{8})([0-9]{6})\.txt$/,
+        mapFile: new RegExp(`^(${ID})_(${ID})_([0-9]+)_([0-9]{8})([0-9]{6})\\.txt$`),
     },
 } as const;
 
@@ -168,8 +172,8 @@ export async function readSubstrateMetadata(
     const result: ExcelMetadata[] = [];
 
     const defectListFolder = /^Defect list$/;
-    const defectXls = /^([A-Za-z0-9]+)\.xls$/;
-    const productMap = /^([A-Za-z0-9]+)_([0-9]{8})([0-9]{6})\.xlsx$/;
+    const defectXls = /^([A-Za-z0-9][A-Za-z0-9-]*)\.xls$/;
+    const productMap = /^([A-Za-z0-9][A-Za-z0-9.-]*)_([0-9]{8})([0-9]{6})\.xlsx$/;
     const productList = /^Product list\.xlsx$/;
 
     let totDir = 0, numRead = 0, numCached = 0, totMatch = 0, totAdded = 0;
@@ -436,6 +440,40 @@ export async function readWlbiMetadata(
     };
 }
 
+/** 去掉型号尾部的 "-A"/"-8" 一类后缀，得到基础型号 */
+export const stripProductIdSuffix = (id: string): string => {
+    const dashIndex = id.indexOf('-');
+    return dashIndex > 0 ? id.slice(0, dashIndex) : id;
+};
+
+/**
+ * FAB CP 文件里的 oem 型号可能带 "-A" 等后缀（或映射表里带而文件里不带）。
+ * 先精确匹配 oem_product_map；查不到时按基础型号匹配，仅在唯一命中时采用。
+ */
+async function resolveFabCpProductModel(oemModel: string): Promise<string> {
+    const db = await getDb();
+
+    const exact = await db.select<Array<{ product_id: string }>>(
+        'SELECT product_id FROM oem_product_map WHERE oem_product_id = ? LIMIT 1',
+        [oemModel]
+    );
+    if (exact.length > 0) return exact[0].product_id;
+
+    const base = stripProductIdSuffix(oemModel);
+    const candidates = await db.select<Array<{ oem_product_id: string; product_id: string }>>(
+        'SELECT oem_product_id, product_id FROM oem_product_map WHERE oem_product_id = ? OR oem_product_id LIKE ? LIMIT 2',
+        [base, `${base}-%`]
+    );
+    if (candidates.length === 1) {
+        console.warn(
+            `[FAB CP] oem 型号 "${oemModel}" 未精确命中映射表，按基础型号匹配到 "${candidates[0].oem_product_id}"`
+        );
+        return candidates[0].product_id;
+    }
+
+    return oemModel;
+}
+
 /**
  * FAB CP 数据读取
  */
@@ -481,13 +519,7 @@ export async function readFabCpMetadata(
         if (batchFromFile !== ctx.batch) {
             continue;
         }
-        const db = await getDb();
-
-        const mapping = await db.select<Array<{ product_id: string }>>(
-            'SELECT product_id FROM oem_product_map WHERE oem_product_id = ? LIMIT 1',
-            [oemModel]
-        );
-        const productModel = mapping.length > 0 ? mapping[0].product_id : oemModel;
+        const productModel = await resolveFabCpProductModel(oemModel);
 
         result.push({
             stage: DataSourceType.FabCp,
