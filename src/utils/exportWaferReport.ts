@@ -1,8 +1,15 @@
 import { writeTextFile, mkdir } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { getWaferStackStatsByOem } from '@/db/waferStackStats';
-import { deleteWaferStackStatsByOem } from '@/db/waferStackStats';
 import { getProductSize } from '@/db/productSize';
+
+/** wafer_id 是文本列；按数值排序，避免 '10' 排在 '2' 前面 */
+const compareWaferIds = (a: string, b: string): number => {
+    const numA = Number(a);
+    const numB = Number(b);
+    if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+    return a.localeCompare(b);
+};
 
 export async function exportWaferStatsReport(
     oemProductIds: string | string[],
@@ -29,22 +36,9 @@ export async function exportWaferStatsReport(
             continue;
         }
 
-        let currentDieSize = { x: 1, y: 1 };
-        try {
-            const productSize = await getProductSize(oemProductId);
-            if (productSize) {
-                currentDieSize = {
-                    x: Math.round(productSize.die_x * 1000),
-                    y: Math.round(productSize.die_y * 1000)
-                };
-            }
-        } catch (e) {
-            console.warn(`加载 ${oemProductId} 尺寸失败，使用默认值: ${String(e)}`);
-        }
-
         const dieSize = {
-            x: productSizeData ? Math.round(productSizeData.die_x * 1000) : currentDieSize.x,
-            y: productSizeData ? Math.round(productSizeData.die_y * 1000) : currentDieSize.y
+            x: productSizeData ? Math.round(productSizeData.die_x * 1000) : 1,
+            y: productSizeData ? Math.round(productSizeData.die_y * 1000) : 1
         };
 
         const batchGroups = statsList.reduce<Record<string, typeof statsList>>((groups, stats) => {
@@ -57,13 +51,13 @@ export async function exportWaferStatsReport(
         }, {});
 
         for (const [batchId, batchStats] of Object.entries(batchGroups)) {
+            // 同一批次的所有片按片号数值排序输出
+            batchStats.sort((a, b) => compareWaferIds(a.wafer_id, b.wafer_id));
             const totalWafer = batchStats.length;
 
             const allBinKeys = new Set<string>();
             batchStats.forEach(stats => {
-                console.log('Processing stats for wafer:', stats);
                 const binCounts = JSON.parse(stats.bin_counts) as Record<string, number>;
-                console.log('BIN Counts:', binCounts);
                 Object.keys(binCounts).forEach(key => allBinKeys.add(key));
             });
             for (let i = 0; i <= 19; i++) {
@@ -139,7 +133,8 @@ export async function exportWaferStatsReport(
             exportedPaths.push(outputPath);
         }
 
-        await deleteWaferStackStatsByOem(oemProductId);
+        // 统计数据保留在数据库中（按 OEM/批次/片号 upsert 去重），
+        // 同一批次分多次处理不同片号时，报告从全量数据重建而非只含本次的片。
     }
 
     return exportedPaths;
