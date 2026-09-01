@@ -58,6 +58,25 @@ describe('waferSubstrateRenderer', () => {
         expect(findDieLayoutSheet(layouts, ['UNKNOWN_MODEL'])).toBeUndefined();
     });
 
+    it('ignores a "-A"-style suffix when it identifies exactly one layout sheet', () => {
+        const layouts = {
+            S1M040120B: { xHeaders: [], yHeaders: [], dies: [] },
+            'S2M12K180BJ-A': { xHeaders: [], yHeaders: [], dies: [] },
+        };
+
+        // Suffixed request → base-named sheet
+        expect(findDieLayoutSheet(layouts, ['S1M040120B-A'])?.key).toBe('S1M040120B');
+        // Base request → suffixed sheet
+        expect(findDieLayoutSheet(layouts, ['S2M12K180BJ'])?.key).toBe('S2M12K180BJ-A');
+
+        // Ambiguous base match resolves to nothing
+        const ambiguous = {
+            'S1M040120B-A': { xHeaders: [], yHeaders: [], dies: [] },
+            'S1M040120B-B': { xHeaders: [], yHeaders: [], dies: [] },
+        };
+        expect(findDieLayoutSheet(ambiguous, ['S1M040120B'])).toBeUndefined();
+    });
+
     it('rejects the reported 7-vs-67 alignment-marker distance mismatch', () => {
         expect(calculateValidatedOffset(
             [{ x: -4, y: -18 }, { x: 3, y: -18 }],

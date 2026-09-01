@@ -95,9 +95,17 @@ export type AlignmentMarker = { x: number; y: number };
 const normalizeProductId = (value: string): string =>
     value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+/** 去掉型号尾部 "-A" 等后缀（第一个 '-' 之后的部分） */
+const stripSuffix = (value: string): string => {
+    const trimmed = value.trim();
+    const dashIndex = trimmed.indexOf('-');
+    return dashIndex > 0 ? trimmed.slice(0, dashIndex) : trimmed;
+};
+
 /**
  * Select a layout only when a requested product identifier identifies one
- * sheet. Exact matches win; separator-insensitive matches must be unique.
+ * sheet. Exact matches win; separator-insensitive matches must be unique;
+ * finally a "-A"-style suffix is ignored on both sides (unique match only).
  */
 export const findDieLayoutSheet = (
     layouts: DieLayoutMap | null | undefined,
@@ -118,6 +126,15 @@ export const findDieLayoutSheet = (
         const normalizedMatches = entries.filter(([key]) => normalizeProductId(key) === normalized);
         if (normalizedMatches.length === 1) {
             return { key: normalizedMatches[0][0], sheet: normalizedMatches[0][1] };
+        }
+
+        const baseNormalized = normalizeProductId(stripSuffix(requested));
+        if (!baseNormalized) continue;
+        const baseMatches = entries.filter(
+            ([key]) => normalizeProductId(stripSuffix(key)) === baseNormalized
+        );
+        if (baseMatches.length === 1) {
+            return { key: baseMatches[0][0], sheet: baseMatches[0][1] };
         }
     }
 

@@ -132,6 +132,38 @@ describe('multi-product CP-prober tree', () => {
     });
 });
 
+describe('product ids with "-A"-style suffixes', () => {
+    it('FAB CP map file with a suffixed oem model matches and captures the full id', () => {
+        const m = SCAN_PATTERNS.fabCp.mapFile.exec('P0097B-A_B003990_02.txt');
+        expect(m).not.toBeNull();
+        expect(m!.slice(1)).toEqual(['P0097B-A', 'B003990', '02']);
+    });
+
+    it('FAB CP batch folder accepts a suffixed lot id', () => {
+        expect(SCAN_PATTERNS.fabCp.batchFolder.test('B003990-1')).toBe(true);
+    });
+
+    it('CP-prober folders and mapEx file accept a suffixed product model', () => {
+        expect(SCAN_PATTERNS.cpProber.processFolder.exec('S1M040120B-A_B003990_1_0')!.slice(1))
+            .toEqual(['S1M040120B-A', 'B003990', '1', '0']);
+        expect(SCAN_PATTERNS.cpProber.waferFolder.test('S1M040120B-A_B003990_02')).toBe(true);
+        expect(SCAN_PATTERNS.cpProber.mapExFile.exec('S1M040120B-A_B003990_02_mapEx.txt')!.slice(1))
+            .toEqual(['S1M040120B-A', 'B003990', '02']);
+    });
+
+    it('AOI and WLBI patterns accept a suffixed product model', () => {
+        expect(SCAN_PATTERNS.aoi.processFolder.exec('S1M040120B-A_B003990')!.slice(1))
+            .toEqual(['S1M040120B-A', 'B003990']);
+        expect(SCAN_PATTERNS.aoi.mapFile.test('S1M040120B-A_B003990_02_20250325165831.txt')).toBe(true);
+        expect(SCAN_PATTERNS.wlbi.processFolder.test('S1M040120B-A_B003990_2_0')).toBe(true);
+    });
+
+    it('underscores still delimit fields: a suffix cannot swallow the next field', () => {
+        const m = SCAN_PATTERNS.fabCp.mapFile.exec('P0097B_B003990_02.txt');
+        expect(m!.slice(1)).toEqual(['P0097B', 'B003990', '02']);
+    });
+});
+
 describe('WLBI and AOI patterns vs scan-tree', () => {
     it('WLBI lot folder, WaferMap folder and file all match', () => {
         const [lot] = dirsIn('WLBI-02');
