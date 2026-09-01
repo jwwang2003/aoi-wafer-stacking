@@ -11,6 +11,7 @@ import {
 import { AsciiDie } from '@/types/ipc';
 import { renderAsJpg, renderSubstrateAsJpg } from './renderUtils';
 import { processInkRules } from './inkRuleProcessor';
+import { processGdbnRule } from './gdbnRuleProcessor';
 import {
     convertToMapData,
     convertToBinMapData,
@@ -38,6 +39,8 @@ export interface WaferOutputConfig {
     selectedPassBins: string[];
     edgeRemovalEnabled: boolean;
     edgeRemovalFailBins: string[];
+    gdbnRuleEnabled: boolean;
+    gdbnMinRunLength?: number;
 }
 
 export const exportNormalWaferFiles = async (config: WaferOutputConfig) => {
@@ -115,10 +118,20 @@ export const exportInkWaferFiles = async (config: WaferOutputConfig) => {
 
     const passValues = createPassValueSet(config.selectedPassBins);
     const failValues = createPassValueSet(config.edgeRemovalFailBins);
-    const { processedDies } = processInkRules(mergedDies, {
-        goodValues: passValues,
-        failValues,
-    });
+    let processedDies = mergedDies;
+    if (config.edgeRemovalEnabled) {
+        processedDies = processInkRules(processedDies, {
+            goodValues: passValues,
+            failValues,
+        }).processedDies;
+    }
+    if (config.gdbnRuleEnabled) {
+        processedDies = processGdbnRule(processedDies, {
+            goodValues: passValues,
+            failValues,
+            minRunLength: config.gdbnMinRunLength,
+        }).processedDies;
+    }
     const inkStats = calculateStatsFromDies(processedDies, passValues);
     console.log('Ink Stats:', inkStats);
     if (selectedOutputs.includes('mapEx')) {
@@ -154,7 +167,7 @@ export const exportWaferFiles = async (config: WaferOutputConfig) => {
     await exportNormalWaferFiles(config);
 
     // 输出INK文件
-    if (config.edgeRemovalEnabled) {
+    if (config.edgeRemovalEnabled || config.gdbnRuleEnabled) {
         await exportInkWaferFiles(config);
     }
 };
