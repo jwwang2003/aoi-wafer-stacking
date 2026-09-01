@@ -2,7 +2,7 @@
 
 AOI Wafer Stacking is a Sichain desktop app for wafer map viewing, multi-stage wafer stacking, substrate defect overlay, export generation, and optional TorchScript AOI inference.
 
-Current release: `v1.0.13`
+Current release: `v1.0.14`
 
 ## Stack
 
@@ -93,12 +93,12 @@ cd src-tauri
 cargo test --no-default-features
 ```
 
-The current `v1.0.13` release prep passed:
+The current `v1.0.14` release prep passed:
 
 - `tsc --noEmit`
-- `vitest run` / `pnpm run test:unit`: 48 tests
+- `vitest run` / `pnpm run test:unit`: 164 tests
 - `eslint ./src`
-- `cargo test --no-default-features`: 13 tests
+- `cargo test --no-default-features`: 14 tests
 - `pnpm run build`
 
 ## Building
@@ -158,8 +158,8 @@ pnpm run tauri -- build --bundles dmg
 6. Create an annotated tag, for example:
 
 ```bash
-git tag -a v1.0.13 -m "Release v1.0.13"
-git push origin main dev-algo v1.0.13
+git tag -a v1.0.14 -m "Release v1.0.14"
+git push origin main dev-algo v1.0.14
 ```
 
 ## Data Source Regex Defaults
