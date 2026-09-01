@@ -85,8 +85,6 @@ const createOptions = (
     edgeRemovalEnabled: false,
     goodBins: ['BIN 1'],
     edgeRemovalFailBins: ['BIN 2'],
-    gdbnRuleEnabled: false,
-    gdbnMinRunLength: 10,
     ...overrides,
 });
 
@@ -182,8 +180,6 @@ describe('processWaferStackingJob', () => {
             selectedPassBins: ['BIN 1'],
             edgeRemovalEnabled: false,
             edgeRemovalFailBins: ['BIN 2'],
-            gdbnRuleEnabled: false,
-            gdbnMinRunLength: 10,
         }));
         expect(result).toEqual({
             jobId: 'job-1',
