@@ -430,11 +430,17 @@ export default function WaferStacking() {
     };
 
     const handleBatchProcess = async () => {
-        const jobsToProcess = [...queue];
+        // 勾选了任务则只批量处理勾选的；否则处理整个队列。已完成的任务跳过
+        //（可用“重置状态”重新处理）。
+        const selectedJobs = queue.filter(j => j.selected);
+        const candidates = selectedJobs.length > 0 ? selectedJobs : [...queue];
+        const jobsToProcess = candidates.filter(j => j.status !== 'done');
         if (jobsToProcess.length === 0) {
             errorToast({
                 title: '无任务可处理',
-                message: '任务队列为空'
+                message: candidates.length > 0
+                    ? '所选任务均已完成，如需重新处理请先重置状态'
+                    : '任务队列为空'
             });
             return;
         }

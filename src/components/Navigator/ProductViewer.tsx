@@ -10,7 +10,7 @@ import { infoToast, errorToast } from '@/components/UI/Toaster';
 import { useDispatch } from 'react-redux';
 import { useAppSelector } from '@/hooks';
 import { AppDispatch } from '@/store';
-import { clearJob, setJob, queueAddJob } from '@/slices/job';
+import { clearJob, setJob, queueAddJob, pickHighestRetestPerGroup } from '@/slices/job';
 import type { OemProductMapRow, WaferMapRow } from '@/db/types';
 
 import { ExcelMetadataCard, WaferFileMetadataCard } from '@/components/Card/MetadataCard';
@@ -271,7 +271,8 @@ export default function ProductBatchNavigator({
                                 waferId: waferNum,
                                 subId: subId,
                                 waferSubstrate: substrate,
-                                waferMaps: maps,
+                                // 与单任务路径一致：每个 stage|sub_stage 只保留最高复测层
+                                waferMaps: pickHighestRetestPerGroup(maps),
                                 includeSubstrateSelected: !!substrate,
                                 name: `${selectedProductId}/${batch.lot_id}/Wafer${wafer.wafer_id}`,
                                 note: `全选批次批量添加`
@@ -329,7 +330,8 @@ export default function ProductBatchNavigator({
                     waferId: waferNum,
                     subId: subId,
                     waferSubstrate: substrate,
-                    waferMaps: maps,
+                    // 与单任务路径一致：每个 stage|sub_stage 只保留最高复测层
+                    waferMaps: pickHighestRetestPerGroup(maps),
                     includeSubstrateSelected: !!substrate,
                     name: `${selectedProductId}/${selectedLotId}/${wafer.wafer_id}`,
                     note: `从批次 ${selectedLotId} 批量添加`

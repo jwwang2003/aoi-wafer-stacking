@@ -7,12 +7,15 @@ import {
     queueRemoveJob,
     queueUpdateJob,
     queueSetActive,
+    queueToggleSelected,
+    queueSetAllSelected,
 } from '@/slices/job';
 import {
     ActionIcon,
     Badge,
     Button,
     Card,
+    Checkbox,
     Group,
     ScrollArea,
     Stack,
@@ -36,9 +39,11 @@ export default function JobManager({ disableAddFromCurrent = false }: { disableA
     const [editing, setEditing] = useState<Record<string, EditState>>({});
 
     const hasJobs = queue.length > 0;
+    const selectedCount = queue.filter(j => j.selected).length;
+    const allSelected = hasJobs && selectedCount === queue.length;
+    const someSelected = selectedCount > 0 && !allSelected;
 
-    // const getLabel = (j: typeof queue[number]) =>
-    //     j.name?.trim() || `${j.productId || '—'} / ${j.batchId || '—'} / ${j.waferId ?? '—'}${j.subId ? ` / ${j.subId}` : ''}`;
+    const getLabel = (j: typeof queue[number]) => j.name?.trim() || '';
 
     const handleAddCurrent = () => {
         dispatch(queueAddFromCurrent(undefined));
@@ -78,7 +83,20 @@ export default function JobManager({ disableAddFromCurrent = false }: { disableA
     return (
         <Card withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Group justify="space-between" mb="xs">
-                <Title order={4}>任务队列</Title>
+                <Group gap={8}>
+                    <Title order={4}>任务队列</Title>
+                    {hasJobs && (
+                        <Tooltip label="全选/取消全选（勾选的任务参与批量处理）" withArrow>
+                            <Checkbox
+                                size="sm"
+                                checked={allSelected}
+                                indeterminate={someSelected}
+                                onChange={(ev) => dispatch(queueSetAllSelected(ev.currentTarget.checked))}
+                                aria-label="全选任务"
+                            />
+                        </Tooltip>
+                    )}
+                </Group>
                 <Tooltip label="加入当前选择" withArrow>
                     <Button size="xs" leftSection={<IconPlus size={14} />} onClick={handleAddCurrent} disabled={disableAddFromCurrent}>
                         加入当前
@@ -101,10 +119,16 @@ export default function JobManager({ disableAddFromCurrent = false }: { disableA
                                 <Stack gap={6}>
                                     <Group justify="space-between" align="center">
                                         <Group gap={8} wrap="nowrap">
+                                            <Checkbox
+                                                size="sm"
+                                                checked={!!j.selected}
+                                                onChange={() => dispatch(queueToggleSelected({ id: j.id }))}
+                                                aria-label="选择任务"
+                                            />
                                             <Badge size="xs" variant="light" color={j.status === 'active' ? 'blue' : j.status === 'done' ? 'teal' : j.status === 'error' ? 'red' : 'gray'}>
                                                 {j.status.toUpperCase()}
                                             </Badge>
-                                            {/* <Text fw={600} size="sm" lineClamp={1} style={{ maxWidth: 200 }}>{getLabel(j)}</Text> */}
+                                            {getLabel(j) && <Text fw={600} size="sm" lineClamp={1} style={{ maxWidth: 200 }}>{getLabel(j)}</Text>}
                                         </Group>
                                         <Group gap={6}>
                                             {!isEditing && <Tooltip label="设为激活" withArrow><ActionIcon size="sm" variant="subtle" onClick={() => handleActivate(j.id)}><IconPlayerPlay size={16} /></ActionIcon></Tooltip>}
@@ -144,7 +168,9 @@ export default function JobManager({ disableAddFromCurrent = false }: { disableA
                 </Stack>
             </ScrollArea.Autosize>
 
-            <Text size="xs" c="dimmed" mt="xs">共 {queue.length} 个任务</Text>
+            <Text size="xs" c="dimmed" mt="xs">
+                共 {queue.length} 个任务{selectedCount > 0 ? `，已勾选 ${selectedCount} 个` : ''}
+            </Text>
         </Card>
     );
 }
